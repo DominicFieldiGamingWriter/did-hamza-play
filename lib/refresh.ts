@@ -19,43 +19,23 @@ function responseArray(
     return data;
   }
 
-  if (
-    Array.isArray(
-      data?.results
-    )
-  ) {
+  if (Array.isArray(data?.results)) {
     return data.results;
   }
 
-  if (
-    Array.isArray(
-      data?.data
-    )
-  ) {
+  if (Array.isArray(data?.data)) {
     return data.data;
   }
 
-  if (
-    Array.isArray(
-      data?.fixtures
-    )
-  ) {
+  if (Array.isArray(data?.fixtures)) {
     return data.fixtures;
   }
 
-  if (
-    Array.isArray(
-      data?.events
-    )
-  ) {
+  if (Array.isArray(data?.events)) {
     return data.events;
   }
 
-  if (
-    Array.isArray(
-      data?.incidents
-    )
-  ) {
+  if (Array.isArray(data?.incidents)) {
     return data.incidents;
   }
 
@@ -68,9 +48,7 @@ function getId(
   if (
     typeof value === "number"
   ) {
-    return Number.isFinite(
-      value
-    ) &&
+    return Number.isFinite(value) &&
       value > 0
       ? value
       : null;
@@ -83,9 +61,7 @@ function getId(
     const id =
       Number(value);
 
-    return Number.isFinite(
-      id
-    ) &&
+    return Number.isFinite(id) &&
       id > 0
       ? id
       : null;
@@ -164,12 +140,9 @@ function playerMatchesId(
   value: any,
   playerId: number
 ): boolean {
-  const id =
-    getId(value);
-
   return (
-    id !== null &&
-    id === playerId
+    getId(value) ===
+    playerId
   );
 }
 
@@ -184,9 +157,7 @@ function findPlayerRecord(
     return null;
   }
 
-  if (
-    Array.isArray(value)
-  ) {
+  if (Array.isArray(value)) {
     for (
       const item of value
     ) {
@@ -247,6 +218,195 @@ function hasPlayer(
       playerId
     )
   );
+}
+
+function lineupRoleFromValue(
+  value: any,
+  playerId: number,
+  context = ""
+):
+  | "starting"
+  | "substitute"
+  | "unknown" {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "unknown";
+  }
+
+  if (Array.isArray(value)) {
+    for (
+      const item of value
+    ) {
+      const role =
+        lineupRoleFromValue(
+          item,
+          playerId,
+          context
+        );
+
+      if (
+        role === "starting" ||
+        role === "substitute"
+      ) {
+        return role;
+      }
+    }
+
+    return "unknown";
+  }
+
+  if (
+    typeof value !== "object"
+  ) {
+    return "unknown";
+  }
+
+  const directId =
+    getId(value);
+
+  if (
+    directId === playerId
+  ) {
+    const explicitRole =
+      String(
+        value.role ??
+        value.position_type ??
+        value.lineup_role ??
+        value.selection_status ??
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      explicitRole.includes(
+        "sub"
+      ) ||
+      explicitRole.includes(
+        "bench"
+      )
+    ) {
+      return "substitute";
+    }
+
+    if (
+      explicitRole.includes(
+        "start"
+      ) ||
+      explicitRole ===
+        "xi"
+    ) {
+      return "starting";
+    }
+
+    if (
+      value.is_substitute === true ||
+      value.substitute === true ||
+      value.on_bench === true ||
+      value.bench === true
+    ) {
+      return "substitute";
+    }
+
+    if (
+      value.is_starter === true ||
+      value.starter === true ||
+      value.starting === true
+    ) {
+      return "starting";
+    }
+  }
+
+  for (
+    const [
+      key,
+      child
+    ] of Object.entries(
+      value
+    )
+  ) {
+    if (
+      !child ||
+      typeof child !== "object"
+    ) {
+      continue;
+    }
+
+    const lowerKey =
+      key
+        .toLowerCase()
+        .replace(
+          /[-_ ]/g,
+          ""
+        );
+
+    let childContext =
+      context;
+
+    if (
+      lowerKey.includes(
+        "substitute"
+      ) ||
+      lowerKey.includes(
+        "bench"
+      )
+    ) {
+      childContext =
+        "substitute";
+    }
+
+    if (
+      lowerKey.includes(
+        "starter"
+      ) ||
+      lowerKey.includes(
+        "starting"
+      ) ||
+      lowerKey ===
+        "xi"
+    ) {
+      childContext =
+        "starting";
+    }
+
+    const role =
+      lineupRoleFromValue(
+        child,
+        playerId,
+        childContext
+      );
+
+    if (
+      role === "starting" ||
+      role === "substitute"
+    ) {
+      return role;
+    }
+  }
+
+  if (
+    context === "substitute" &&
+    hasPlayer(
+      value,
+      playerId
+    )
+  ) {
+    return "substitute";
+  }
+
+  if (
+    context === "starting" &&
+    hasPlayer(
+      value,
+      playerId
+    )
+  ) {
+    return "starting";
+  }
+
+  return "unknown";
 }
 
 function playerPlayed(
@@ -368,11 +528,10 @@ function resolveIncidentPlayerId(
     return direct;
   }
 
-  const idField =
-    `${field}_id`;
-
   return getId(
-    incident?.[idField]
+    incident?.[
+      `${field}_id`
+    ]
   );
 }
 
@@ -427,9 +586,7 @@ async function resolvePlayerName(
   }
 
   if (
-    cache.has(
-      playerId
-    )
+    cache.has(playerId)
   ) {
     return (
       cache.get(
@@ -450,9 +607,7 @@ async function resolvePlayerName(
         player
       );
 
-    if (
-      name
-    ) {
+    if (name) {
       cache.set(
         playerId,
         name
@@ -518,64 +673,78 @@ async function normaliseIncidents(
             playerInName,
             playerOutName,
             assistName
-          ] = await Promise.all([
-            resolvePlayerName(
-              playerId,
-              incident?.player,
-              cache
-            ),
+          ] =
+            await Promise.all([
+              resolvePlayerName(
+                playerId,
+                incident?.player,
+                cache
+              ),
 
-            resolvePlayerName(
-              playerInId,
-              incident?.player_in,
-              cache
-            ),
+              resolvePlayerName(
+                playerInId,
+                incident?.player_in,
+                cache
+              ),
 
-            resolvePlayerName(
-              playerOutId,
-              incident?.player_out,
-              cache
-            ),
+              resolvePlayerName(
+                playerOutId,
+                incident?.player_out,
+                cache
+              ),
 
-            resolvePlayerName(
-              assistId,
-              incident?.assist ??
-                incident?.assistant,
-              cache
-            )
-          ]);
+              resolvePlayerName(
+                assistId,
+                incident?.assist ??
+                  incident?.assistant,
+                cache
+              )
+            ]);
 
           return {
             type,
             minute,
+
             player_id:
               playerId,
+
             player_name:
               playerName,
+
             assist_id:
               assistId,
+
             assist_name:
               assistName,
+
             player_in_id:
               playerInId,
+
             player_in_name:
               playerInName,
+
             player_out_id:
               playerOutId,
+
             player_out_name:
               playerOutName,
+
             is_home:
               incident?.is_home ??
               null,
+
             card_type:
               incident?.card_type ??
               null,
+
             goal_type:
               incident?.goal_type ??
               null,
+
             added_time:
               incident?.added_time ??
               null,
+
             length:
               incident?.length ??
               null
@@ -1192,6 +1361,155 @@ function normaliseFixture(
   };
 }
 
+async function buildLivePlayerStatus(
+  playerId: number,
+  live: any
+) {
+  if (
+    !live?.id
+  ) {
+    return null;
+  }
+
+  try {
+    const [
+      lineupData,
+      rawIncidents
+    ] = await Promise.all([
+      getLineups(
+        Number(
+          live.id
+        )
+      ),
+
+      getFixtureIncidents(
+        Number(
+          live.id
+        )
+      )
+    ]);
+
+    const lineupRole =
+      lineupRoleFromValue(
+        lineupData,
+        playerId
+      );
+
+    const incidents =
+      responseArray(
+        rawIncidents
+      );
+
+    const subbedOn =
+      incidents.some(
+        (incident: any) =>
+          getIncidentType(
+            incident
+          ) === "substitution" &&
+          resolveIncidentPlayerId(
+            incident,
+            "player_in"
+          ) === playerId
+      );
+
+    const subbedOff =
+      incidents.some(
+        (incident: any) =>
+          getIncidentType(
+            incident
+          ) === "substitution" &&
+          resolveIncidentPlayerId(
+            incident,
+            "player_out"
+          ) === playerId
+      );
+
+    if (
+      subbedOff
+    ) {
+      return {
+        status:
+          "not_playing",
+        role:
+          "not_playing",
+        lineup_status:
+          lineupData?.status ??
+          "unavailable"
+      };
+    }
+
+    if (
+      subbedOn
+    ) {
+      return {
+        status:
+          "playing",
+        role:
+          "playing",
+        lineup_status:
+          lineupData?.status ??
+          "unavailable"
+      };
+    }
+
+    if (
+      lineupRole ===
+      "starting"
+    ) {
+      return {
+        status:
+          "playing",
+        role:
+          "starting",
+        lineup_status:
+          lineupData?.status ??
+          "unavailable"
+      };
+    }
+
+    if (
+      lineupRole ===
+      "substitute"
+    ) {
+      return {
+        status:
+          "substitute",
+        role:
+          "substitute",
+        lineup_status:
+          lineupData?.status ??
+          "unavailable"
+      };
+    }
+
+    if (
+      lineupData?.status ===
+      "confirmed"
+    ) {
+      return {
+        status:
+          "not_playing",
+        role:
+          "not_selected",
+        lineup_status:
+          "confirmed"
+      };
+    }
+
+    return {
+      status:
+        "unknown",
+      role:
+        "unknown",
+      lineup_status:
+        lineupData?.status ??
+        "unavailable"
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function refreshPlayerPage() {
   const playerName =
     process.env.PLAYER_NAME ||
@@ -1269,19 +1587,20 @@ export async function refreshPlayerPage() {
     lineupData,
     playerStats,
     rawIncidents
-  ] = await Promise.all([
-    getLineups(
-      last.id
-    ),
+  ] =
+    await Promise.all([
+      getLineups(
+        last.id
+      ),
 
-    getFixturePlayerStats(
-      last.id
-    ),
+      getFixturePlayerStats(
+        last.id
+      ),
 
-    getFixtureIncidents(
-      last.id
-    )
-  ]);
+      getFixtureIncidents(
+        last.id
+      )
+    ]);
 
   const incidents =
     await normaliseIncidents(
@@ -1319,70 +1638,36 @@ export async function refreshPlayerPage() {
       squadPlayer
     );
 
-  /*
-   * Live-match player status.
-   *
-   * We only set this when BSD returns a live
-   * fixture and a lineup response is available.
-   *
-   * selected = true means Hamza appears in
-   * the live match lineup data.
-   *
-   * selected = false means he does not appear
-   * in the live match lineup data.
-   */
-  let livePlayerStatus:
-    | {
-        selected: boolean;
-        lineup_status: string;
-      }
-    | null = null;
+  const normalisedLiveBase =
+    live
+      ? normaliseFixture(
+          live,
+          team.id
+        )
+      : null;
 
-  if (
-    live?.id
-  ) {
-    try {
-      const liveLineupData =
-        await getLineups(
-          Number(
-            live.id
-          )
-        );
+  const livePlayerStatus =
+    live
+      ? await buildLivePlayerStatus(
+          playerId,
+          live
+        )
+      : null;
 
-      const selected =
-        hasPlayer(
-          liveLineupData.lineups,
-          playerId
-        );
-
-      livePlayerStatus = {
-        selected,
-        lineup_status:
-          liveLineupData.status
-      };
-    } catch {
-      livePlayerStatus = null;
-    }
-  }
+  const normalisedLive =
+    normalisedLiveBase
+      ? {
+          ...normalisedLiveBase,
+          player_status:
+            livePlayerStatus
+        }
+      : null;
 
   const normalisedLast =
     normaliseFixture(
       last,
       team.id
     );
-
-  const normalisedLive =
-    live
-      ? {
-          ...normaliseFixture(
-            live,
-            team.id
-          ),
-
-          player_status:
-            livePlayerStatus
-        }
-      : null;
 
   const normalisedNext =
     next.map(
