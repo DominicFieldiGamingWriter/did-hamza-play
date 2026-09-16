@@ -1,266 +1,245 @@
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "../lib/supabase";
 
-function dateValue(fixture: any) {
-  return (
-    fixture?.time?.kickoff_at ??
-    fixture?.kickoff_at ??
-    fixture?.kickoff ??
-    fixture?.event_date ??
-    fixture?.date ??
-    fixture?.start_time ??
-    null
-  );
+function dateValue(value: any): string | null {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "object") {
+    return (
+      value?.kickoff_at ??
+      value?.kickoff ??
+      value?.event_date ??
+      value?.date ??
+      value?.start_time ??
+      null
+    );
+  }
+
+  return null;
 }
 
 function rawTeamValue(
   fixture: any,
   side: "home" | "away"
 ) {
+  return (
+    fixture?.[side] ??
+    fixture?.[`${side}_team`] ??
+    fixture?.[`${side}Team`] ??
+    fixture?.teams?.[side] ??
+    fixture?.participants?.[side] ??
+    null
+  );
+}
+
+function teamId(
+  fixture: any,
+  side: "home" | "away"
+): number {
+  const team = rawTeamValue(
+    fixture,
+    side
+  );
+
   const candidates = [
-    fixture?.[side],
-    fixture?.[`${side}_team`],
-    fixture?.[`${side}_club`],
-    fixture?.teams?.[side],
-    fixture?.team?.[side],
+    team?.id,
+    team?.team_id,
+    team?.team?.id,
+    fixture?.[`${side}_team_id`],
+    fixture?.[`${side}_id`]
   ];
 
   for (const value of candidates) {
-    if (value != null) {
-      return value;
+    const id = Number(value);
+
+    if (
+      Number.isFinite(id) &&
+      id > 0
+    ) {
+      return id;
     }
   }
 
-  return null;
+  return 0;
 }
 
-function teamId(team: any) {
-  if (team == null) return 0;
-
-  if (typeof team === "number") {
-    return team;
-  }
-
-  if (typeof team === "string") {
-    return 0;
-  }
-
-  return Number(
-    team?.id ??
-      team?.team_id ??
-      team?.club_id ??
-      team?.team?.id ??
-      0
-  );
-}
-
-function teamName(team: any) {
-  if (team == null) {
-    return "Unknown";
-  }
-
-  if (typeof team === "string") {
-    return team;
-  }
-
-  return (
-    team?.name ??
-    team?.team_name ??
-    team?.club_name ??
-    team?.team?.name ??
-    team?.club?.name ??
-    "Unknown"
-  );
-}
-
-function fixtureTeamName(
+function teamName(
   fixture: any,
   side: "home" | "away"
-) {
-  const directName =
-    fixture?.[`${side}_team_name`] ??
-    fixture?.[`${side}_name`] ??
-    fixture?.[side === "home" ? "home_name" : "away_name"];
+): string {
+  const team =
+    rawTeamValue(
+      fixture,
+      side
+    );
 
-  if (directName) {
-    return directName;
+  const candidates = [
+    team?.name,
+    team?.team_name,
+    team?.team?.name,
+    team?.team?.team_name,
+    fixture?.[`${side}_team_name`],
+    fixture?.[`${side}_name`]
+  ];
+
+  for (const value of candidates) {
+    if (
+      typeof value === "string" &&
+      value.trim()
+    ) {
+      return value.trim();
+    }
   }
 
-  return teamName(
-    rawTeamValue(fixture, side)
-  );
+  return "Unknown";
 }
 
 function fixtureName(
-  fixture: any,
-  currentTeamId: number,
-  currentTeamName: string
-) {
-  const home = rawTeamValue(
-    fixture,
-    "home"
-  );
-
-  const away = rawTeamValue(
-    fixture,
-    "away"
-  );
-
-  const homeId = teamId(home);
-  const awayId = teamId(away);
-
-  const homeName = fixtureTeamName(
-    fixture,
-    "home"
-  );
-
-  const awayName = fixtureTeamName(
-    fixture,
-    "away"
-  );
-
-  if (homeId === currentTeamId) {
-    return `${currentTeamName} vs ${awayName}`;
-  }
-
-  if (awayId === currentTeamId) {
-    return `${homeName} vs ${currentTeamName}`;
-  }
-
-  if (
-    homeName !== "Unknown" &&
-    awayName !== "Unknown"
-  ) {
-    return `${homeName} vs ${awayName}`;
-  }
-
-  const fallbackHome =
-    fixture?.home_team_name ??
-    fixture?.home_name ??
-    fixture?.home_team;
-
-  const fallbackAway =
-    fixture?.away_team_name ??
-    fixture?.away_name ??
-    fixture?.away_team;
-
-  if (fallbackHome && fallbackAway) {
-    return `${fallbackHome} vs ${fallbackAway}`;
-  }
-
-  return "Fixture";
-}
-
-function scoreValue(fixture: any) {
-  const score =
-    fixture?.score ??
-    fixture?.scores ??
-    {};
-
+  fixture: any
+): string {
   const home =
-    score?.home ??
-    score?.home_score ??
-    score?.home_team ??
-    fixture?.home_score ??
-    fixture?.home_team_score;
+    teamName(fixture, "home");
 
   const away =
-    score?.away ??
-    score?.away_score ??
-    score?.away_team ??
-    fixture?.away_score ??
-    fixture?.away_team_score;
+    teamName(fixture, "away");
 
-  if (
-    home == null ||
-    away == null
-  ) {
-    return null;
-  }
-
-  return `${home}–${away}`;
+  return `${home} vs ${away}`;
 }
 
-function validDate(value: any) {
-  if (!value) return null;
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
+function scoreValue(
+  fixture: any,
+  side: "home" | "away"
+) {
+  return (
+    fixture?.[`${side}_score`] ??
+    fixture?.score?.[side] ??
+    fixture?.scores?.[side] ??
+    null
+  );
 }
 
-function formatDate(value: any) {
-  const date = validDate(value);
+function formatDate(
+  value: any
+): string {
+  const date =
+    dateValue(value);
 
   if (!date) {
-    return "Date unavailable";
+    return "";
   }
 
-  return new Intl.DateTimeFormat(
-    "en-GB",
-    {
-      timeZone: "Europe/London",
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    }
-  ).format(date);
-}
+  const parsed =
+    new Date(date);
 
-function formatUKTime(value: any) {
-  const date = validDate(value);
-
-  if (!date) {
+  if (Number.isNaN(
+    parsed.getTime()
+  )) {
     return "";
   }
 
   return new Intl.DateTimeFormat(
     "en-GB",
     {
-      timeZone: "Europe/London",
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "Europe/London"
+    }
+  ).format(parsed);
+}
+
+function formatUKTime(
+  value: any
+): string {
+  const date =
+    dateValue(value);
+
+  if (!date) {
+    return "";
+  }
+
+  const parsed =
+    new Date(date);
+
+  if (Number.isNaN(
+    parsed.getTime()
+  )) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
+      timeZone: "Europe/London"
     }
-  ).format(date);
+  ).format(parsed);
 }
 
 function formatBangladeshTime(
   value: any
-) {
-  const date = validDate(value);
+): string {
+  const date =
+    dateValue(value);
 
   if (!date) {
+    return "";
+  }
+
+  const parsed =
+    new Date(date);
+
+  if (Number.isNaN(
+    parsed.getTime()
+  )) {
     return "";
   }
 
   return new Intl.DateTimeFormat(
     "en-GB",
     {
-      timeZone: "Asia/Dhaka",
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
+      timeZone: "Asia/Dhaka"
     }
-  ).format(date);
+  ).format(parsed);
 }
 
-function fixtureTimes(value: any) {
-  const uk = formatUKTime(value);
-  const bangladesh =
-    formatBangladeshTime(value);
+function fixtureTimes(
+  fixture: any
+) {
+  const date =
+    dateValue(fixture);
 
-  if (!uk && !bangladesh) {
+  if (!date) {
+    return null;
+  }
+
+  const uk =
+    formatUKTime(fixture);
+
+  const bangladesh =
+    formatBangladeshTime(
+      fixture
+    );
+
+  if (!uk || !bangladesh) {
     return null;
   }
 
   return (
     <div className="times">
-      <span>{uk} (UK)</span>
+      <span>
+        {uk} (UK)
+      </span>
+
       <span>
         {bangladesh} (Bangladesh)
       </span>
@@ -268,156 +247,91 @@ function fixtureTimes(value: any) {
   );
 }
 
-function playerAppears(value: any): boolean {
-  if (!value) {
-    return false;
+function fixtureTimestamp(
+  fixture: any
+): number {
+  const date =
+    dateValue(fixture);
+
+  if (!date) {
+    return 0;
   }
 
-  if (Array.isArray(value)) {
-    return value.some((item) =>
-      playerAppears(item)
-    );
-  }
+  const timestamp =
+    new Date(date).getTime();
 
-  if (
-    typeof value !== "object"
-  ) {
-    return false;
-  }
-
-  const ids = [
-    value?.id,
-    value?.player_id,
-    value?.player?.id,
-    value?.player?.player_id,
-  ];
-
-  if (
-    ids.some(
-      (id: any) =>
-        Number(id) === 6135
-    )
-  ) {
-    return true;
-  }
-
-  const names = [
-    value?.name,
-    value?.player_name,
-    value?.full_name,
-    value?.player?.name,
-    value?.player?.full_name,
-  ];
-
-  if (
-    names.some((name: any) =>
-      String(name ?? "")
-        .toLowerCase()
-        .includes("choudhury")
-    )
-  ) {
-    return true;
-  }
-
-  return Object.values(value).some(
-    (child: any) =>
-      child &&
-      typeof child === "object" &&
-      playerAppears(child)
-  );
-}
-
-function playedFromStoredData(
-  data: any
-) {
-  const status =
-    data?.last_fixture
-      ?.player_status ??
-    data?.player_status
-      ?.latest_match;
-
-  if (status?.played === true) {
-    return {
-      played: true,
-      text:
-        status.label ??
-        "Played",
-      reason:
-        status.label ??
-        "Played",
-    };
-  }
-
-  return {
-    played: false,
-    text: "NO",
-    reason:
-      status?.label ??
-      "Did not play",
-  };
+  return Number.isNaN(timestamp)
+    ? 0
+    : timestamp;
 }
 
 function sortUpcomingFixtures(
   fixtures: any[]
 ) {
   return [...fixtures]
-    .filter((fixture) =>
-      validDate(
-        dateValue(fixture)
-      )
+    .filter(
+      (fixture) =>
+        fixtureTimestamp(
+          fixture
+        ) > 0
     )
     .sort(
       (a, b) =>
-        new Date(
-          dateValue(a)
-        ).getTime() -
-        new Date(
-          dateValue(b)
-        ).getTime()
+        fixtureTimestamp(a) -
+        fixtureTimestamp(b)
     );
+}
+
+function playerAppears(
+  fixture: any
+): boolean {
+  const status =
+    fixture?.player_status;
+
+  return Boolean(
+    status?.played === true
+  );
 }
 
 export default async function Home() {
   const supabase =
     getSupabaseAdmin();
 
-  const { data } =
-    await supabase
-      .from("player_page")
-      .select("*")
-      .eq("id", 1)
-      .single();
+  const {
+    data,
+    error
+  } = await supabase
+    .from("player_page")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
 
-  if (!data) {
+  if (
+    error ||
+    !data
+  ) {
     return (
       <main className="page">
-        <div className="container">
-          <div className="eyebrow">
-            HAMZA CHOUDHURY
+        <div className="card">
+          <div className="label">
+            DID HAMZA PLAY?
           </div>
 
           <h1>
-            DID HAMZA PLAY?
+            Data unavailable
           </h1>
 
-          <p className="muted">
-            Waiting for football
-            data.
+          <p>
+            The football data has not
+            been loaded yet.
           </p>
         </div>
       </main>
     );
   }
 
-  const currentTeamId =
-    Number(data.team_id);
-
-  const currentTeamName =
-    data.team_name ??
-    "Sheffield United";
-
-  const last =
-    data.last_fixture ?? {};
+  const lastFixture =
+    data.last_fixture ?? null;
 
   const storedFixtures =
     Array.isArray(
@@ -434,552 +348,573 @@ export default async function Home() {
   const next =
     nextFixtures[0] ?? null;
 
-  const storedStatus =
-    playedFromStoredData(data);
+  /*
+   * IMPORTANT:
+   *
+   * The first upcoming fixture is
+   * displayed in "WILL HAMZA PLAY NEXT?"
+   *
+   * Therefore the fixture list below
+   * starts at index 1 so the next match
+   * is NOT repeated.
+   */
+  const upcomingFixtures =
+    next
+      ? nextFixtures.slice(1, 4)
+      : nextFixtures.slice(0, 3);
+
+  const latestStatus =
+    lastFixture?.player_status ??
+    data.player_status?.latest_match ??
+    null;
 
   const nextStatus =
-    data?.player_status
-      ?.next_match ?? {};
+    data.player_status?.next_match ??
+    null;
+
+  const latestPlayed =
+    latestStatus?.played === true;
+
+  const latestHomeName =
+    lastFixture
+      ? teamName(
+          lastFixture,
+          "home"
+        )
+      : "Unknown";
+
+  const latestAwayName =
+    lastFixture
+      ? teamName(
+          lastFixture,
+          "away"
+        )
+      : "Unknown";
+
+  const latestHomeScore =
+    scoreValue(
+      lastFixture,
+      "home"
+    );
+
+  const latestAwayScore =
+    scoreValue(
+      lastFixture,
+      "away"
+    );
+
+  const latestDate =
+    lastFixture
+      ? dateValue(lastFixture)
+      : null;
+
+  const latestFixtureTitle =
+    lastFixture
+      ? `${latestHomeName} vs ${latestAwayName}`
+      : "No recent match";
+
+  const nextFixtureTitle =
+    next
+      ? fixtureName(next)
+      : "No upcoming fixture";
+
+  const nextDate =
+    next
+      ? dateValue(next)
+      : null;
 
   return (
-    <main className="page">
-      <div className="container">
-
-        <header className="header">
-          <div className="eyebrow">
-            <span className="dot" />
-            HAMZA CHOUDHURY
-          </div>
-
-          <h1>
-            DID HAMZA PLAY?
-          </h1>
-
-          <p className="intro">
-            A simple answer to
-            whether Hamza Choudhury
-            featured for Sheffield
-            United in the latest
-            match.
-          </p>
-        </header>
-
-        <section className="latest">
-
-          <div className="latest-info">
-
-            <div className="label">
-              LATEST MATCH
-            </div>
-
-            <h2>
-              {fixtureName(
-                last,
-                currentTeamId,
-                currentTeamName
-              )}
-            </h2>
-
-            <p className="date">
-              {formatDate(
-                dateValue(last)
-              )}
-            </p>
-
-            {fixtureTimes(
-              dateValue(last)
-            )}
-
-            {scoreValue(last) && (
-              <div className="score">
-                {scoreValue(last)}
-              </div>
-            )}
-
-          </div>
-
-          <div
-            className={
-              storedStatus.played
-                ? "answer yes"
-                : "answer no"
-            }
-          >
-            {storedStatus.played
-              ? "YES"
-              : "NO"}
-          </div>
-
-          <div className="why">
-
-            <div className="label">
-              WHY?
-            </div>
-
-            <div className="reason">
-              {storedStatus.reason}
-            </div>
-
-          </div>
-
-        </section>
-
-        <section className="next">
-
-          <div className="label">
-            WILL HAMZA PLAY NEXT?
-          </div>
-
-          {next ? (
-            <>
-              <h2>
-                {fixtureName(
-                  next,
-                  currentTeamId,
-                  currentTeamName
-                )}
-              </h2>
-
-              <p className="date">
-                {formatDate(
-                  dateValue(next)
-                )}
-              </p>
-
-              {fixtureTimes(
-                dateValue(next)
-              )}
-
-              <div className="availability">
-
-                <div>
-
-                  <div className="small-label">
-                    AVAILABILITY
-                  </div>
-
-                  <div className="availability-title">
-                    {nextStatus.label ??
-                      "Likely available"}
-                  </div>
-
-                  <p>
-                    {nextStatus.reason ??
-                      "No current injury, doubt or suspension is listed."}
-                  </p>
-
-                </div>
-
-                <div className="badge">
-                  {String(
-                    nextStatus.type ??
-                      "likely_available"
-                  )
-                    .replaceAll(
-                      "_",
-                      " "
-                    )
-                    .toUpperCase()}
-                </div>
-
-              </div>
-            </>
-          ) : (
-            <p className="muted">
-              No upcoming fixture
-              is currently
-              available.
-            </p>
-          )}
-
-        </section>
-
-        <section className="fixtures">
-
-          <div className="label">
-            NEXT 3 FIXTURES
-          </div>
-
-          {nextFixtures
-            .slice(0, 3)
-            .map(
-              (
-                fixture: any,
-                index: number
-              ) => (
-                <div
-                  className="fixture"
-                  key={
-                    fixture?.id ??
-                    index
-                  }
-                >
-
-                  <div>
-
-                    <strong>
-                      {fixtureName(
-                        fixture,
-                        currentTeamId,
-                        currentTeamName
-                      )}
-                    </strong>
-
-                    <div className="date">
-                      {formatDate(
-                        dateValue(
-                          fixture
-                        )
-                      )}
-                    </div>
-
-                    {fixtureTimes(
-                      dateValue(
-                        fixture
-                      )
-                    )}
-
-                  </div>
-
-                  <span>
-                    {index === 0
-                      ? "NEXT"
-                      : `#${index + 1}`}
-                  </span>
-
-                </div>
-              )
-            )}
-
-        </section>
-
-        <footer>
-          Data updated{" "}
-          {formatDate(
-            data.updated_at
-          )}
-          {" · "}
-          Live football data
-        </footer>
-
-      </div>
-
+    <>
       <style>{`
-
         * {
           box-sizing: border-box;
         }
 
+        html,
         body {
           margin: 0;
-          background: #070b12;
-          color: #fff;
+          padding: 0;
+          background: #080d14;
+          color: #ffffff;
           font-family:
             Arial,
             Helvetica,
             sans-serif;
         }
 
-        .page {
+        body {
           min-height: 100vh;
-          padding:
-            50px
-            20px
-            80px;
-          background:
-            radial-gradient(
-              circle at 90% 0%,
-              #17233a 0,
-              #070b12 42%
-            );
         }
 
-        .container {
-          max-width: 1050px;
-          margin: auto;
+        .page {
+          width: 100%;
+          max-width: 900px;
+          margin: 0 auto;
+          padding: 42px 32px 70px;
         }
 
         .header {
-          margin-bottom: 35px;
+          margin-bottom: 26px;
         }
 
-        .eyebrow {
-          color: #8995a8;
-          font-size: 13px;
+        .brand {
+          font-size: 14px;
           font-weight: 800;
-          letter-spacing: .16em;
+          letter-spacing: 2.5px;
+          color: #91a5c2;
+          text-transform: uppercase;
         }
 
-        .dot {
-          display: inline-block;
-          width: 8px;
-          height: 8px;
-          margin-right: 9px;
-          border-radius: 50%;
-          background: #35d399;
+        .title {
+          margin: 8px 0 0;
+          font-size: clamp(42px, 8vw, 72px);
+          line-height: 0.95;
+          letter-spacing: -3px;
+          font-weight: 900;
         }
 
-        h1 {
-          margin: 15px 0;
-          font-size:
-            clamp(
-              58px,
-              10vw,
-              120px
-            );
-          line-height: .9;
-          letter-spacing: -.07em;
+        .subtitle {
+          margin-top: 14px;
+          color: #91a5c2;
+          font-size: 16px;
+          line-height: 1.5;
         }
 
-        h2 {
-          margin:
-            8px
-            0
-            0;
-          font-size:
-            clamp(
-              26px,
-              4vw,
-              40px
-            );
-          line-height: 1.1;
-          letter-spacing: -.03em;
+        .card {
+          background: #ffffff;
+          color: #090d13;
+          border-radius: 34px;
+          padding: 44px;
+          margin-bottom: 24px;
         }
 
-        .intro {
-          max-width: 650px;
-          color: #8995a8;
-          font-size: 17px;
-          line-height: 1.6;
-        }
-
-        .latest {
+        .hero {
           position: relative;
-          padding: 35px;
-          border-radius: 28px;
-          background: #fff;
-          color: #0b1018;
-        }
-
-        .latest-info {
-          padding-right: 190px;
+          min-height: 370px;
         }
 
         .label {
-          color: #7b8797;
-          font-size: 12px;
+          color: #7084a1;
+          font-size: 15px;
           font-weight: 900;
-          letter-spacing: .16em;
+          letter-spacing: 2.2px;
+          text-transform: uppercase;
         }
 
-        .date {
-          margin:
-            9px
-            0
-            0;
-          color: #718096;
-          font-size: 14px;
+        .match-title {
+          max-width: 650px;
+          margin: 14px 0 10px;
+          font-size: clamp(34px, 6vw, 52px);
+          line-height: 1.02;
+          letter-spacing: -2px;
+          font-weight: 900;
+        }
+
+        .match-date {
+          color: #7084a1;
+          font-size: 17px;
+          margin-top: 16px;
         }
 
         .times {
           display: flex;
+          gap: 24px;
           flex-wrap: wrap;
-          gap: 8px 18px;
-          margin-top: 7px;
-          color: #718096;
-          font-size: 14px;
+          margin-top: 8px;
+          color: #7084a1;
+          font-size: 16px;
           font-weight: 700;
-        }
-
-        .score {
-          margin-top: 18px;
-          font-size: 30px;
-          font-weight: 900;
         }
 
         .answer {
           position: absolute;
-          top: 35px;
-          right: 35px;
-          width: 145px;
-          height: 145px;
+          right: 0;
+          top: 0;
+          width: 182px;
+          height: 182px;
+          border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 50%;
-          color: #fff;
-          font-size: 34px;
-          font-weight: 950;
-        }
-
-        .yes {
-          background: #16a36b;
-        }
-
-        .no {
-          background: #111827;
-        }
-
-        .why {
-          margin-top: 30px;
-          padding-top: 25px;
-          border-top:
-            1px solid
-            #e5e7eb;
-        }
-
-        .reason {
-          margin-top: 8px;
-          font-size: 21px;
-          font-weight: 800;
-        }
-
-        .next {
-          margin-top: 20px;
-          padding: 35px;
-          border-radius: 28px;
-          background: #111927;
-        }
-
-        .next h2 {
-          color: #fff;
-        }
-
-        .next .date,
-        .next .times {
-          color: #8995a8;
-        }
-
-        .availability {
-          margin-top: 28px;
-          padding: 24px;
-          border-radius: 20px;
-          background: #fff;
-          color: #0b1018;
-          display: flex;
-          justify-content: space-between;
-          gap: 20px;
-          align-items: center;
-        }
-
-        .small-label {
-          color: #718096;
-          font-size: 11px;
+          font-size: 46px;
           font-weight: 900;
-          letter-spacing: .14em;
         }
 
-        .availability-title {
-          margin-top: 7px;
+        .answer.yes {
+          background: #18a36d;
+          color: #ffffff;
+        }
+
+        .answer.no {
+          background: #e45757;
+          color: #ffffff;
+        }
+
+        .score {
+          margin-top: 28px;
+          font-size: 38px;
+          font-weight: 900;
+          letter-spacing: -1px;
+        }
+
+        .divider {
+          height: 1px;
+          background: #dfe4ea;
+          margin: 44px 0 34px;
+        }
+
+        .why-title {
+          margin-top: 16px;
           font-size: 28px;
           font-weight: 900;
         }
 
-        .availability p {
-          color: #667085;
+        .dark-card {
+          background: #111a29;
+          border-radius: 34px;
+          padding: 46px 44px;
+          margin-bottom: 24px;
         }
 
-        .badge {
-          padding:
-            9px
-            14px;
-          border-radius: 999px;
-          background: #dcfce7;
-          color: #08734b;
-          font-size: 11px;
+        .dark-card .match-title {
+          color: #ffffff;
+        }
+
+        .availability {
+          background: #ffffff;
+          color: #090d13;
+          border-radius: 26px;
+          padding: 32px;
+          margin-top: 34px;
+          position: relative;
+        }
+
+        .availability-label {
+          color: #7084a1;
+          font-size: 15px;
           font-weight: 900;
-          white-space: nowrap;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+        }
+
+        .availability-status {
+          margin-top: 14px;
+          font-size: 36px;
+          line-height: 1.05;
+          font-weight: 900;
+          letter-spacing: -1.5px;
+          padding-right: 170px;
+        }
+
+        .availability-reason {
+          margin-top: 18px;
+          color: #7084a1;
+          font-size: 18px;
+          line-height: 1.45;
+          padding-right: 80px;
+        }
+
+        .status-pill {
+          position: absolute;
+          right: 28px;
+          top: 76px;
+          padding: 11px 18px;
+          border-radius: 999px;
+          background: #d9f8e8;
+          color: #087c51;
+          font-size: 13px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
         .fixtures {
-          margin-top: 38px;
+          background: #ffffff;
+          color: #090d13;
+          border-radius: 34px;
+          padding: 44px;
         }
 
-        .fixture {
-          margin-top: 10px;
-          padding: 21px;
-          border:
-            1px solid
-            #1d2838;
-          border-radius: 18px;
-          background: #111927;
-          display: flex;
-          justify-content: space-between;
-          gap: 20px;
+        .fixture-list {
+          margin-top: 26px;
         }
 
-        .fixture strong {
-          font-size: 17px;
+        .fixture-row {
+          padding: 24px 0;
+          border-top: 1px solid #dfe4ea;
         }
 
-        .fixture .times {
-          color: #8995a8;
+        .fixture-row:first-child {
+          border-top: 0;
         }
 
-        .fixture span {
-          color: #7f8a9b;
-          font-size: 11px;
+        .fixture-opponent {
+          font-size: 25px;
+          line-height: 1.15;
           font-weight: 900;
-          letter-spacing: .1em;
+          letter-spacing: -0.5px;
         }
 
-        .muted {
-          color: #8995a8;
+        .fixture-date {
+          margin-top: 9px;
+          color: #7084a1;
+          font-size: 15px;
         }
 
-        footer {
-          margin-top: 35px;
-          padding-top: 20px;
-          border-top:
-            1px solid
-            #1d2838;
-          color: #657184;
-          font-size: 12px;
+        .fixture-times {
+          display: flex;
+          gap: 20px;
+          flex-wrap: wrap;
+          margin-top: 6px;
+          color: #7084a1;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .updated {
+          text-align: center;
+          margin-top: 28px;
+          color: #7084a1;
+          font-size: 13px;
         }
 
         @media (max-width: 700px) {
-
           .page {
-            padding:
-              30px
-              14px
-              50px;
+            padding: 24px 16px 50px;
           }
 
-          .latest,
-          .next {
-            padding: 24px;
-            border-radius: 22px;
+          .card,
+          .dark-card,
+          .fixtures {
+            padding: 30px 24px;
+            border-radius: 26px;
           }
 
-          .latest-info {
-            padding-right: 0;
+          .hero {
+            min-height: 0;
           }
 
           .answer {
+            position: relative;
+            right: auto;
+            top: auto;
+            margin: 28px 0 0;
+            width: 145px;
+            height: 145px;
+            font-size: 38px;
+          }
+
+          .availability-status {
+            padding-right: 0;
+          }
+
+          .availability-reason {
+            padding-right: 0;
+          }
+
+          .status-pill {
             position: static;
-            margin-top: 25px;
-            width: 120px;
-            height: 120px;
+            display: inline-block;
+            margin-top: 18px;
           }
-
-          .availability {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-
-          .times {
-            flex-direction: column;
-            gap: 4px;
-          }
-
-          .fixture {
-            align-items: flex-start;
-          }
-
         }
-
       `}</style>
-    </main>
+
+      <main className="page">
+        <header className="header">
+          <div className="brand">
+            DID HAMZA PLAY?
+          </div>
+
+          <h1 className="title">
+            Match tracker
+          </h1>
+
+          <div className="subtitle">
+            Sheffield United · Hamza Choudhury
+          </div>
+        </header>
+
+        <section className="card hero">
+          <div className="label">
+            LATEST MATCH
+          </div>
+
+          <h2 className="match-title">
+            {latestFixtureTitle}
+          </h2>
+
+          {latestDate && (
+            <>
+              <div className="match-date">
+                {formatDate(
+                  latestDate
+                )}
+              </div>
+
+              {fixtureTimes(
+                lastFixture
+              )}
+            </>
+          )}
+
+          <div
+            className={
+              latestPlayed
+                ? "answer yes"
+                : "answer no"
+            }
+          >
+            {latestPlayed
+              ? "YES"
+              : "NO"}
+          </div>
+
+          {latestHomeScore !== null &&
+            latestAwayScore !== null && (
+              <div className="score">
+                {latestHomeScore}
+                –
+                {latestAwayScore}
+              </div>
+            )}
+
+          <div className="divider" />
+
+          <div className="label">
+            WHY?
+          </div>
+
+          <div className="why-title">
+            {latestStatus?.label ??
+              (latestPlayed
+                ? "Played"
+                : "Did not play")}
+          </div>
+        </section>
+
+        <section className="dark-card">
+          <div className="label">
+            WILL HAMZA PLAY NEXT?
+          </div>
+
+          <h2 className="match-title">
+            {nextFixtureTitle}
+          </h2>
+
+          {nextDate && (
+            <>
+              <div className="match-date">
+                {formatDate(
+                  nextDate
+                )}
+              </div>
+
+              {fixtureTimes(next)}
+            </>
+          )}
+
+          <div className="availability">
+            <div className="availability-label">
+              AVAILABILITY
+            </div>
+
+            <div className="availability-status">
+              {nextStatus?.label ??
+                "Likely available"}
+            </div>
+
+            <div className="availability-reason">
+              {nextStatus?.reason ??
+                "No current injury, doubt or suspension is listed."}
+            </div>
+
+            <div className="status-pill">
+              {nextStatus?.label ??
+                "LIKELY AVAILABLE"}
+            </div>
+          </div>
+        </section>
+
+        <section className="fixtures">
+          <div className="label">
+            UPCOMING FIXTURES
+          </div>
+
+          <div className="fixture-list">
+            {upcomingFixtures.length === 0 ? (
+              <div className="fixture-row">
+                No upcoming fixtures found.
+              </div>
+            ) : (
+              upcomingFixtures.map(
+                (
+                  fixture: any,
+                  index: number
+                ) => {
+                  const date =
+                    dateValue(
+                      fixture
+                    );
+
+                  return (
+                    <div
+                      className="fixture-row"
+                      key={
+                        fixture?.id ??
+                        `${fixtureTimestamp(
+                          fixture
+                        )}-${index}`
+                      }
+                    >
+                      <div className="fixture-opponent">
+                        {fixtureName(
+                          fixture
+                        )}
+                      </div>
+
+                      {date && (
+                        <div className="fixture-date">
+                          {formatDate(date)}
+                        </div>
+                      )}
+
+                      <div className="fixture-times">
+                        {date && (
+                          <>
+                            <span>
+                              {formatUKTime(
+                                fixture
+                              )}{" "}
+                              (UK)
+                            </span>
+
+                            <span>
+                              {formatBangladeshTime(
+                                fixture
+                              )}{" "}
+                              (Bangladesh)
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+              )
+            )}
+          </div>
+        </section>
+
+        <div className="updated">
+          Data updated{" "}
+          {data.updated_at
+            ? formatDate(
+                data.updated_at
+              )
+            : ""}
+        </div>
+      </main>
+    </>
   );
 }
