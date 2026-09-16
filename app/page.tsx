@@ -1,8 +1,6 @@
 import { getSupabaseAdmin } from "../lib/supabase";
 
-function dateValue(
-  value: any
-): string | null {
+function dateValue(value: any): string | null {
   if (!value) return null;
 
   if (typeof value === "string") {
@@ -56,9 +54,7 @@ function teamName(
     fixture?.[`${side}_name`]
   ];
 
-  for (
-    const value of candidates
-  ) {
+  for (const value of candidates) {
     if (
       typeof value === "string" &&
       value.trim()
@@ -192,8 +188,7 @@ function formatBangladeshTime(
 
 function fixtureTimes(
   fixture: any,
-  className =
-    "times"
+  className = "times"
 ) {
   const date =
     dateValue(fixture);
@@ -446,9 +441,7 @@ function appearanceSummary(
     );
   }
 
-  if (
-    started
-  ) {
+  if (started) {
     return (
       minutes !== null
         ? `Started. Played ${minutes} mins.`
@@ -675,9 +668,9 @@ export default async function Home() {
         .recent-grid {
           display: grid;
           grid-template-columns:
-            minmax(0, 1.35fr)
-            minmax(390px, 0.95fr);
-          gap: 38px;
+            minmax(0, 1.3fr)
+            minmax(400px, 1fr);
+          gap: 34px;
           align-items: start;
         }
 
@@ -760,19 +753,20 @@ export default async function Home() {
         }
 
         .details-panel {
-          padding-left: 34px;
+          padding-left: 28px;
           border-left:
             1px solid
             #dfe4ea;
+          min-width: 0;
         }
 
         .details-main {
           margin-top: 10px;
           font-size: 24px;
-          line-height: 1.15;
+          line-height: 1.16;
           font-weight: 900;
-          letter-spacing: -0.8px;
-          white-space: nowrap;
+          letter-spacing: -0.7px;
+          max-width: 100%;
         }
 
         .details-supporting {
@@ -780,6 +774,7 @@ export default async function Home() {
           color: #52647d;
           font-size: 15px;
           line-height: 1.5;
+          max-width: 430px;
         }
 
         .detail-stats {
@@ -994,7 +989,6 @@ export default async function Home() {
           }
 
           .details-main {
-            white-space: normal;
             font-size: 28px;
           }
 
