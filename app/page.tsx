@@ -1061,12 +1061,12 @@ export default async function Home() {
 
         .detail-stat-label {
           color: #7084a1;
-          font-size: 9px;
-          line-height: 1.05;
+          font-size: 8px;
+          line-height: 1;
           font-weight: 900;
-          letter-spacing: .8px;
+          letter-spacing: .5px;
           text-transform: uppercase;
-          overflow-wrap: normal;
+          white-space: nowrap;
         }
 
         .detail-stat-value {
