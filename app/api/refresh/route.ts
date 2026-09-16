@@ -3,6 +3,7 @@ import {
   refreshPlayerPage
 } from "../../../lib/refresh";
 import {
+  findTeam,
   getTeamFixtures,
   getLineups
 } from "../../../lib/api-football";
@@ -42,9 +43,24 @@ export async function GET(
     const result =
       await refreshPlayerPage();
 
+    const teams =
+      await findTeam("Sheffield United");
+
+    const team =
+      teams?.find(
+        (item: any) =>
+          Number(item?.id) > 0
+      ) ?? null;
+
+    if (!team?.id) {
+      throw new Error(
+        "Could not find Sheffield United team ID."
+      );
+    }
+
     const fixtures =
       await getTeamFixtures(
-        result.team_id
+        Number(team.id)
       );
 
     const nextFixture =
