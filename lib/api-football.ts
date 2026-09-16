@@ -55,7 +55,9 @@ async function bsdGet<T>(
   return response.json() as Promise<T>;
 }
 
-function responseArray(data: any): any[] {
+function responseArray(
+  data: any
+): any[] {
   if (Array.isArray(data)) {
     return data;
   }
@@ -79,7 +81,9 @@ function responseArray(data: any): any[] {
   return [];
 }
 
-function fixtureDate(fixture: any) {
+function fixtureDate(
+  fixture: any
+) {
   return (
     fixture?.time?.kickoff_at ??
     fixture?.time?.start_time ??
@@ -110,16 +114,62 @@ function fixtureTimestamp(
     : timestamp;
 }
 
-function teamId(value: any): number {
+function getNestedTeam(
+  fixture: any,
+  side: "home" | "away"
+) {
   const candidates = [
-    value?.id,
-    value?.team_id,
-    value?.team?.id,
-    value?.team?.team_id
+    fixture?.[side],
+    fixture?.[`${side}_team`],
+    fixture?.[`${side}Team`],
+    fixture?.teams?.[side],
+    fixture?.teams?.[
+      `${side}_team`
+    ],
+    fixture?.participants?.[side],
+    fixture?.participants?.[
+      `${side}_team`
+    ]
   ];
 
   for (const candidate of candidates) {
-    const id = Number(candidate);
+    if (
+      candidate !== undefined &&
+      candidate !== null
+    ) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function getTeamId(
+  fixture: any,
+  side: "home" | "away"
+): number {
+  const nested =
+    getNestedTeam(
+      fixture,
+      side
+    );
+
+  const candidates = [
+    fixture?.[
+      `${side}_team_id`
+    ],
+    fixture?.[
+      `${side}_id`
+    ],
+    nested?.id,
+    nested?.team_id,
+    nested?.team?.id,
+    nested?.team?.team_id
+  ];
+
+  for (const value of candidates) {
+    const id =
+      Number(value);
 
     if (
       Number.isFinite(id) &&
@@ -132,14 +182,30 @@ function teamId(value: any): number {
   return 0;
 }
 
-function teamName(value: any): string {
+function getTeamName(
+  value: any
+): string {
+  if (
+    typeof value === "string" &&
+    value.trim()
+  ) {
+    return value.trim();
+  }
+
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return "Unknown";
+  }
+
   const candidates = [
-    value?.name,
-    value?.team_name,
-    value?.team?.name,
-    value?.team?.team_name,
-    value?.full_name,
-    value?.short_name
+    value.name,
+    value.team_name,
+    value.full_name,
+    value.short_name,
+    value.team?.name,
+    value.team?.team_name
   ];
 
   for (const candidate of candidates) {
@@ -154,115 +220,224 @@ function teamName(value: any): string {
   return "Unknown";
 }
 
-function extractHomeAway(
-  fixture: any
-) {
-  const home =
-    fixture?.home ??
-    fixture?.home_team ??
-    fixture?.homeTeam ??
-    fixture?.teams?.home ??
-    fixture?.teams?.home_team ??
-    fixture?.participants?.home ??
-    fixture?.participants?.home_team ??
-    null;
+function getFixtureTeamName(
+  fixture: any,
+  side: "home" | "away"
+): string {
+  const nested =
+    getNestedTeam(
+      fixture,
+      side
+    );
 
-  const away =
-    fixture?.away ??
-    fixture?.away_team ??
-    fixture?.awayTeam ??
-    fixture?.teams?.away ??
-    fixture?.teams?.away_team ??
-    fixture?.participants?.away ??
-    fixture?.participants?.away_team ??
-    null;
+  const nestedName =
+    getTeamName(nested);
 
-  return {
-    homeId:
-      teamId(home) ||
-      Number(
-        fixture?.home_team_id ??
-        fixture?.home_id ??
-        0
-      ),
+  if (
+    nestedName !== "Unknown"
+  ) {
+    return nestedName;
+  }
 
-    awayId:
-      teamId(away) ||
-      Number(
-        fixture?.away_team_id ??
-        fixture?.away_id ??
-        0
-      ),
+  const candidates = [
+    fixture?.[
+      `${side}_team_name`
+    ],
+    fixture?.[
+      `${side}_name`
+    ]
+  ];
 
-    homeName:
-      teamName(home) !== "Unknown"
-        ? teamName(home)
-        : (
-            fixture?.home_team_name ??
-            fixture?.home_name ??
-            "Unknown"
-          ),
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === "string" &&
+      candidate.trim()
+    ) {
+      return candidate.trim();
+    }
+  }
 
-    awayName:
-      teamName(away) !== "Unknown"
-        ? teamName(away)
-        : (
-            fixture?.away_team_name ??
-            fixture?.away_name ??
-            "Unknown"
-          )
-  };
+  return "Unknown";
 }
 
-async function getEvent(
-  eventId: number
+async function getTeamById(
+  teamId: number
 ) {
+  if (
+    !Number.isFinite(teamId) ||
+    teamId <= 0
+  ) {
+    return null;
+  }
+
   return bsdGet<any>(
-    `/events/${eventId}/`
+    `/teams/${teamId}/`
   );
+}
+
+async function resolveFixtureTeams(
+  fixture: any
+) {
+  const homeId =
+    getTeamId(
+      fixture,
+      "home"
+    );
+
+  const awayId =
+    getTeamId(
+      fixture,
+      "away"
+    );
+
+  /*
+   * First use whatever names BSD has
+   * already supplied.
+   */
+  let homeName =
+    getFixtureTeamName(
+      fixture,
+      "home"
+    );
+
+  let awayName =
+    getFixtureTeamName(
+      fixture,
+      "away"
+    );
+
+  /*
+   * If either name is missing, resolve
+   * it directly from the BSD team ID.
+   */
+  const needsHome =
+    homeName === "Unknown" &&
+    homeId > 0;
+
+  const needsAway =
+    awayName === "Unknown" &&
+    awayId > 0;
+
+  const [
+    homeTeam,
+    awayTeam
+  ] = await Promise.all([
+    needsHome
+      ? getTeamById(homeId)
+      : Promise.resolve(null),
+
+    needsAway
+      ? getTeamById(awayId)
+      : Promise.resolve(null)
+  ]);
+
+  if (
+    homeName === "Unknown"
+  ) {
+    homeName =
+      getTeamName(homeTeam);
+  }
+
+  if (
+    awayName === "Unknown"
+  ) {
+    awayName =
+      getTeamName(awayTeam);
+  }
+
+  /*
+   * Return a canonical fixture shape.
+   *
+   * We deliberately populate BOTH:
+   *   home / away
+   *   home_team / away_team
+   *
+   * so the refresh normaliser can consume
+   * the data regardless of which field it
+   * checks first.
+   */
+  return {
+    ...fixture,
+
+    home: {
+      id: homeId,
+      name: homeName
+    },
+
+    away: {
+      id: awayId,
+      name: awayName
+    },
+
+    home_team: {
+      id: homeId,
+      name: homeName
+    },
+
+    away_team: {
+      id: awayId,
+      name: awayName
+    },
+
+    home_team_id:
+      homeId,
+
+    away_team_id:
+      awayId,
+
+    home_team_name:
+      homeName,
+
+    away_team_name:
+      awayName
+  };
 }
 
 async function enrichFixture(
   fixture: any
 ) {
+  /*
+   * Get the authoritative event detail
+   * first, when an event ID exists.
+   */
   const eventId =
     Number(
       fixture?.id ??
       fixture?.event_id
     );
 
+  let combined =
+    fixture;
+
   if (
-    !Number.isFinite(eventId) ||
-    eventId <= 0
+    Number.isFinite(eventId) &&
+    eventId > 0
   ) {
-    return fixture;
-  }
+    try {
+      const event =
+        await bsdGet<any>(
+          `/events/${eventId}/`
+        );
 
-  try {
-    const event =
-      await getEvent(eventId);
-
-    /*
-     * BSD's event detail contains the
-     * authoritative home/away team data.
-     */
-    return {
-      ...fixture,
-      ...event,
-
+      combined = {
+        ...fixture,
+        ...event,
+        id:
+          event?.id ??
+          eventId
+      };
+    } catch {
       /*
-       * Preserve the original fixture ID.
+       * Keep the fixture feed data if
+       * event-detail lookup fails.
        */
-      id: event?.id ?? eventId
-    };
-  } catch {
-    /*
-     * If enrichment fails, retain the
-     * original fixture rather than breaking
-     * the entire refresh.
-     */
-    return fixture;
+      combined = fixture;
+    }
   }
+
+  return resolveFixtureTeams(
+    combined
+  );
 }
 
 export async function getPlayer(
@@ -318,8 +493,8 @@ export async function getTeamFixtures(
   teamId: number
 ) {
   /*
-   * BSD's team fixtures endpoint contains
-   * every fixture and result, including
+   * This endpoint contains Sheffield
+   * United's full fixture list, including
    * cup competitions.
    */
   const data =
@@ -341,6 +516,9 @@ export async function getTeamFixtures(
         ) > 0
     );
 
+  /*
+   * Latest completed fixture.
+   */
   const finished =
     validFixtures
       .filter(
@@ -355,6 +533,10 @@ export async function getTeamFixtures(
           fixtureTimestamp(a)
       );
 
+  /*
+   * All future fixtures, regardless
+   * of competition.
+   */
   const upcoming =
     validFixtures
       .filter(
@@ -370,36 +552,43 @@ export async function getTeamFixtures(
       );
 
   /*
-   * Enrich the fixtures with BSD's event
-   * detail endpoint. This is the important
-   * part: the event detail has the actual
-   * home and away team names.
+   * Resolve the latest fixture and the
+   * next six fixtures individually.
+   *
+   * Six gives the page enough data for:
+   *   - Will Hamza play next?
+   *   - three fixtures after that
    */
-  const upcomingEnriched =
+  const fixturesToResolve = [
+    ...(finished[0]
+      ? [finished[0]]
+      : []),
+    ...upcoming.slice(0, 6)
+  ];
+
+  const resolved =
     await Promise.all(
-      upcoming
-        .slice(0, 6)
-        .map(
-          (fixture) =>
-            enrichFixture(
-              fixture
-            )
-        )
+      fixturesToResolve.map(
+        (fixture) =>
+          enrichFixture(
+            fixture
+          )
+      )
     );
 
-  const lastEnriched =
+  const last =
     finished[0]
-      ? await enrichFixture(
-          finished[0]
-        )
+      ? resolved[0] ?? null
       : null;
 
-  return {
-    last:
-      lastEnriched,
+  const next =
+    finished[0]
+      ? resolved.slice(1)
+      : resolved;
 
-    next:
-      upcomingEnriched
+  return {
+    last,
+    next
   };
 }
 
