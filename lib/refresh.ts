@@ -527,8 +527,7 @@ function playerPlayed(
 
   if (
     target &&
-    text.includes(target) &&
-    lineupRole !== "substitute"
+    text.includes(target)
   ) {
     return {
       played: true,
