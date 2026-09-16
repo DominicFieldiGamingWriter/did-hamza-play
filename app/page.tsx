@@ -737,7 +737,7 @@ export default async function Home() {
 
         <section className="card hero">
           <div className="label">
-            LATEST MATCH
+            MOST RECENT MATCH
           </div>
 
           <h2 className="match-title">
