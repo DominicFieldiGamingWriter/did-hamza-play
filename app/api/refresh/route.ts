@@ -1,108 +1,98 @@
 import { NextResponse } from "next/server";
 import { refreshPlayerPage } from "../../../lib/refresh";
 import {
-  findTeam
+  findTeam,
+  getTeamFixtures,
+  getLineups
 } from "../../../lib/api-football";
 
-const BASE_URL =
-  "https://sports.bzzoiro.com/api/v2";
-
-function getKey() {
-  const key =
-    process.env.BSD_API_KEY;
-
-  if (!key) {
-    throw new Error(
-      "BSD_API_KEY is not configured."
-    );
-  }
-
-  return key;
-}
-
-async function bsdGet(
-  path: string,
-  params: Record<
-    string,
-    string | number | undefined
-  > = {}
-) {
-  const url =
-    new URL(
-      `${BASE_URL}${path}`
-    );
+function getId(
+  value: any
+): number | null {
+  const candidates = [
+    value?.id,
+    value?.player_id,
+    value?.player?.id,
+    value?.player?.player_id
+  ];
 
   for (
-    const [key, value] of Object.entries(
-      params
+    const candidate of candidates
+  ) {
+    const number =
+      Number(candidate);
+
+    if (
+      Number.isFinite(number) &&
+      number > 0
+    ) {
+      return number;
+    }
+  }
+
+  return null;
+}
+
+function collectPlayerIds(
+  value: any,
+  output: number[] = []
+): number[] {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return output;
+  }
+
+  if (
+    Array.isArray(value)
+  ) {
+    for (
+      const item of value
+    ) {
+      collectPlayerIds(
+        item,
+        output
+      );
+    }
+
+    return output;
+  }
+
+  if (
+    typeof value !==
+    "object"
+  ) {
+    return output;
+  }
+
+  const id =
+    getId(value);
+
+  if (
+    id !== null &&
+    !output.includes(id)
+  ) {
+    output.push(id);
+  }
+
+  for (
+    const child of Object.values(
+      value
     )
   ) {
     if (
-      value !== undefined &&
-      value !== ""
+      child &&
+      typeof child === "object"
     ) {
-      url.searchParams.set(
-        key,
-        String(value)
+      collectPlayerIds(
+        child,
+        output
       );
     }
   }
 
-  const response =
-    await fetch(url, {
-      headers: {
-        Authorization:
-          `Token ${getKey()}`,
-        Accept:
-          "application/json"
-      },
-      cache:
-        "no-store"
-    });
-
-  if (!response.ok) {
-    throw new Error(
-      `BSD API ${response.status}: ${await response.text()}`
-    );
-  }
-
-  return response.json();
-}
-
-function responseArray(
-  data: any
-): any[] {
-  if (
-    Array.isArray(data)
-  ) {
-    return data;
-  }
-
-  if (
-    Array.isArray(
-      data?.results
-    )
-  ) {
-    return data.results;
-  }
-
-  if (
-    Array.isArray(
-      data?.data
-    )
-  ) {
-    return data.data;
-  }
-
-  if (
-    Array.isArray(
-      data?.events
-    )
-  ) {
-    return data.events;
-  }
-
-  return [];
+  return output;
 }
 
 export async function GET(
@@ -130,7 +120,8 @@ export async function GET(
     return NextResponse.json(
       {
         ok: false,
-        error: "Unauthorized"
+        error:
+          "Unauthorized"
       },
       {
         status: 401
@@ -163,100 +154,120 @@ export async function GET(
       );
     }
 
-    const allEvents =
-      await bsdGet(
-        "/events/",
-        {
-          team_id:
-            Number(team.id),
-          limit:
-            100
-        }
+    const fixtures =
+      await getTeamFixtures(
+        Number(team.id)
       );
 
-    const events =
-      responseArray(
-        allEvents
-      );
+    const live =
+      fixtures.live ??
+      null;
 
-    const simplified =
-      events.map(
-        (event: any) => ({
-          id:
-            event?.id ??
-            event?.event_id ??
-            null,
+    let lineupResult:
+      | any
+      | null = null;
 
-          status:
-            event?.status ??
-            event?.state ??
-            event?.match_status ??
-            event?.event_status ??
-            null,
+    let lineupPlayerIds:
+      | number[]
+      = [];
 
-          date:
-            event?.time?.kickoff_at ??
-            event?.time?.start_time ??
-            event?.kickoff_at ??
-            event?.kickoff ??
-            event?.event_date ??
-            event?.date ??
-            event?.start_time ??
-            null,
+    if (
+      live?.id
+    ) {
+      try {
+        lineupResult =
+          await getLineups(
+            Number(
+              live.id
+            )
+          );
 
-          home:
-            event?.home?.name ??
-            event?.home_team?.name ??
-            event?.home_team_name ??
-            null,
+        lineupPlayerIds =
+          collectPlayerIds(
+            lineupResult
+          );
+      } catch (error) {
+        lineupResult = {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Lineup request failed"
+        };
+      }
+    }
 
-          away:
-            event?.away?.name ??
-            event?.away_team?.name ??
-            event?.away_team_name ??
-            null,
+    return NextResponse.json({
+      ok: true,
 
-          raw_status_keys:
-            {
+      player:
+        result.player,
+
+      player_id:
+        6135,
+
+      team:
+        result.team,
+
+      updated_at:
+        result.updated_at,
+
+      live_fixture:
+        live
+          ? {
+              id:
+                live.id,
+
               status:
-                event?.status ??
+                live.status ??
                 null,
 
-              state:
-                event?.state ??
+              date:
+                live.date ??
                 null,
 
-              match_status:
-                event?.match_status ??
+              home_team:
+                live.home_team ??
                 null,
 
-              event_status:
-                event?.event_status ??
+              away_team:
+                live.away_team ??
+                null,
+
+              home_score:
+                live.home_score ??
+                null,
+
+              away_score:
+                live.away_score ??
                 null
             }
-        })
-      );
+          : null,
 
-    return NextResponse.json(
-      {
-        ok: true,
-        player:
-          result.player,
-        team:
-          result.team,
-        updated_at:
-          result.updated_at,
+      lineup_status:
+        lineupResult?.status ??
+        null,
 
-        event_count:
-          simplified.length,
+      lineup_top_level_keys:
+        lineupResult
+          ? Object.keys(
+              lineupResult
+            )
+          : [],
 
-        events:
-          simplified
-      }
-    );
+      lineup_player_ids:
+        lineupPlayerIds,
+
+      hamza_in_lineup:
+        lineupPlayerIds.includes(
+          6135
+        ),
+
+      lineup:
+        lineupResult
+    });
   } catch (error) {
     console.error(
-      "Refresh diagnostic failed:",
+      "Live lineup diagnostic failed:",
       error
     );
 
@@ -266,7 +277,7 @@ export async function GET(
         error:
           error instanceof Error
             ? error.message
-            : "Refresh diagnostic failed"
+            : "Live lineup diagnostic failed"
       },
       {
         status: 500
