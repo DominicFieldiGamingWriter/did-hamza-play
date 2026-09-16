@@ -580,21 +580,31 @@ export default async function Home() {
       latestStatus
     );
 
-  const liveSelected =
+  const liveStatus =
     liveFixture
       ?.player_status
-      ?.selected;
+      ?.status ??
+    null;
 
-  const liveHasDecision =
-    liveSelected ===
-      true ||
-    liveSelected ===
-      false;
+  const liveAnswer =
+    liveStatus ===
+    "playing"
+      ? "YES"
+      : liveStatus ===
+        "substitute"
+      ? "SUB"
+      : liveStatus ===
+        "not_playing"
+      ? "NO"
+      : null;
 
   const liveAnswerClass =
-    liveSelected ===
-    true
+    liveStatus ===
+    "playing"
       ? "answer yes live-answer"
+      : liveStatus ===
+        "substitute"
+      ? "answer sub live-answer"
       : "answer no live-answer";
 
   const liveDate =
@@ -686,6 +696,10 @@ export default async function Home() {
 
         .answer.no {
           color: #d9303f;
+        }
+
+        .answer.sub {
+          color: #52647d;
         }
 
         .live-section {
@@ -1258,71 +1272,6 @@ export default async function Home() {
           </div>
         </div>
 
-        {liveFixture && (
-          <section className="live-section">
-            <div className="live-heading-row">
-              <h2 className="live-heading">
-                CURRENTLY PLAYING
-              </h2>
-
-              {liveHasDecision && (
-                <div
-                  className={
-                    liveAnswerClass
-                  }
-                >
-                  {liveSelected
-                    ? "YES"
-                    : "NO"}
-                </div>
-              )}
-            </div>
-
-            <div className="live-card">
-              <div className="live-card-inner">
-                <div>
-                  <div className="section-label">
-                    LIVE MATCH
-                  </div>
-
-                  <h3 className="live-title">
-                    {fixtureName(
-                      liveFixture
-                    )}
-                  </h3>
-
-                  {liveDate && (
-                    <>
-                      <div className="live-date">
-                        {formatDate(
-                          liveDate
-                        )}
-                      </div>
-
-                      {fixtureTimes(
-                        liveFixture,
-                        "live-times"
-                      )}
-                    </>
-                  )}
-
-                  <div className="live-status">
-                    LIVE
-                  </div>
-                </div>
-
-                <div className="live-score">
-                  {liveHomeScore ??
-                    "—"}
-                  –
-                  {liveAwayScore ??
-                    "—"}
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
         <section className="section-card">
           <div className="recent-grid">
             <div>
@@ -1488,6 +1437,69 @@ export default async function Home() {
             </div>
           </div>
         </section>
+
+        {liveFixture && (
+          <section className="live-section">
+            <div className="live-heading-row">
+              <h2 className="live-heading">
+                CURRENTLY PLAYING
+              </h2>
+
+              {liveAnswer && (
+                <div
+                  className={
+                    liveAnswerClass
+                  }
+                >
+                  {liveAnswer}
+                </div>
+              )}
+            </div>
+
+            <div className="live-card">
+              <div className="live-card-inner">
+                <div>
+                  <div className="section-label">
+                    LIVE MATCH
+                  </div>
+
+                  <h3 className="live-title">
+                    {fixtureName(
+                      liveFixture
+                    )}
+                  </h3>
+
+                  {liveDate && (
+                    <>
+                      <div className="live-date">
+                        {formatDate(
+                          liveDate
+                        )}
+                      </div>
+
+                      {fixtureTimes(
+                        liveFixture,
+                        "live-times"
+                      )}
+                    </>
+                  )}
+
+                  <div className="live-status">
+                    LIVE
+                  </div>
+                </div>
+
+                <div className="live-score">
+                  {liveHomeScore ??
+                    "—"}
+                  –
+                  {liveAwayScore ??
+                    "—"}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         <h2 className="next-heading">
           WILL HAMZA PLAY NEXT?
