@@ -1,26 +1,35 @@
 import {
   findPlayer,
   getPlayer,
+  findTeam,
+  getTeamSquad,
   getTeamFixtures,
   getLineups,
-  getFixturePlayerStats,
-  getSidelined
+  getFixturePlayerStats
 } from "./api-football";
+
 import { getSupabaseAdmin } from "./supabase";
 
-function getPlayerStatus(
+function playerPlayed(
   playerId: number,
   lineups: any[],
-  playerStats: any[],
-  sidelined: any[]
+  playerStats: any[]
 ) {
-  // Check whether the player appeared in the match.
   for (const lineup of lineups) {
-    const starters = lineup.starting_xi ?? lineup.startXI ?? [];
-    const substitutes = lineup.substitutes ?? [];
+    const starters =
+      lineup.starting_xi ??
+      lineup.startXI ??
+      [];
+
+    const substitutes =
+      lineup.substitutes ??
+      [];
 
     if (
-      starters.some((p: any) => p.player?.id === playerId)
+      starters.some(
+        (p: any) =>
+          p.player?.id === playerId
+      )
     ) {
       return {
         played: true,
@@ -30,7 +39,10 @@ function getPlayerStatus(
     }
 
     if (
-      substitutes.some((p: any) => p.player?.id === playerId)
+      substitutes.some(
+        (p: any) =>
+          p.player?.id === playerId
+      )
     ) {
       return {
         played: true,
@@ -40,63 +52,26 @@ function getPlayerStatus(
     }
   }
 
-  // Check player statistics as a second confirmation.
-  for (const group of playerStats) {
-    const players = group.players ?? [];
-
-    for (const entry of players) {
-      if (entry.player?.id === playerId) {
-        const stats = entry.statistics?.[0];
-
-        if (
-          stats?.minutes ||
-          stats?.games?.minutes > 0 ||
-          stats?.games?.appearences > 0
-        ) {
-          return {
-            played: true,
-            type: "played",
-            label: "Played"
-          };
-        }
-      }
-    }
-  }
-
-  // If he did not play, look for an absence reason.
-  const absence = sidelined?.[0];
-
-  if (absence) {
-    const status = String(
-      absence.status ?? absence.type ?? ""
-    ).toLowerCase();
-
-    const reason = absence.reason ?? "";
-
-    if (status.includes("suspend")) {
-      return {
-        played: false,
-        type: "suspended",
-        label: "Suspended",
-        reason
-      };
+  for (const entry of playerStats) {
+    if (entry.player?.id !== playerId) {
+      continue;
     }
 
-    if (status.includes("injur")) {
-      return {
-        played: false,
-        type: "injured",
-        label: "Injured",
-        reason
-      };
-    }
+    const stats =
+      entry.statistics?.[0] ??
+      entry.stats ??
+      entry;
 
-    if (status.includes("doubt")) {
+    const minutes =
+      stats?.minutes ??
+      stats?.games?.minutes ??
+      0;
+
+    if (Number(minutes) > 0) {
       return {
-        played: false,
-        type: "doubtful",
-        label: "Doubtful",
-        reason
+        played: true,
+        type: "played",
+        label: "Played"
       };
     }
   }
@@ -104,126 +79,152 @@ function getPlayerStatus(
   return {
     played: false,
     type: "not_selected",
-    label: "Not selected"
+    label: "Did not play"
   };
 }
 
-function getNextMatchStatus(sidelined: any[]) {
-  const absence = sidelined?.[0];
+function getAvailabilityStatus(
+  squadPlayer: any
+) {
+  const availability =
+    String(
+      squadPlayer?.availability ?? ""
+    ).toLowerCase();
 
-  if (!absence) {
-    return {
-      status: "likely_available",
-      label: "Likely available",
-      reason: "No current injury or suspension is listed."
-    };
-  }
+  const reason =
+    squadPlayer?.injury_type ??
+    "";
 
-  const status = String(
-    absence.status ?? absence.type ?? ""
-  ).toLowerCase();
-
-  const reason = absence.reason ?? "";
-
-  if (status.includes("suspend")) {
+  if (availability === "injured") {
     return {
       status: "unavailable",
       label: "Unavailable",
-      reason: reason || "Suspended."
+      reason: reason || "Injured"
     };
   }
 
-  if (status.includes("injur")) {
-    return {
-      status: "unavailable",
-      label: "Unavailable",
-      reason: reason || "Injured."
-    };
-  }
-
-  if (status.includes("doubt")) {
+  if (availability === "doubtful") {
     return {
       status: "doubtful",
       label: "Doubtful",
-      reason: reason || "Listed as doubtful."
+      reason: reason || "Listed as doubtful"
+    };
+  }
+
+  if (availability === "suspended") {
+    return {
+      status: "unavailable",
+      label: "Unavailable",
+      reason: reason || "Suspended"
     };
   }
 
   return {
     status: "likely_available",
     label: "Likely available",
-    reason: reason || "No current absence is listed."
+    reason:
+      "No current injury, doubt or suspension is listed."
   };
 }
 
 export async function refreshPlayerPage() {
   const playerName =
-    process.env.PLAYER_NAME || "Hamza Choudhury";
+    process.env.PLAYER_NAME ||
+    "Hamza Choudhury";
 
-  const configuredPlayerId = Number(
+  const playerId = Number(
     process.env.PLAYER_ID || 6135
   );
 
-  let player;
+  const player = await getPlayer(playerId);
 
-  if (configuredPlayerId) {
-    player = await getPlayer(configuredPlayerId);
-  } else {
-    const results = await findPlayer(playerName);
-
-    if (!results.length) {
-      throw new Error(
-        `Could not find player: ${playerName}`
-      );
-    }
-
-    player = results[0];
-  }
-
-  const playerId = player.id;
-  const team = player.team;
-
-  if (!team?.id) {
+  if (!player) {
     throw new Error(
-      "Could not determine Hamza's current team."
+      `Could not find player ID ${playerId}.`
     );
   }
 
-  const { last, next } = await getTeamFixtures(team.id);
+  // Find Sheffield United from BSD rather than
+  // relying on the player profile to contain a team.
+  const teams = await findTeam(
+    "Sheffield United"
+  );
+
+  const team =
+    teams.find(
+      (t: any) =>
+        String(t.name).toLowerCase() ===
+        "sheffield united"
+    ) ??
+    teams[0];
+
+  if (!team?.id) {
+    throw new Error(
+      "Could not find Sheffield United in BSD."
+    );
+  }
+
+  const squad =
+    await getTeamSquad(team.id);
+
+  const squadPlayer =
+    squad.find(
+      (p: any) =>
+        Number(p.id ?? p.player?.id) ===
+        playerId
+    ) ?? null;
+
+  const { last, next } =
+    await getTeamFixtures(team.id);
 
   if (!last) {
     throw new Error(
-      "Could not find the latest completed fixture."
+      "Could not find Sheffield United's latest completed match."
     );
   }
 
   const [
-    lineups,
-    playerStats,
-    sidelined
+    lineupData,
+    playerStats
   ] = await Promise.all([
     getLineups(last.id),
-    getFixturePlayerStats(last.id, team.id),
-    getSidelined(playerId)
+    getFixturePlayerStats(last.id)
   ]);
 
-  const lastStatus = getPlayerStatus(
-    playerId,
-    lineups,
-    playerStats,
-    sidelined
-  );
+  const lastStatus =
+    playerPlayed(
+      playerId,
+      lineupData.lineups,
+      playerStats
+    );
 
-  const nextStatus = getNextMatchStatus(sidelined);
+  const nextStatus =
+    getAvailabilityStatus(
+      squadPlayer
+    );
 
   const payload = {
     id: 1,
+
     player_id: playerId,
-    player_name: player.name,
+
+    player_name:
+      player?.name ??
+      squadPlayer?.name ??
+      playerName,
+
     team_id: team.id,
+
     team_name: team.name,
-    team_logo: team.logo ?? null,
-    player_photo: player.photo ?? null,
+
+    team_logo:
+      team.logo ??
+      null,
+
+    player_photo:
+      player?.photo ??
+      squadPlayer?.photo ??
+      null,
 
     last_fixture: {
       ...last,
@@ -237,14 +238,17 @@ export async function refreshPlayerPage() {
       next_match: nextStatus
     },
 
-    updated_at: new Date().toISOString()
+    updated_at:
+      new Date().toISOString()
   };
 
-  const supabase = getSupabaseAdmin();
+  const supabase =
+    getSupabaseAdmin();
 
-  const { error } = await supabase
-    .from("player_page")
-    .upsert(payload);
+  const { error } =
+    await supabase
+      .from("player_page")
+      .upsert(payload);
 
   if (error) {
     throw new Error(
