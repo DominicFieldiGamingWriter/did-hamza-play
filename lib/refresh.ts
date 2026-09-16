@@ -4,12 +4,17 @@ import {
   getTeamSquad,
   getTeamFixtures,
   getLineups,
-  getFixturePlayerStats
+  getFixturePlayerStats,
+  getFixtureIncidents
 } from "./api-football";
 
-import { getSupabaseAdmin } from "./supabase";
+import {
+  getSupabaseAdmin
+} from "./supabase";
 
-function getId(value: any): number | null {
+function getId(
+  value: any
+): number | null {
   const ids = [
     value?.id,
     value?.player_id,
@@ -17,10 +22,17 @@ function getId(value: any): number | null {
     value?.player?.player_id
   ];
 
-  for (const id of ids) {
-    const numberId = Number(id);
+  for (
+    const id of ids
+  ) {
+    const numberId =
+      Number(id);
 
-    if (Number.isFinite(numberId)) {
+    if (
+      Number.isFinite(
+        numberId
+      )
+    ) {
       return numberId;
     }
   }
@@ -28,7 +40,9 @@ function getId(value: any): number | null {
   return null;
 }
 
-function getName(value: any): string {
+function getName(
+  value: any
+): string {
   const names = [
     value?.name,
     value?.player_name,
@@ -37,16 +51,58 @@ function getName(value: any): string {
     value?.player?.full_name
   ];
 
-  for (const name of names) {
+  for (
+    const name of names
+  ) {
     if (
       typeof name === "string" &&
       name.trim()
     ) {
-      return name.trim().toLowerCase();
+      return name
+        .trim()
+        .toLowerCase();
     }
   }
 
   return "";
+}
+
+function hasMinutes(
+  value: any
+): boolean {
+  if (
+    !value ||
+    typeof value !==
+      "object"
+  ) {
+    return false;
+  }
+
+  const candidates = [
+    value.minutes,
+    value.minutes_played,
+    value.played_minutes,
+    value.min,
+    value.games?.minutes,
+    value.stats?.minutes,
+    value.statistics?.minutes,
+    value.statistics?.[0]?.minutes,
+    value.statistics?.[0]?.games?.minutes
+  ];
+
+  return candidates.some(
+    (minutes) => {
+      const number =
+        Number(minutes);
+
+      return (
+        Number.isFinite(
+          number
+        ) &&
+        number > 0
+      );
+    }
+  );
 }
 
 function findPlayerRecord(
@@ -56,13 +112,16 @@ function findPlayerRecord(
 ): any | null {
   if (
     !value ||
-    typeof value !== "object"
+    typeof value !==
+      "object"
   ) {
     return null;
   }
 
   if (Array.isArray(value)) {
-    for (const entry of value) {
+    for (
+      const entry of value
+    ) {
       const found =
         findPlayerRecord(
           entry,
@@ -90,8 +149,12 @@ function findPlayerRecord(
 
   const nameMatches =
     name === playerName ||
-    name.includes(playerName) ||
-    playerName.includes(name);
+    name.includes(
+      playerName
+    ) ||
+    playerName.includes(
+      name
+    );
 
   if (
     idMatches ||
@@ -100,7 +163,11 @@ function findPlayerRecord(
     return value;
   }
 
-  for (const child of Object.values(value)) {
+  for (
+    const child of Object.values(
+      value
+    )
+  ) {
     if (
       child &&
       typeof child === "object"
@@ -121,41 +188,6 @@ function findPlayerRecord(
   return null;
 }
 
-function hasMinutes(
-  value: any
-): boolean {
-  if (
-    !value ||
-    typeof value !== "object"
-  ) {
-    return false;
-  }
-
-  const candidates = [
-    value.minutes,
-    value.minutes_played,
-    value.played_minutes,
-    value.min,
-    value.games?.minutes,
-    value.stats?.minutes,
-    value.statistics?.minutes,
-    value.statistics?.[0]?.minutes,
-    value.statistics?.[0]?.games?.minutes
-  ];
-
-  return candidates.some(
-    (minutes) => {
-      const number =
-        Number(minutes);
-
-      return (
-        Number.isFinite(number) &&
-        number > 0
-      );
-    }
-  );
-}
-
 function findPlayerWithMinutes(
   value: any,
   playerId: number,
@@ -163,7 +195,8 @@ function findPlayerWithMinutes(
 ): boolean {
   if (
     !value ||
-    typeof value !== "object"
+    typeof value !==
+      "object"
   ) {
     return false;
   }
@@ -191,8 +224,12 @@ function findPlayerWithMinutes(
 
   const nameMatches =
     name === playerName ||
-    name.includes(playerName) ||
-    playerName.includes(name);
+    name.includes(
+      playerName
+    ) ||
+    playerName.includes(
+      name
+    );
 
   if (
     (idMatches || nameMatches) &&
@@ -201,7 +238,9 @@ function findPlayerWithMinutes(
     return true;
   }
 
-  return Object.values(value).some(
+  return Object.values(
+    value
+  ).some(
     (child) =>
       child &&
       typeof child === "object" &&
@@ -220,7 +259,8 @@ function findPlayerAnywhere(
 ): boolean {
   if (
     !value ||
-    typeof value !== "object"
+    typeof value !==
+      "object"
   ) {
     return false;
   }
@@ -248,8 +288,12 @@ function findPlayerAnywhere(
 
   const nameMatches =
     name === playerName ||
-    name.includes(playerName) ||
-    playerName.includes(name);
+    name.includes(
+      playerName
+    ) ||
+    playerName.includes(
+      name
+    );
 
   if (
     idMatches ||
@@ -258,7 +302,9 @@ function findPlayerAnywhere(
     return true;
   }
 
-  return Object.values(value).some(
+  return Object.values(
+    value
+  ).some(
     (child) =>
       child &&
       typeof child === "object" &&
@@ -317,20 +363,24 @@ function findNumber(
 ): number | null {
   if (
     !value ||
-    typeof value !== "object"
+    typeof value !==
+      "object"
   ) {
     return null;
   }
 
-  for (const key of keys) {
-    const candidate =
-      value?.[key];
-
+  for (
+    const key of keys
+  ) {
     const number =
-      Number(candidate);
+      Number(
+        value?.[key]
+      );
 
     if (
-      Number.isFinite(number) &&
+      Number.isFinite(
+        number
+      ) &&
       number >= 0
     ) {
       return number;
@@ -340,21 +390,20 @@ function findNumber(
   return null;
 }
 
-function findText(
-  value: any,
-  keys: string[]
-): string {
-  if (
-    !value ||
-    typeof value !== "object"
+function getDisplayName(
+  value: any
+): string | null {
+  const candidates = [
+    value?.name,
+    value?.player_name,
+    value?.full_name,
+    value?.player?.name,
+    value?.player?.full_name
+  ];
+
+  for (
+    const candidate of candidates
   ) {
-    return "";
-  }
-
-  for (const key of keys) {
-    const candidate =
-      value?.[key];
-
     if (
       typeof candidate === "string" &&
       candidate.trim()
@@ -363,7 +412,7 @@ function findText(
     }
   }
 
-  return "";
+  return null;
 }
 
 function getSubstitutionDetails(
@@ -388,7 +437,8 @@ function getSubstitutionDetails(
   ) {
     if (
       !current ||
-      typeof current !== "object"
+      typeof current !==
+        "object"
     ) {
       return;
     }
@@ -411,68 +461,58 @@ function getSubstitutionDetails(
         }
       })();
 
-    const directPlayerIn =
+    const playerIn =
       current?.player_in ??
       current?.playerIn ??
       current?.substitute_in ??
-      current?.substitution?.player_in ??
+      current?.substituteIn ??
       current?.in_player ??
+      current?.inPlayer ??
+      current?.substitution?.player_in ??
       null;
 
-    const directPlayerOut =
+    const playerOut =
       current?.player_out ??
       current?.playerOut ??
       current?.substitute_out ??
-      current?.substitution?.player_out ??
+      current?.substituteOut ??
       current?.out_player ??
+      current?.outPlayer ??
+      current?.substitution?.player_out ??
       null;
 
     const inId =
-      getId(
-        directPlayerIn
-      );
+      getId(playerIn);
 
     const outId =
-      getId(
-        directPlayerOut
-      );
+      getId(playerOut);
 
     const inName =
-      getName(
-        directPlayerIn
-      );
+      getName(playerIn);
 
     const outName =
-      getName(
-        directPlayerOut
-      );
+      getName(playerOut);
 
-    const playerNameLower =
+    const target =
       playerName.toLowerCase();
 
-    const currentPlayerId =
+    const currentId =
       getId(current);
 
-    const currentPlayerName =
+    const currentName =
       getName(current);
 
     const playerIsIn =
       inId === playerId ||
-      inName.includes(
-        playerNameLower
-      );
+      inName.includes(target);
 
     const playerIsOut =
       outId === playerId ||
-      outName.includes(
-        playerNameLower
-      );
+      outName.includes(target);
 
     const currentIsPlayer =
-      currentPlayerId ===
-        playerId ||
-      currentPlayerName ===
-        playerNameLower;
+      currentId === playerId ||
+      currentName === target;
 
     const minute =
       findNumber(
@@ -492,7 +532,7 @@ function getSubstitutionDetails(
         ]
       );
 
-    const substitutionText =
+    const looksLikeSub =
       text.includes(
         "substitution"
       ) ||
@@ -507,85 +547,58 @@ function getSubstitutionDetails(
       );
 
     if (
+      looksLikeSub &&
       minute !== null &&
-      substitutionText &&
-      (
-        playerIsIn ||
-        currentIsPlayer &&
-        (
-          text.includes(
-            "in"
-          ) ||
-          text.includes(
-            "sub on"
-          )
-        )
-      )
+      playerIsIn
     ) {
-      if (
-        playerIsIn ||
-        (
-          currentIsPlayer &&
-          !text.includes(
-            "out"
-          )
-        )
-      ) {
-        subbedOn = minute;
+      subbedOn =
+        minute;
 
-        if (
-          directPlayerOut
-        ) {
-          replacedPlayer =
-            getPlayerDisplayName(
-              directPlayerOut
-            );
-        }
+      if (
+        playerOut
+      ) {
+        replacedPlayer =
+          getDisplayName(
+            playerOut
+          );
       }
     }
 
     if (
+      looksLikeSub &&
       minute !== null &&
-      substitutionText &&
       (
         playerIsOut ||
-        currentIsPlayer &&
         (
+          currentIsPlayer &&
           text.includes(
             "out"
-          ) ||
-          text.includes(
-            "sub off"
-          ) ||
-          text.includes(
-            "replace"
           )
         )
       )
     ) {
-      if (
-        playerIsOut ||
-        currentIsPlayer
-      ) {
-        subbedOff = minute;
+      subbedOff =
+        minute;
 
-        if (
-          directPlayerIn
-        ) {
-          replacedPlayer =
-            getPlayerDisplayName(
-              directPlayerIn
-            );
-        }
+      if (
+        playerIn
+      ) {
+        replacedPlayer =
+          getDisplayName(
+            playerIn
+          );
       }
     }
 
-    for (const child of Object.values(
-      current
-    )) {
+    for (
+      const child of Object.values(
+        current
+      )
+    ) {
       if (
         child &&
-        typeof child === "object"
+        typeof child ===
+          "object"
       ) {
         visit(child);
       }
@@ -601,35 +614,13 @@ function getSubstitutionDetails(
   };
 }
 
-function getPlayerDisplayName(
-  value: any
-): string | null {
-  const candidates = [
-    value?.name,
-    value?.player_name,
-    value?.full_name,
-    value?.player?.name,
-    value?.player?.full_name
-  ];
-
-  for (const candidate of candidates) {
-    if (
-      typeof candidate === "string" &&
-      candidate.trim()
-    ) {
-      return candidate.trim();
-    }
-  }
-
-  return null;
-}
-
 function buildAppearanceDetails(
   playerId: number,
   playerName: string,
   lastFixture: any,
   lineupData: any,
   playerStats: any[],
+  incidents: any[],
   lastStatus: any
 ) {
   if (
@@ -654,7 +645,9 @@ function buildAppearanceDetails(
       lineupData,
 
     player_stats:
-      playerStats
+      playerStats,
+
+    incidents
   };
 
   const playerRecord =
@@ -666,21 +659,14 @@ function buildAppearanceDetails(
 
   const substitutions =
     getSubstitutionDetails(
-      combined,
+      incidents,
       playerId,
       playerName
     );
 
-  /*
-   * The player's stat-feed minute total
-   * can incorrectly show 90 after a player
-   * has been substituted.
-   *
-   * A recorded substitution-off minute
-   * takes priority.
-   */
   let minutes =
-    substitutions.subbedOff !== null
+    substitutions.subbedOff !==
+    null
       ? substitutions.subbedOff
       : findNumber(
           playerRecord,
@@ -700,16 +686,13 @@ function buildAppearanceDetails(
       playerName
     )
   ) {
-    const record =
-      findPlayerRecord(
-        playerStats,
-        playerId,
-        playerName
-      );
-
     minutes =
       findNumber(
-        record,
+        findPlayerRecord(
+          playerStats,
+          playerId,
+          playerName
+        ),
         [
           "minutes",
           "minutes_played",
@@ -719,13 +702,9 @@ function buildAppearanceDetails(
       );
   }
 
-  /*
-   * Hamza was in the starting XI unless
-   * we can positively establish that he
-   * came on as a substitute.
-   */
   const started =
-    substitutions.subbedOn === null;
+    substitutions.subbedOn ===
+    null;
 
   const parts: string[] = [];
 
@@ -746,7 +725,8 @@ function buildAppearanceDetails(
   }
 
   if (
-    substitutions.subbedOn !== null
+    substitutions.subbedOn !==
+    null
   ) {
     parts.push(
       substitutions.replacedPlayer
@@ -756,7 +736,8 @@ function buildAppearanceDetails(
   }
 
   if (
-    substitutions.subbedOff !== null
+    substitutions.subbedOff !==
+    null
   ) {
     parts.push(
       `Subbed off in the ${substitutions.subbedOff}th minute`
@@ -875,7 +856,8 @@ function getTeamInfo(
   ) {
     return {
       id: 0,
-      name: "Unknown"
+      name:
+        "Unknown"
     };
   }
 
@@ -887,12 +869,16 @@ function getTeamInfo(
 
   let id = 0;
 
-  for (const candidate of ids) {
+  for (
+    const candidate of ids
+  ) {
     const number =
       Number(candidate);
 
     if (
-      Number.isFinite(number) &&
+      Number.isFinite(
+        number
+      ) &&
       number > 0
     ) {
       id = number;
@@ -908,21 +894,25 @@ function getTeamInfo(
     value.team?.name
   ];
 
-  for (const candidate of names) {
+  for (
+    const candidate of names
+  ) {
     if (
       typeof candidate === "string" &&
       candidate.trim()
     ) {
       return {
         id,
-        name: candidate.trim()
+        name:
+          candidate.trim()
       };
     }
   }
 
   return {
     id,
-    name: "Unknown"
+    name:
+      "Unknown"
   };
 }
 
@@ -1045,9 +1035,11 @@ function normaliseFixture(
 
     opponent_id:
       isHome
-        ? awayId || null
+        ? awayId ||
+          null
         : isAway
-        ? homeId || null
+        ? homeId ||
+          null
         : null
   };
 }
@@ -1125,12 +1117,16 @@ export async function refreshPlayerPage() {
 
   const [
     lineupData,
-    playerStats
+    playerStats,
+    incidents
   ] = await Promise.all([
     getLineups(
       last.id
     ),
     getFixturePlayerStats(
+      last.id
+    ),
+    getFixtureIncidents(
       last.id
     )
   ]);
@@ -1155,6 +1151,7 @@ export async function refreshPlayerPage() {
       last,
       lineupData,
       playerStats,
+      incidents,
       lastStatus
     );
 
@@ -1204,6 +1201,13 @@ export async function refreshPlayerPage() {
 
     last_fixture: {
       ...normalisedLast,
+
+      /*
+       * Keep the raw BSD incident feed.
+       * This gives us the actual source data
+       * for goals, assists, cards and subs.
+       */
+      incidents,
 
       player_status: {
         ...lastStatus,
