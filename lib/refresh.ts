@@ -15,6 +15,35 @@ import {
 function getId(
   value: any
 ): number | null {
+  if (
+    typeof value ===
+      "number"
+  ) {
+    return Number.isFinite(
+      value
+    ) &&
+      value > 0
+      ? value
+      : null;
+  }
+
+  if (
+    typeof value ===
+      "string"
+  ) {
+    const id =
+      Number(
+        value
+      );
+
+    return Number.isFinite(
+      id
+    ) &&
+      id > 0
+      ? id
+      : null;
+  }
+
   const candidates = [
     value?.id,
     value?.player_id,
@@ -22,15 +51,21 @@ function getId(
     value?.player?.player_id
   ];
 
-  for (const candidate of candidates) {
-    const number =
-      Number(candidate);
+  for (
+    const candidate of candidates
+  ) {
+    const id =
+      Number(
+        candidate
+      );
 
     if (
-      Number.isFinite(number) &&
-      number > 0
+      Number.isFinite(
+        id
+      ) &&
+      id > 0
     ) {
-      return number;
+      return id;
     }
   }
 
@@ -41,190 +76,59 @@ function getName(
   value: any
 ): string {
   if (
-    typeof value === "string" &&
-    value.trim()
+    typeof value ===
+      "string"
   ) {
     return value.trim();
   }
 
   if (
     !value ||
-    typeof value !== "object"
+    typeof value !==
+      "object"
   ) {
     return "";
   }
 
-  const candidates = [
+  const names = [
     value.name,
     value.player_name,
     value.full_name,
     value.player?.name,
-    value.player?.full_name,
-    value.team?.name
+    value.player?.full_name
   ];
 
-  for (const candidate of candidates) {
+  for (
+    const name of names
+  ) {
     if (
-      typeof candidate === "string" &&
-      candidate.trim()
+      typeof name ===
+        "string" &&
+      name.trim()
     ) {
-      return candidate.trim();
+      return name.trim();
     }
   }
 
   return "";
 }
 
-function playerMatches(
+function playerMatchesId(
   value: any,
-  playerId: number,
-  playerName: string
+  playerId: number
 ): boolean {
-  if (
-    value === playerId ||
-    Number(value) === playerId
-  ) {
-    return true;
-  }
-
   const id =
     getId(value);
 
-  if (
+  return (
     id !== null &&
     id === playerId
-  ) {
-    return true;
-  }
-
-  const name =
-    getName(value)
-      .toLowerCase();
-
-  const target =
-    playerName
-      .toLowerCase();
-
-  return (
-    name === target ||
-    name.includes(target) ||
-    target.includes(name)
-  );
-}
-
-function getMinute(
-  value: any
-): number | null {
-  const candidates = [
-    value?.minute,
-    value?.min,
-    value?.event_minute,
-    value?.minute_value,
-    value?.time?.minute
-  ];
-
-  for (const candidate of candidates) {
-    const minute =
-      Number(candidate);
-
-    if (
-      Number.isFinite(minute) &&
-      minute >= 0
-    ) {
-      return minute;
-    }
-  }
-
-  return null;
-}
-
-function getIncidentType(
-  value: any
-): string {
-  const candidates = [
-    value?.type,
-    value?.event_type,
-    value?.incident_type,
-    value?.action_type,
-    value?.kind,
-    value?.event
-  ];
-
-  for (const candidate of candidates) {
-    if (
-      typeof candidate === "string" &&
-      candidate.trim()
-    ) {
-      return candidate
-        .trim()
-        .toLowerCase();
-    }
-  }
-
-  return "";
-}
-
-function responseArray(
-  data: any
-): any[] {
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  if (
-    Array.isArray(data?.results)
-  ) {
-    return data.results;
-  }
-
-  if (
-    Array.isArray(data?.data)
-  ) {
-    return data.data;
-  }
-
-  return [];
-}
-
-function hasMinutes(
-  value: any
-): boolean {
-  if (
-    !value ||
-    typeof value !==
-      "object"
-  ) {
-    return false;
-  }
-
-  const candidates = [
-    value.minutes,
-    value.minutes_played,
-    value.played_minutes,
-    value.min,
-    value.games?.minutes,
-    value.stats?.minutes,
-    value.statistics?.minutes,
-    value.statistics?.[0]?.minutes
-  ];
-
-  return candidates.some(
-    (candidate) => {
-      const number =
-        Number(candidate);
-
-      return (
-        Number.isFinite(number) &&
-        number > 0
-      );
-    }
   );
 }
 
 function findPlayerRecord(
   value: any,
-  playerId: number,
-  playerName: string
+  playerId: number
 ): any | null {
   if (
     !value ||
@@ -234,13 +138,16 @@ function findPlayerRecord(
     return null;
   }
 
-  if (Array.isArray(value)) {
-    for (const item of value) {
+  if (
+    Array.isArray(value)
+  ) {
+    for (
+      const item of value
+    ) {
       const found =
         findPlayerRecord(
           item,
-          playerId,
-          playerName
+          playerId
         );
 
       if (found) {
@@ -252,10 +159,9 @@ function findPlayerRecord(
   }
 
   if (
-    playerMatches(
+    playerMatchesId(
       value,
-      playerId,
-      playerName
+      playerId
     )
   ) {
     return value;
@@ -274,8 +180,7 @@ function findPlayerRecord(
       const found =
         findPlayerRecord(
           child,
-          playerId,
-          playerName
+          playerId
         );
 
       if (found) {
@@ -287,6 +192,18 @@ function findPlayerRecord(
   return null;
 }
 
+function hasPlayer(
+  value: any,
+  playerId: number
+): boolean {
+  return Boolean(
+    findPlayerRecord(
+      value,
+      playerId
+    )
+  );
+}
+
 function playerPlayed(
   playerId: number,
   playerName: string,
@@ -294,10 +211,9 @@ function playerPlayed(
   playerStats: any[]
 ) {
   if (
-    findPlayerRecord(
+    hasPlayer(
       playerStats,
-      playerId,
-      playerName
+      playerId
     )
   ) {
     return {
@@ -308,10 +224,38 @@ function playerPlayed(
   }
 
   if (
-    findPlayerRecord(
+    hasPlayer(
       lineups,
-      playerId,
-      playerName
+      playerId
+    )
+  ) {
+    return {
+      played: true,
+      type: "played",
+      label: "Played"
+    };
+  }
+
+  /*
+   * Keep the name check as a fallback
+   * for providers that omit player IDs
+   * in lineup data.
+   */
+  const target =
+    playerName
+      .trim()
+      .toLowerCase();
+
+  const text =
+    JSON.stringify(
+      lineups ??
+      []
+    ).toLowerCase();
+
+  if (
+    target &&
+    text.includes(
+      target
     )
   ) {
     return {
@@ -328,293 +272,335 @@ function playerPlayed(
   };
 }
 
-/*
- * Resolve BSD player IDs to actual
- * player names. Nothing is hard-coded.
- */
-async function resolvePlayerName(
-  value: any,
-  explicitId?: number | null,
-  cache?: Map<number, string>
-): Promise<{
-  id: number | null;
-  name: string;
-}> {
-  let id =
-    explicitId ??
-    null;
+function getMinute(
+  value: any
+): number | null {
+  const candidates = [
+    value?.minute,
+    value?.min,
+    value?.event_minute,
+    value?.minute_value,
+    value?.time?.minute
+  ];
 
-  if (
-    id === null
+  for (
+    const candidate of candidates
   ) {
-    id =
-      getId(value);
+    const minute =
+      Number(
+        candidate
+      );
+
+    if (
+      Number.isFinite(
+        minute
+      ) &&
+      minute >= 0
+    ) {
+      return minute;
+    }
   }
 
+  return null;
+}
+
+function getIncidentType(
+  value: any
+): string {
+  return String(
+    value?.type ??
+    value?.event_type ??
+    value?.incident_type ??
+    value?.action_type ??
+    value?.kind ??
+    value?.event ??
+    ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function resolveIncidentPlayerId(
+  incident: any,
+  field: string
+): number | null {
+  const direct =
+    getId(
+      incident?.[field]
+    );
+
+  if (
+    direct !== null
+  ) {
+    return direct;
+  }
+
+  const idField =
+    `${field}_id`;
+
+  return getId(
+    incident?.[idField]
+  );
+}
+
+function getAssistId(
+  incident: any
+): number | null {
+  const candidates = [
+    incident?.assist_id,
+    incident?.assist_player_id,
+    incident?.assistant_id,
+    incident?.assist?.id,
+    incident?.assist,
+    incident?.assistant
+  ];
+
+  for (
+    const candidate of candidates
+  ) {
+    const id =
+      getId(candidate);
+
+    if (
+      id !== null
+    ) {
+      return id;
+    }
+  }
+
+  return null;
+}
+
+async function resolvePlayerName(
+  playerId: number | null,
+  directValue: any,
+  cache: Map<number, string>
+): Promise<string> {
   const directName =
-    getName(value);
+    getName(
+      directValue
+    );
 
   if (
     directName
   ) {
-    return {
-      id,
-      name:
-        directName
-    };
+    return directName;
   }
 
   if (
-    id === null
+    playerId === null
   ) {
-    return {
-      id: null,
-      name: ""
-    };
+    return "";
   }
 
   if (
-    cache?.has(id)
+    cache.has(
+      playerId
+    )
   ) {
-    return {
-      id,
-      name:
-        cache.get(id) ??
-        ""
-    };
+    return (
+      cache.get(
+        playerId
+      ) ?? ""
+    );
   }
 
   try {
     const player =
-      await getPlayer(id);
+      await getPlayer(
+        playerId
+      );
 
     const name =
-      getName(player);
+      getName(
+        player
+      );
 
     if (
-      name &&
-      cache
+      name
     ) {
       cache.set(
-        id,
+        playerId,
         name
       );
     }
 
-    return {
-      id,
-      name
-    };
+    return name;
   } catch {
-    return {
-      id,
-      name: ""
-    };
+    return "";
   }
 }
 
-/*
- * Convert BSD incidents into a predictable
- * structure that the rest of the site can
- * rely on.
- */
 async function normaliseIncidents(
   incidents: any[]
 ) {
-  const playerCache =
+  const cache =
     new Map<
       number,
       string
     >();
 
-  return Promise.all(
-    incidents.map(
-      async (
-        incident
-      ) => {
-        const type =
-          getIncidentType(
-            incident
-          );
+  const normalised =
+    await Promise.all(
+      incidents.map(
+        async (
+          incident
+        ) => {
+          const type =
+            getIncidentType(
+              incident
+            );
 
-        const minute =
-          getMinute(
-            incident
-          );
+          const minute =
+            getMinute(
+              incident
+            );
 
-        const playerId =
-          Number.isFinite(
-            Number(
-              incident?.player_id
+          const playerId =
+            resolveIncidentPlayerId(
+              incident,
+              "player"
+            );
+
+          const playerInId =
+            resolveIncidentPlayerId(
+              incident,
+              "player_in"
+            );
+
+          const playerOutId =
+            resolveIncidentPlayerId(
+              incident,
+              "player_out"
+            );
+
+          const assistId =
+            getAssistId(
+              incident
+            );
+
+          const [
+            playerName,
+            playerInName,
+            playerOutName,
+            assistName
+          ] = await Promise.all([
+            resolvePlayerName(
+              playerId,
+              incident?.player,
+              cache
+            ),
+
+            resolvePlayerName(
+              playerInId,
+              incident?.player_in,
+              cache
+            ),
+
+            resolvePlayerName(
+              playerOutId,
+              incident?.player_out,
+              cache
+            ),
+
+            resolvePlayerName(
+              assistId,
+              incident?.assist ??
+              incident?.assistant,
+              cache
             )
-          )
-            ? Number(
-                incident.player_id
-              )
-            : getId(
-                incident?.player
-              );
+          ]);
 
-        const assistId =
-          Number.isFinite(
-            Number(
-              incident?.assist_player_id
-            )
-          )
-            ? Number(
-                incident.assist_player_id
-              )
-            : Number.isFinite(
-                Number(
-                  incident?.assist_id
-                )
-              )
-            ? Number(
-                incident.assist_id
-              )
-            : getId(
-                incident?.assist
-              );
+          return {
+            type,
 
-        const playerInId =
-          Number.isFinite(
-            Number(
-              incident?.player_in_id
-            )
-          )
-            ? Number(
-                incident.player_in_id
-              )
-            : getId(
-                incident?.player_in
-              );
+            minute,
 
-        const playerOutId =
-          Number.isFinite(
-            Number(
-              incident?.player_out_id
-            )
-          )
-            ? Number(
-                incident.player_out_id
-              )
-            : getId(
-                incident?.player_out
-              );
+            player_id:
+              playerId,
 
-        const [
-          player,
-          assist,
-          playerIn,
-          playerOut
-        ] = await Promise.all([
-          resolvePlayerName(
-            incident?.player,
-            playerId,
-            playerCache
-          ),
+            player_name:
+              playerName,
 
-          resolvePlayerName(
-            incident?.assist,
-            assistId,
-            playerCache
-          ),
+            assist_id:
+              assistId,
 
-          resolvePlayerName(
-            incident?.player_in,
-            playerInId,
-            playerCache
-          ),
+            assist_name:
+              assistName,
 
-          resolvePlayerName(
-            incident?.player_out,
-            playerOutId,
-            playerCache
-          )
-        ]);
+            player_in_id:
+              playerInId,
 
-        return {
-          type,
+            player_in_name:
+              playerInName,
 
-          minute,
+            player_out_id:
+              playerOutId,
 
-          player_id:
-            player.id,
+            player_out_name:
+              playerOutName,
 
-          player_name:
-            player.name,
+            is_home:
+              incident?.is_home ??
+              null,
 
-          assist_id:
-            assist.id,
+            card_type:
+              incident?.card_type ??
+              null,
 
-          assist_name:
-            assist.name,
+            goal_type:
+              incident?.goal_type ??
+              null,
 
-          player_in_id:
-            playerIn.id,
+            added_time:
+              incident?.added_time ??
+              null,
 
-          player_in_name:
-            playerIn.name,
+            length:
+              incident?.length ??
+              null
+          };
+        }
+      )
+    );
 
-          player_out_id:
-            playerOut.id,
-
-          player_out_name:
-            playerOut.name,
-
-          is_home:
-            incident?.is_home ??
-            null,
-
-          card_type:
-            incident?.card_type ??
-            null,
-
-          goal_type:
-            incident?.goal_type ??
-            null,
-
-          added_time:
-            incident?.added_time ??
-            null,
-
-          length:
-            incident?.length ??
-            null
-        };
-      }
-    )
-  );
+  return normalised;
 }
 
-function getFinalMinute(
+function finalMinute(
   incidents: any[]
 ): number {
-  const periodMinutes =
+  const periods =
     incidents
       .filter(
-        (incident) =>
+        (
+          incident
+        ) =>
           incident.type ===
           "period"
       )
       .map(
-        (incident) =>
+        (
+          incident
+        ) =>
           Number(
             incident.minute
           )
       )
       .filter(
-        (minute) =>
+        (
+          minute
+        ) =>
           Number.isFinite(
             minute
           )
       );
 
   if (
-    periodMinutes.length
+    periods.length
   ) {
     return Math.max(
-      ...periodMinutes
+      ...periods
     );
   }
 
@@ -623,7 +609,6 @@ function getFinalMinute(
 
 function buildAppearanceDetails(
   playerId: number,
-  playerName: string,
   playerStats: any[],
   incidents: any[],
   lastStatus: any
@@ -645,49 +630,36 @@ function buildAppearanceDetails(
     };
   }
 
-  const playerRecord =
-    findPlayerRecord(
-      playerStats,
-      playerId,
-      playerName
-    );
-
   const substitutions =
     incidents.filter(
-      (incident) =>
+      (
+        incident
+      ) =>
         incident.type ===
         "substitution"
     );
 
+  /*
+   * BSD gives us the actual player
+   * IDs on substitution records.
+   */
   const subbedOnIncident =
     substitutions.find(
-      (incident) =>
+      (
+        incident
+      ) =>
         incident.player_in_id ===
-          playerId ||
-        playerMatches(
-          {
-            name:
-              incident.player_in_name
-          },
-          playerId,
-          playerName
-        )
-    );
+        playerId
+    ) ?? null;
 
   const subbedOffIncident =
     substitutions.find(
-      (incident) =>
+      (
+        incident
+      ) =>
         incident.player_out_id ===
-          playerId ||
-        playerMatches(
-          {
-            name:
-              incident.player_out_name
-          },
-          playerId,
-          playerName
-        )
-    );
+        playerId
+    ) ?? null;
 
   const subbedOn =
     subbedOnIncident?.minute ??
@@ -700,56 +672,71 @@ function buildAppearanceDetails(
   const started =
     subbedOn === null;
 
-  const finalMinute =
-    getFinalMinute(
-      incidents
-    );
-
-  /*
-   * Never treat the substitution-on minute
-   * as minutes played.
-   *
-   * We calculate from:
-   *
-   *   on -> off
-   *   on -> full time
-   *   start -> off
-   *   start -> full time
-   */
   let minutes:
     | number
     | null = null;
 
+  /*
+   * Started -> substituted off:
+   * minutes played equal the off minute.
+   */
   if (
-    subbedOn !== null
-  ) {
-    if (
-      subbedOff !== null
-    ) {
-      minutes =
-        Math.max(
-          0,
-          subbedOff -
-            subbedOn
-        );
-    } else {
-      minutes =
-        Math.max(
-          0,
-          finalMinute -
-            subbedOn
-        );
-    }
-  } else if (
+    started &&
     subbedOff !== null
   ) {
     minutes =
       subbedOff;
-  } else if (
-    hasMinutes(
-      playerRecord
-    )
+  }
+
+  /*
+   * Substitute -> substituted off:
+   * minutes played equal off minus on.
+   */
+  if (
+    subbedOn !== null &&
+    subbedOff !== null
   ) {
+    minutes =
+      Math.max(
+        0,
+        subbedOff -
+          subbedOn
+      );
+  }
+
+  /*
+   * Substitute -> full time:
+   * calculate from final match minute.
+   */
+  if (
+    subbedOn !== null &&
+    subbedOff === null
+  ) {
+    minutes =
+      Math.max(
+        0,
+        finalMinute(
+          incidents
+        ) -
+          subbedOn
+      );
+  }
+
+  /*
+   * If BSD supplies a trustworthy
+   * minutes-played statistic and we
+   * still don't have a minute figure,
+   * use that.
+   */
+  if (
+    minutes === null
+  ) {
+    const playerRecord =
+      findPlayerRecord(
+        playerStats,
+        playerId
+      );
+
     const candidates = [
       playerRecord?.minutes,
       playerRecord?.minutes_played,
@@ -757,14 +744,17 @@ function buildAppearanceDetails(
       playerRecord?.min,
       playerRecord?.games?.minutes,
       playerRecord?.stats?.minutes,
-      playerRecord?.statistics?.minutes
+      playerRecord?.statistics?.minutes,
+      playerRecord?.statistics?.[0]?.minutes
     ];
 
     for (
       const candidate of candidates
     ) {
       const number =
-        Number(candidate);
+        Number(
+          candidate
+        );
 
       if (
         Number.isFinite(
@@ -775,13 +765,9 @@ function buildAppearanceDetails(
       ) {
         minutes =
           number;
-
         break;
       }
     }
-  } else {
-    minutes =
-      finalMinute;
   }
 
   const cameOnFor =
@@ -804,7 +790,8 @@ function buildAppearanceDetails(
       ?.player_in_id ??
     null;
 
-  const parts: string[] = [];
+  const parts: string[] =
+    [];
 
   if (
     started
@@ -988,7 +975,9 @@ function getTeamInfo(
     const candidate of ids
   ) {
     const number =
-      Number(candidate);
+      Number(
+        candidate
+      );
 
     if (
       Number.isFinite(
@@ -996,7 +985,8 @@ function getTeamInfo(
       ) &&
       number > 0
     ) {
-      id = number;
+      id =
+        number;
       break;
     }
   }
@@ -1159,11 +1149,9 @@ function normaliseFixture(
 
     opponent_id:
       isHome
-        ? awayId ||
-          null
+        ? awayId || null
         : isAway
-        ? homeId ||
-          null
+        ? homeId || null
         : null
   };
 }
@@ -1222,7 +1210,8 @@ export async function refreshPlayerPage() {
         Number(
           p.id ??
           p.player?.id
-        ) === playerId
+        ) ===
+        playerId
     ) ?? null;
 
   const {
@@ -1257,9 +1246,7 @@ export async function refreshPlayerPage() {
 
   const incidents =
     await normaliseIncidents(
-      responseArray(
-        rawIncidents
-      )
+      rawIncidents
     );
 
   const actualPlayerName =
@@ -1278,7 +1265,6 @@ export async function refreshPlayerPage() {
   const appearanceDetails =
     buildAppearanceDetails(
       playerId,
-      actualPlayerName,
       playerStats,
       incidents,
       lastStatus
@@ -1307,7 +1293,8 @@ export async function refreshPlayerPage() {
     );
 
   const payload = {
-    id: 1,
+    id:
+      1,
 
     player_id:
       playerId,
