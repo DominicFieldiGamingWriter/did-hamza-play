@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 function dateValue(fixture: any) {
   return (
     fixture?.time?.kickoff_at ??
+    fixture?.kickoff_at ??
     fixture?.kickoff ??
     fixture?.event_date ??
     fixture?.date ??
@@ -11,114 +12,290 @@ function dateValue(fixture: any) {
   );
 }
 
-function teamValue(fixture: any, side: "home" | "away") {
-  return (
-    fixture?.[side] ??
-    fixture?.[`${side}_team`] ??
-    fixture?.teams?.[side] ??
-    {}
-  );
+function rawTeamValue(
+  fixture: any,
+  side: "home" | "away"
+) {
+  const candidates = [
+    fixture?.[side],
+    fixture?.[`${side}_team`],
+    fixture?.[`${side}_club`],
+    fixture?.teams?.[side],
+    fixture?.team?.[side],
+  ];
+
+  for (const value of candidates) {
+    if (value != null) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 function teamId(team: any) {
-  return Number(team?.id ?? team?.team_id ?? 0);
+  if (team == null) return 0;
+
+  if (typeof team === "number") {
+    return team;
+  }
+
+  if (typeof team === "string") {
+    return 0;
+  }
+
+  return Number(
+    team?.id ??
+      team?.team_id ??
+      team?.club_id ??
+      team?.team?.id ??
+      0
+  );
 }
 
 function teamName(team: any) {
-  return team?.name ?? team?.team_name ?? "Unknown";
+  if (team == null) {
+    return "Unknown";
+  }
+
+  if (typeof team === "string") {
+    return team;
+  }
+
+  return (
+    team?.name ??
+    team?.team_name ??
+    team?.club_name ??
+    team?.team?.name ??
+    team?.club?.name ??
+    "Unknown"
+  );
 }
 
-function fixtureName(fixture: any, currentTeamId: number) {
-  const home = teamValue(fixture, "home");
-  const away = teamValue(fixture, "away");
+function fixtureTeamName(
+  fixture: any,
+  side: "home" | "away"
+) {
+  const directName =
+    fixture?.[`${side}_team_name`] ??
+    fixture?.[`${side}_name`] ??
+    fixture?.[side === "home" ? "home_name" : "away_name"];
+
+  if (directName) {
+    return directName;
+  }
+
+  return teamName(
+    rawTeamValue(fixture, side)
+  );
+}
+
+function fixtureName(
+  fixture: any,
+  currentTeamId: number,
+  currentTeamName: string
+) {
+  const home = rawTeamValue(
+    fixture,
+    "home"
+  );
+
+  const away = rawTeamValue(
+    fixture,
+    "away"
+  );
 
   const homeId = teamId(home);
   const awayId = teamId(away);
 
+  const homeName = fixtureTeamName(
+    fixture,
+    "home"
+  );
+
+  const awayName = fixtureTeamName(
+    fixture,
+    "away"
+  );
+
   if (homeId === currentTeamId) {
-    return `Sheffield United vs ${teamName(away)}`;
+    return `${currentTeamName} vs ${awayName}`;
   }
 
   if (awayId === currentTeamId) {
-    return `${teamName(home)} vs Sheffield United`;
+    return `${homeName} vs ${currentTeamName}`;
   }
 
-  return `${teamName(home)} vs ${teamName(away)}`;
+  if (
+    homeName !== "Unknown" &&
+    awayName !== "Unknown"
+  ) {
+    return `${homeName} vs ${awayName}`;
+  }
+
+  const fallbackHome =
+    fixture?.home_team_name ??
+    fixture?.home_name ??
+    fixture?.home_team;
+
+  const fallbackAway =
+    fixture?.away_team_name ??
+    fixture?.away_name ??
+    fixture?.away_team;
+
+  if (fallbackHome && fallbackAway) {
+    return `${fallbackHome} vs ${fallbackAway}`;
+  }
+
+  return "Fixture";
 }
 
 function scoreValue(fixture: any) {
-  const score = fixture?.score ?? {};
+  const score =
+    fixture?.score ??
+    fixture?.scores ??
+    {};
 
   const home =
-    score.home ??
+    score?.home ??
+    score?.home_score ??
+    score?.home_team ??
     fixture?.home_score ??
     fixture?.home_team_score;
 
   const away =
-    score.away ??
+    score?.away ??
+    score?.away_score ??
+    score?.away_team ??
     fixture?.away_score ??
     fixture?.away_team_score;
 
-  if (home == null || away == null) {
+  if (
+    home == null ||
+    away == null
+  ) {
     return null;
   }
 
   return `${home}–${away}`;
 }
 
-function formatDate(value: any) {
-  if (!value) return "Date unavailable";
+function validDate(value: any) {
+  if (!value) return null;
 
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatDate(value: any) {
+  const date = validDate(value);
+
+  if (!date) {
     return "Date unavailable";
   }
 
-  return new Intl.DateTimeFormat("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  }).format(date);
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      timeZone: "Europe/London",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }
+  ).format(date);
 }
 
-function formatTime(value: any) {
-  if (!value) return "";
+function formatUKTime(value: any) {
+  const date = validDate(value);
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
+  if (!date) {
     return "";
   }
 
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      timeZone: "Europe/London",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }
+  ).format(date);
+}
+
+function formatBangladeshTime(
+  value: any
+) {
+  const date = validDate(value);
+
+  if (!date) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      timeZone: "Asia/Dhaka",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }
+  ).format(date);
+}
+
+function fixtureTimes(value: any) {
+  const uk = formatUKTime(value);
+  const bangladesh =
+    formatBangladeshTime(value);
+
+  if (!uk && !bangladesh) {
+    return null;
+  }
+
+  return (
+    <div className="times">
+      <span>{uk} (UK)</span>
+      <span>
+        {bangladesh} (Bangladesh)
+      </span>
+    </div>
+  );
 }
 
 function playerAppears(value: any): boolean {
-  if (!value || typeof value !== "object") {
+  if (!value) {
     return false;
   }
 
   if (Array.isArray(value)) {
-    return value.some((item: any) =>
+    return value.some((item) =>
       playerAppears(item)
     );
+  }
+
+  if (
+    typeof value !== "object"
+  ) {
+    return false;
   }
 
   const ids = [
     value?.id,
     value?.player_id,
     value?.player?.id,
-    value?.player?.player_id
+    value?.player?.player_id,
   ];
 
   if (
     ids.some(
-      (id: any) => Number(id) === 6135
+      (id: any) =>
+        Number(id) === 6135
     )
   ) {
     return true;
@@ -129,7 +306,7 @@ function playerAppears(value: any): boolean {
     value?.player_name,
     value?.full_name,
     value?.player?.name,
-    value?.player?.full_name
+    value?.player?.full_name,
   ];
 
   if (
@@ -150,34 +327,66 @@ function playerAppears(value: any): boolean {
   );
 }
 
-function playedFromStoredData(data: any) {
+function playedFromStoredData(
+  data: any
+) {
   const status =
-    data?.last_fixture?.player_status ??
-    data?.player_status?.latest_match;
+    data?.last_fixture
+      ?.player_status ??
+    data?.player_status
+      ?.latest_match;
 
   if (status?.played === true) {
     return {
       played: true,
-      text: status.label ?? "Played",
-      reason: status.label ?? "Played"
+      text:
+        status.label ??
+        "Played",
+      reason:
+        status.label ??
+        "Played",
     };
   }
 
   return {
     played: false,
     text: "NO",
-    reason: status?.label ?? "Did not play"
+    reason:
+      status?.label ??
+      "Did not play",
   };
 }
 
-export default async function Home() {
-  const supabase = getSupabaseAdmin();
+function sortUpcomingFixtures(
+  fixtures: any[]
+) {
+  return [...fixtures]
+    .filter((fixture) =>
+      validDate(
+        dateValue(fixture)
+      )
+    )
+    .sort(
+      (a, b) =>
+        new Date(
+          dateValue(a)
+        ).getTime() -
+        new Date(
+          dateValue(b)
+        ).getTime()
+    );
+}
 
-  const { data } = await supabase
-    .from("player_page")
-    .select("*")
-    .eq("id", 1)
-    .single();
+export default async function Home() {
+  const supabase =
+    getSupabaseAdmin();
+
+  const { data } =
+    await supabase
+      .from("player_page")
+      .select("*")
+      .eq("id", 1)
+      .single();
 
   if (!data) {
     return (
@@ -187,25 +396,40 @@ export default async function Home() {
             HAMZA CHOUDHURY
           </div>
 
-          <h1>DID HAMZA PLAY?</h1>
+          <h1>
+            DID HAMZA PLAY?
+          </h1>
 
           <p className="muted">
-            Waiting for football data.
+            Waiting for football
+            data.
           </p>
         </div>
       </main>
     );
   }
 
-  const teamId = Number(data.team_id);
+  const currentTeamId =
+    Number(data.team_id);
+
+  const currentTeamName =
+    data.team_name ??
+    "Sheffield United";
 
   const last =
     data.last_fixture ?? {};
 
-  const nextFixtures =
-    Array.isArray(data.next_fixtures)
+  const storedFixtures =
+    Array.isArray(
+      data.next_fixtures
+    )
       ? data.next_fixtures
       : [];
+
+  const nextFixtures =
+    sortUpcomingFixtures(
+      storedFixtures
+    );
 
   const next =
     nextFixtures[0] ?? null;
@@ -214,7 +438,8 @@ export default async function Home() {
     playedFromStoredData(data);
 
   const nextStatus =
-    data?.player_status?.next_match ?? {};
+    data?.player_status
+      ?.next_match ?? {};
 
   return (
     <main className="page">
@@ -226,18 +451,23 @@ export default async function Home() {
             HAMZA CHOUDHURY
           </div>
 
-          <h1>DID HAMZA PLAY?</h1>
+          <h1>
+            DID HAMZA PLAY?
+          </h1>
 
           <p className="intro">
-            A simple answer to whether Hamza
-            Choudhury featured for Sheffield
-            United in the latest match.
+            A simple answer to
+            whether Hamza Choudhury
+            featured for Sheffield
+            United in the latest
+            match.
           </p>
         </header>
 
         <section className="latest">
 
           <div className="latest-info">
+
             <div className="label">
               LATEST MATCH
             </div>
@@ -245,7 +475,8 @@ export default async function Home() {
             <h2>
               {fixtureName(
                 last,
-                teamId
+                currentTeamId,
+                currentTeamName
               )}
             </h2>
 
@@ -253,21 +484,18 @@ export default async function Home() {
               {formatDate(
                 dateValue(last)
               )}
-
-              {formatTime(
-                dateValue(last)
-              )
-                ? ` · ${formatTime(
-                    dateValue(last)
-                  )}`
-                : ""}
             </p>
+
+            {fixtureTimes(
+              dateValue(last)
+            )}
 
             {scoreValue(last) && (
               <div className="score">
                 {scoreValue(last)}
               </div>
             )}
+
           </div>
 
           <div
@@ -283,6 +511,7 @@ export default async function Home() {
           </div>
 
           <div className="why">
+
             <div className="label">
               WHY?
             </div>
@@ -290,6 +519,7 @@ export default async function Home() {
             <div className="reason">
               {storedStatus.reason}
             </div>
+
           </div>
 
         </section>
@@ -305,7 +535,8 @@ export default async function Home() {
               <h2>
                 {fixtureName(
                   next,
-                  teamId
+                  currentTeamId,
+                  currentTeamName
                 )}
               </h2>
 
@@ -313,19 +544,16 @@ export default async function Home() {
                 {formatDate(
                   dateValue(next)
                 )}
-
-                {formatTime(
-                  dateValue(next)
-                )
-                  ? ` · ${formatTime(
-                      dateValue(next)
-                    )}`
-                  : ""}
               </p>
+
+              {fixtureTimes(
+                dateValue(next)
+              )}
 
               <div className="availability">
 
                 <div>
+
                   <div className="small-label">
                     AVAILABILITY
                   </div>
@@ -339,6 +567,7 @@ export default async function Home() {
                     {nextStatus.reason ??
                       "No current injury, doubt or suspension is listed."}
                   </p>
+
                 </div>
 
                 <div className="badge">
@@ -357,8 +586,9 @@ export default async function Home() {
             </>
           ) : (
             <p className="muted">
-              No upcoming fixture is
-              currently available.
+              No upcoming fixture
+              is currently
+              available.
             </p>
           )}
 
@@ -384,11 +614,14 @@ export default async function Home() {
                     index
                   }
                 >
+
                   <div>
+
                     <strong>
                       {fixtureName(
                         fixture,
-                        teamId
+                        currentTeamId,
+                        currentTeamName
                       )}
                     </strong>
 
@@ -399,6 +632,13 @@ export default async function Home() {
                         )
                       )}
                     </div>
+
+                    {fixtureTimes(
+                      dateValue(
+                        fixture
+                      )
+                    )}
+
                   </div>
 
                   <span>
@@ -406,6 +646,7 @@ export default async function Home() {
                       ? "NEXT"
                       : `#${index + 1}`}
                   </span>
+
                 </div>
               )
             )}
@@ -424,6 +665,7 @@ export default async function Home() {
       </div>
 
       <style>{`
+
         * {
           box-sizing: border-box;
         }
@@ -432,12 +674,18 @@ export default async function Home() {
           margin: 0;
           background: #070b12;
           color: #fff;
-          font-family: Arial, Helvetica, sans-serif;
+          font-family:
+            Arial,
+            Helvetica,
+            sans-serif;
         }
 
         .page {
           min-height: 100vh;
-          padding: 50px 20px 80px;
+          padding:
+            50px
+            20px
+            80px;
           background:
             radial-gradient(
               circle at 90% 0%,
@@ -473,22 +721,27 @@ export default async function Home() {
 
         h1 {
           margin: 15px 0;
-          font-size: clamp(
-            58px,
-            10vw,
-            120px
-          );
+          font-size:
+            clamp(
+              58px,
+              10vw,
+              120px
+            );
           line-height: .9;
           letter-spacing: -.07em;
         }
 
         h2 {
-          margin: 8px 0 0;
-          font-size: clamp(
-            26px,
-            4vw,
-            40px
-          );
+          margin:
+            8px
+            0
+            0;
+          font-size:
+            clamp(
+              26px,
+              4vw,
+              40px
+            );
           line-height: 1.1;
           letter-spacing: -.03em;
         }
@@ -520,9 +773,22 @@ export default async function Home() {
         }
 
         .date {
-          margin: 9px 0 0;
+          margin:
+            9px
+            0
+            0;
           color: #718096;
           font-size: 14px;
+        }
+
+        .times {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px 18px;
+          margin-top: 7px;
+          color: #718096;
+          font-size: 14px;
+          font-weight: 700;
         }
 
         .score {
@@ -557,7 +823,9 @@ export default async function Home() {
         .why {
           margin-top: 30px;
           padding-top: 25px;
-          border-top: 1px solid #e5e7eb;
+          border-top:
+            1px solid
+            #e5e7eb;
         }
 
         .reason {
@@ -575,6 +843,11 @@ export default async function Home() {
 
         .next h2 {
           color: #fff;
+        }
+
+        .next .date,
+        .next .times {
+          color: #8995a8;
         }
 
         .availability {
@@ -607,7 +880,9 @@ export default async function Home() {
         }
 
         .badge {
-          padding: 9px 14px;
+          padding:
+            9px
+            14px;
           border-radius: 999px;
           background: #dcfce7;
           color: #08734b;
@@ -623,7 +898,9 @@ export default async function Home() {
         .fixture {
           margin-top: 10px;
           padding: 21px;
-          border: 1px solid #1d2838;
+          border:
+            1px solid
+            #1d2838;
           border-radius: 18px;
           background: #111927;
           display: flex;
@@ -633,6 +910,10 @@ export default async function Home() {
 
         .fixture strong {
           font-size: 17px;
+        }
+
+        .fixture .times {
+          color: #8995a8;
         }
 
         .fixture span {
@@ -649,14 +930,20 @@ export default async function Home() {
         footer {
           margin-top: 35px;
           padding-top: 20px;
-          border-top: 1px solid #1d2838;
+          border-top:
+            1px solid
+            #1d2838;
           color: #657184;
           font-size: 12px;
         }
 
         @media (max-width: 700px) {
+
           .page {
-            padding: 30px 14px 50px;
+            padding:
+              30px
+              14px
+              50px;
           }
 
           .latest,
@@ -680,7 +967,18 @@ export default async function Home() {
             align-items: flex-start;
             flex-direction: column;
           }
+
+          .times {
+            flex-direction: column;
+            gap: 4px;
+          }
+
+          .fixture {
+            align-items: flex-start;
+          }
+
         }
+
       `}</style>
     </main>
   );
