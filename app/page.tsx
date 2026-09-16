@@ -469,11 +469,12 @@ export default async function Home() {
   const {
     data,
     error
-  } = await supabase
-    .from("player_page")
-    .select("*")
-    .eq("id", 1)
-    .maybeSingle();
+  } =
+    await supabase
+      .from("player_page")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
 
   if (
     error ||
@@ -491,6 +492,10 @@ export default async function Home() {
       </main>
     );
   }
+
+  const liveFixture =
+    data.live_fixture ??
+    null;
 
   const lastFixture =
     data.last_fixture ??
@@ -563,6 +568,23 @@ export default async function Home() {
   const latestAwayScore =
     scoreValue(
       lastFixture,
+      "away"
+    );
+
+  const liveDate =
+    dateValue(
+      liveFixture
+    );
+
+  const liveHomeScore =
+    scoreValue(
+      liveFixture,
+      "home"
+    );
+
+  const liveAwayScore =
+    scoreValue(
+      liveFixture,
       "away"
     );
 
@@ -647,6 +669,89 @@ export default async function Home() {
 
         .answer.no {
           color: #d9303f;
+        }
+
+        .live-section {
+          margin-top: 30px;
+        }
+
+        .live-heading {
+          margin: 0 0 16px;
+          color: #ffffff;
+          font-size: clamp(
+            29px,
+            4vw,
+            43px
+          );
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: -1.4px;
+        }
+
+        .live-card {
+          background: #111a29;
+          border-radius: 30px;
+          padding: 34px;
+        }
+
+        .live-card-inner {
+          display: grid;
+          grid-template-columns:
+            minmax(0, 1fr)
+            minmax(220px, 300px);
+          gap: 30px;
+          align-items: center;
+        }
+
+        .live-title {
+          margin: 10px 0 0;
+          color: #ffffff;
+          font-size: clamp(
+            30px,
+            4.4vw,
+            45px
+          );
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: -1.5px;
+        }
+
+        .live-date {
+          margin-top: 13px;
+          color: #aab8cb;
+          font-size: 15px;
+        }
+
+        .live-times {
+          display: flex;
+          gap: 20px;
+          flex-wrap: wrap;
+          margin-top: 6px;
+          color: #aab8cb;
+          font-size: 15px;
+          font-weight: 800;
+        }
+
+        .live-score {
+          text-align: right;
+          color: #ffffff;
+          font-size: 58px;
+          line-height: 0.9;
+          font-weight: 900;
+          letter-spacing: -2px;
+        }
+
+        .live-status {
+          margin-top: 16px;
+          display: inline-block;
+          padding: 10px 15px;
+          border-radius: 999px;
+          background: #ffffff;
+          color: #00824f;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 1px;
+          text-transform: uppercase;
         }
 
         .section-card {
@@ -967,11 +1072,21 @@ export default async function Home() {
             font-size: 58px;
           }
 
+          .live-card,
           .section-card,
           .next-card,
           .fixtures-card {
             padding: 27px 22px;
             border-radius: 25px;
+          }
+
+          .live-card-inner {
+            grid-template-columns: 1fr;
+            gap: 24px;
+          }
+
+          .live-score {
+            text-align: left;
           }
 
           .recent-grid {
@@ -1039,19 +1154,23 @@ export default async function Home() {
             text-align: left;
           }
 
-          .next-heading {
+          .next-heading,
+          .live-heading {
             font-size: 31px;
           }
 
-          .next-title {
+          .next-title,
+          .live-title {
             font-size: 33px;
           }
 
-          .score {
+          .score,
+          .live-score {
             font-size: 48px;
           }
 
-          .times {
+          .times,
+          .live-times {
             gap: 14px;
           }
         }
@@ -1075,6 +1194,57 @@ export default async function Home() {
               : "NO"}
           </div>
         </div>
+
+        {liveFixture && (
+          <section className="live-section">
+            <h2 className="live-heading">
+              CURRENTLY PLAYING
+            </h2>
+
+            <div className="live-card">
+              <div className="live-card-inner">
+                <div>
+                  <div className="section-label">
+                    LIVE MATCH
+                  </div>
+
+                  <h3 className="live-title">
+                    {fixtureName(
+                      liveFixture
+                    )}
+                  </h3>
+
+                  {liveDate && (
+                    <>
+                      <div className="live-date">
+                        {formatDate(
+                          liveDate
+                        )}
+                      </div>
+
+                      {fixtureTimes(
+                        liveFixture,
+                        "live-times"
+                      )}
+                    </>
+                  )}
+
+                  <div className="live-status">
+                    LIVE
+                  </div>
+                </div>
+
+                <div className="live-score">
+                  {liveHomeScore ??
+                    "—"}
+                  –
+                  {liveAwayScore ??
+                    "—"}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className="section-card">
           <div className="recent-grid">
@@ -1229,10 +1399,10 @@ export default async function Home() {
                   <div className="detail-stat-value">
                     {appearance
                       ?.subbed_off_minute !==
-                    null &&
+                      null &&
                     appearance
                       ?.subbed_off_minute !==
-                    undefined
+                      undefined
                       ? `${appearance.subbed_off_minute}'`
                       : "—"}
                   </div>
