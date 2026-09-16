@@ -743,44 +743,37 @@ export async function getTeamFixtures(
           fixtureTimestamp(b)
       );
 
-  const currentFixtures =
-    live.length > 0
-      ? live
-      : [];
+  const resolvedLive =
+    live[0]
+      ? await resolveFixture(
+          live[0]
+        )
+      : null;
 
-  const rawFixtures = [
-    ...(currentFixtures.length > 0
-      ? [currentFixtures[0]]
-      : finished[0]
-      ? [finished[0]]
-      : []),
-
-    ...upcoming.slice(
-      0,
-      6
-    )
-  ];
-
-  const resolved =
-    await Promise.all(
-      rawFixtures.map(
-        (fixture) =>
-          resolveFixture(
-            fixture
-          )
-      )
-    );
-
-  const currentOrLast =
-    resolved[0] ??
-    null;
+  const last =
+    finished[0]
+      ? await resolveFixture(
+          finished[0]
+        )
+      : null;
 
   const next =
-    resolved.slice(1);
+    await Promise.all(
+      upcoming
+        .slice(0, 6)
+        .map(
+          (fixture) =>
+            resolveFixture(
+              fixture
+            )
+        )
+    );
 
   return {
-    last:
-      currentOrLast,
+    live:
+      resolvedLive,
+
+    last,
 
     next
   };
