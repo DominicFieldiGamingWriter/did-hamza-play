@@ -1,242 +1,139 @@
-type ApiResponse<T> = {
-  get?: string;
-  errors?: unknown;
-  results?: number;
-  response?: T[];
-};
+const BASE_URL = "https://sports.bzzoiro.com/api/v2";
 
-const BASE_URL = "https://v3.football.api-sports.io";
+function getKey() {
+  const key = process.env.BSD_API_KEY;
 
-function key() {
-  const value = process.env.API_FOOTBALL_KEY;
-  if (!value) throw new Error("API_FOOTBALL_KEY is not configured.");
-  return value;
-}
-
-export async function footballGet<T>(
-  path: string,
-  params: Record<string, string | number | undefined> = {}
-): Promise<T[]> {
-  const url = new URL(BASE_URL + path);
-
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== "") {
-      url.searchParams.set(k, String(v));
-    }
+  if (!key) {
+    throw new Error("BSD_API_KEY is not configured.");
   }
 
-  const res = await fetch(url, {
-    headers: { "x-apisports-key": key() },
+  return key;
+}
+
+async function bsdGet<T>(
+  path: string,
+  params: Record<string, string | number | undefined> = {}
+): Promise<T> {
+  const url = new URL(`${BASE_URL}${path}`);
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  });
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Token ${getKey()}`,
+      Accept: "application/json"
+    },
     cache: "no-store"
   });
 
-  if (!res.ok) {
-    throw new Error(`API-Football ${res.status}: ${await res.text()}`);
-  }
-
-  const data = (await res.json()) as ApiResponse<T>;
-
-  if (data.errors && Object.keys(data.errors as object).length) {
+  if (!response.ok) {
     throw new Error(
-      `API-Football error: ${JSON.stringify(data.errors)}`
+      `BSD API ${response.status}: ${await response.text()}`
     );
   }
 
-  return data.response ?? [];
+  return response.json() as Promise<T>;
 }
 
-export type PlayerSearch = {
-  player: {
-    id: number;
-    name: string;
-    firstname?: string;
-    lastname?: string;
-    age?: number;
-    birth?: {
-      date?: string;
-      place?: string;
-      country?: string;
-    };
-    nationality?: string;
-    photo?: string;
-  };
-  statistics?: Array<{
-    team?: {
-      id: number;
-      name: string;
-      logo?: string;
-    };
-    league?: {
-      id: number;
-      name: string;
-      season: number;
-    };
-  }>;
-};
-
-export type Fixture = {
-  fixture: {
-    id: number;
-    date: string;
-    status: {
-      short: string;
-      long?: string;
-    };
-    venue?: {
-      name?: string;
-      city?: string;
-    };
-  };
-  league: {
-    id: number;
-    name: string;
-    logo?: string;
-    season: number;
-  };
-  teams: {
-    home: {
-      id: number;
-      name: string;
-      logo?: string;
-      winner?: boolean;
-    };
-    away: {
-      id: number;
-      name: string;
-      logo?: string;
-      winner?: boolean;
-    };
-  };
-  goals: {
-    home: number | null;
-    away: number | null;
-  };
-};
-
-export type Lineup = {
-  team: {
-    id: number;
-    name: string;
-  };
-  startXI: Array<{
-    player: {
-      id: number;
-      name: string;
-      number?: number;
-      pos?: string;
-    };
-  }>;
-  substitutes: Array<{
-    player: {
-      id: number;
-      name: string;
-      number?: number;
-      pos?: string;
-    };
-  }>;
-};
-
-export type PlayerFixtureStat = {
+export type Player = {
+  id: number;
+  name: string;
+  first_name?: string;
+  last_name?: string;
+  photo?: string;
   team?: {
     id: number;
     name: string;
+    logo?: string;
   };
-  players?: Array<{
-    player: {
-      id: number;
-      name: string;
-    };
-    statistics?: Array<{
-      minutes?: {
-        number?: number;
-        position?: string;
-        substitute?: boolean;
-      };
-      games?: {
-        appearences?: number;
-        lineups?: number;
-        minutes?: number;
-        substitute?: boolean;
-      };
-    }>;
-  }>;
 };
 
-export type Sidelined = {
-  player?: {
+export type Fixture = {
+  id: number;
+  date: string;
+  status?: string;
+  home_team?: {
+    id: number;
+    name: string;
+    logo?: string;
+  };
+  away_team?: {
+    id: number;
+    name: string;
+    logo?: string;
+  };
+  home_score?: number | null;
+  away_score?: number | null;
+  competition?: {
     id: number;
     name: string;
   };
-  type?: string;
-  start?: string;
-  end?: string;
+};
+
+export type PlayerAvailability = {
+  status?: string;
   reason?: string;
 };
 
 export async function findPlayer(name: string) {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const season = now.getUTCMonth() >= 6 ? year : year - 1;
-
-  const [championship, leagueOne] = await Promise.all([
-    footballGet<PlayerSearch>("/players", {
-      search: name,
-      league: 40,
-      season
-    }),
-    footballGet<PlayerSearch>("/players", {
-      search: name,
-      league: 41,
-      season
-    })
-  ]);
-
-  return [...championship, ...leagueOne];
-}
-
-export async function getPlayer(playerId: number, season: number) {
-  return footballGet<PlayerSearch>("/players", {
-    id: playerId,
-    season
+  return bsdGet<Player[]>("/players/", {
+    search: name
   });
 }
 
+export async function getPlayer(playerId: number) {
+  return bsdGet<Player>(`/players/${playerId}/`);
+}
+
 export async function getTeamFixtures(teamId: number) {
-  const [last, next] = await Promise.all([
-    footballGet<Fixture>("/fixtures", {
-      team: teamId,
-      last: 1
-    }),
-    footballGet<Fixture>("/fixtures", {
-      team: teamId,
-      next: 3
-    })
-  ]);
+  const fixtures = await bsdGet<Fixture[]>("/fixtures/", {
+    team: teamId
+  });
+
+  const now = Date.now();
+
+  const sorted = [...fixtures].sort(
+    (a, b) =>
+      new Date(a.date).getTime() -
+      new Date(b.date).getTime()
+  );
+
+  const completed = sorted.filter(
+    fixture =>
+      new Date(fixture.date).getTime() <= now
+  );
+
+  const upcoming = sorted.filter(
+    fixture =>
+      new Date(fixture.date).getTime() > now
+  );
 
   return {
-    last: last[0] ?? null,
-    next
+    last: completed[completed.length - 1] ?? null,
+    next: upcoming.slice(0, 3)
   };
 }
 
 export async function getLineups(fixtureId: number) {
-  return footballGet<Lineup>("/fixtures/lineups", {
-    fixture: fixtureId
-  });
+  return bsdGet<unknown[]>(`/fixtures/${fixtureId}/lineups/`);
 }
 
 export async function getFixturePlayerStats(
   fixtureId: number,
   teamId: number
 ) {
-  return footballGet<PlayerFixtureStat>("/fixtures/players", {
-    fixture: fixtureId,
-    team: teamId
-  });
+  return bsdGet<unknown[]>(
+    `/fixtures/${fixtureId}/player-stats/`,
+    { team: teamId }
+  );
 }
 
 export async function getSidelined(playerId: number) {
-  return footballGet<Sidelined>("/sidelined", {
-    player: playerId
-  });
+  return bsdGet<PlayerAvailability[]>(
+    `/players/${playerId}/availability/`
+  );
 }
