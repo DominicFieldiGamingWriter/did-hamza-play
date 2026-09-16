@@ -39,10 +39,28 @@ async function bsdGet<T>(
   return response.json() as Promise<T>;
 }
 
-function results<T>(data: any): T[] {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results;
+function asArray(value: any): any[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
   return [];
+}
+
+function responseArray(data: any): any[] {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  return [];
+}
+
+export async function getPlayer(playerId: number) {
+  return bsdGet<any>(`/players/${playerId}/`);
 }
 
 export async function findPlayer(name: string) {
@@ -51,11 +69,7 @@ export async function findPlayer(name: string) {
     limit: 20
   });
 
-  return results<any>(data);
-}
-
-export async function getPlayer(playerId: number) {
-  return bsdGet<any>(`/players/${playerId}/`);
+  return responseArray(data);
 }
 
 export async function findTeam(name: string) {
@@ -64,7 +78,7 @@ export async function findTeam(name: string) {
     limit: 20
   });
 
-  return results<any>(data);
+  return responseArray(data);
 }
 
 export async function getTeamSquad(teamId: number) {
@@ -72,24 +86,34 @@ export async function getTeamSquad(teamId: number) {
     `/teams/${teamId}/squad/`
   );
 
-  return results<any>(data);
+  return responseArray(data);
 }
 
 export async function getTeamFixtures(teamId: number) {
-  const finishedData = await bsdGet<any>("/events/", {
-    team_id: teamId,
-    status: "finished",
-    limit: 10
-  });
+  const [finishedData, upcomingData] =
+    await Promise.all([
+      bsdGet<any>(
+        `/teams/${teamId}/fixtures/`,
+        {
+          status: "finished",
+          limit: 10
+        }
+      ),
 
-  const upcomingData = await bsdGet<any>("/events/", {
-    team_id: teamId,
-    status: "upcoming",
-    limit: 10
-  });
+      bsdGet<any>(
+        `/teams/${teamId}/fixtures/`,
+        {
+          status: "upcoming",
+          limit: 10
+        }
+      )
+    ]);
 
-  const finished = results<any>(finishedData);
-  const upcoming = results<any>(upcomingData);
+  const finished =
+    responseArray(finishedData);
+
+  const upcoming =
+    responseArray(upcomingData);
 
   finished.sort(
     (a, b) =>
@@ -115,8 +139,12 @@ export async function getLineups(eventId: number) {
   );
 
   return {
-    status: data?.lineup_status ?? "unavailable",
-    lineups: data?.lineups ?? []
+    status:
+      data?.lineup_status ??
+      "unavailable",
+
+    lineups:
+      asArray(data?.lineups)
   };
 }
 
@@ -127,5 +155,5 @@ export async function getFixturePlayerStats(
     `/events/${eventId}/player-stats/`
   );
 
-  return data?.players ?? results<any>(data);
+  return asArray(data?.players);
 }
