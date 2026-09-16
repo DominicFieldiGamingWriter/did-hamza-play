@@ -40,14 +40,8 @@ async function bsdGet<T>(
 }
 
 function responseArray(data: any): any[] {
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  if (Array.isArray(data?.results)) {
-    return data.results;
-  }
-
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
   return [];
 }
 
@@ -96,7 +90,7 @@ export async function getTeamFixtures(teamId: number) {
 
       bsdGet<any>("/events/", {
         team_id: teamId,
-        status: "upcoming",
+        status: "notstarted",
         limit: 20
       })
     ]);
@@ -107,20 +101,34 @@ export async function getTeamFixtures(teamId: number) {
   finished.sort(
     (a, b) =>
       new Date(
-        b.date ?? b.start_time
+        a.kickoff ??
+        a.event_date ??
+        a.date ??
+        a.start_time
       ).getTime() -
       new Date(
-        a.date ?? a.start_time
+        b.kickoff ??
+        b.event_date ??
+        b.date ??
+        b.start_time
       ).getTime()
   );
+
+  finished.reverse();
 
   upcoming.sort(
     (a, b) =>
       new Date(
-        a.date ?? a.start_time
+        a.kickoff ??
+        a.event_date ??
+        a.date ??
+        a.start_time
       ).getTime() -
       new Date(
-        b.date ?? b.start_time
+        b.kickoff ??
+        b.event_date ??
+        b.date ??
+        b.start_time
       ).getTime()
   );
 
