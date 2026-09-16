@@ -1,10 +1,3 @@
-import type {
-  Fixture,
-  Lineup,
-  PlayerFixtureStat,
-  Sidelined
-} from "./api-football";
-
 export type PlayerStatus = {
   played: boolean;
   type: string;
@@ -14,19 +7,25 @@ export type PlayerStatus = {
 
 export function classifyPlayer(
   playerId: number,
-  fixture: Fixture,
-  lineups: Lineup[],
-  playerStats: PlayerFixtureStat[],
-  sidelined: Sidelined[]
+  fixture: any,
+  lineups: any[],
+  playerStats: any[],
+  sidelined: any[]
 ): PlayerStatus {
-  // Check lineups first.
   for (const lineup of lineups) {
-    const starters = lineup.starting_xi ?? [];
-    const substitutes = lineup.substitutes ?? [];
+    const starters =
+      lineup.starting_xi ??
+      lineup.startXI ??
+      [];
+
+    const substitutes =
+      lineup.substitutes ??
+      [];
 
     if (
       starters.some(
-        (entry: any) => entry.player?.id === playerId
+        (entry: any) =>
+          entry.player?.id === playerId
       )
     ) {
       return {
@@ -38,7 +37,8 @@ export function classifyPlayer(
 
     if (
       substitutes.some(
-        (entry: any) => entry.player?.id === playerId
+        (entry: any) =>
+          entry.player?.id === playerId
       )
     ) {
       return {
@@ -49,40 +49,20 @@ export function classifyPlayer(
     }
   }
 
-  // Check player statistics.
   for (const group of playerStats) {
     const players = group.players ?? [];
 
     for (const entry of players) {
-      if (entry.player?.id !== playerId) continue;
+      if (entry.player?.id !== playerId) {
+        continue;
+      }
 
       const stats = entry.statistics?.[0];
 
       if (
-        stats?.minutes?.number &&
-        stats.minutes.number > 0
-      ) {
-        return {
-          played: true,
-          type: "played",
-          label: "Played"
-        };
-      }
-
-      if (
-        stats?.games?.minutes &&
-        stats.games.minutes > 0
-      ) {
-        return {
-          played: true,
-          type: "played",
-          label: "Played"
-        };
-      }
-
-      if (
-        stats?.games?.appearences &&
-        stats.games.appearences > 0
+        stats?.minutes?.number > 0 ||
+        stats?.games?.minutes > 0 ||
+        stats?.games?.appearences > 0
       ) {
         return {
           played: true,
@@ -93,12 +73,13 @@ export function classifyPlayer(
     }
   }
 
-  // No appearance found. Check for an absence reason.
   const absence = sidelined?.[0];
 
   if (absence) {
     const status = String(
-      absence.status ?? absence.type ?? ""
+      absence.status ??
+      absence.type ??
+      ""
     ).toLowerCase();
 
     const reason = absence.reason ?? "";
