@@ -1,5 +1,4 @@
 export const dynamic = "force-dynamic";
-
 import { getSupabaseAdmin } from "../lib/supabase";
 
 function dateValue(value: any): string | null {
@@ -42,10 +41,11 @@ function teamName(
   fixture: any,
   side: "home" | "away"
 ): string {
-  const team = rawTeamValue(
-    fixture,
-    side
-  );
+  const team =
+    rawTeamValue(
+      fixture,
+      side
+    );
 
   const candidates = [
     team?.name,
@@ -96,15 +96,13 @@ function scoreValue(
 function formatDate(
   value: any
 ): string {
-  const date = dateValue(
-    value
-  );
+  const date =
+    dateValue(value);
 
   if (!date) return "";
 
-  const parsed = new Date(
-    date
-  );
+  const parsed =
+    new Date(date);
 
   if (
     Number.isNaN(
@@ -130,15 +128,13 @@ function formatDate(
 function formatUKTime(
   value: any
 ): string {
-  const date = dateValue(
-    value
-  );
+  const date =
+    dateValue(value);
 
   if (!date) return "";
 
-  const parsed = new Date(
-    date
-  );
+  const parsed =
+    new Date(date);
 
   if (
     Number.isNaN(
@@ -163,15 +159,13 @@ function formatUKTime(
 function formatBangladeshTime(
   value: any
 ): string {
-  const date = dateValue(
-    value
-  );
+  const date =
+    dateValue(value);
 
   if (!date) return "";
 
-  const parsed = new Date(
-    date
-  );
+  const parsed =
+    new Date(date);
 
   if (
     Number.isNaN(
@@ -197,9 +191,8 @@ function fixtureTimes(
   fixture: any,
   className = "times"
 ) {
-  const date = dateValue(
-    fixture
-  );
+  const date =
+    dateValue(fixture);
 
   if (!date) return null;
 
@@ -225,15 +218,13 @@ function fixtureTimes(
 function fixtureTimestamp(
   fixture: any
 ): number {
-  const date = dateValue(
-    fixture
-  );
+  const date =
+    dateValue(fixture);
 
   if (!date) return 0;
 
-  const timestamp = new Date(
-    date
-  ).getTime();
+  const timestamp =
+    new Date(date).getTime();
 
   return Number.isNaN(
     timestamp
@@ -281,13 +272,16 @@ function surname(
     return "Unknown";
   }
 
-  const parts = name
-    .trim()
-    .split(/\s+/);
+  const parts =
+    name.trim().split(
+      /\s+/
+    );
 
-  return parts[
-    parts.length - 1
-  ];
+  return (
+    parts[
+      parts.length - 1
+    ]
+  );
 }
 
 function formatMinute(
@@ -316,9 +310,7 @@ function getIncidents(
 function isOwnGoal(
   goal: any
 ): boolean {
-  if (
-    goal?.is_own_goal === true
-  ) {
+  if (goal?.is_own_goal === true) {
     return true;
   }
 
@@ -327,13 +319,15 @@ function isOwnGoal(
     goal?.goalType,
     goal?.goal?.type,
     goal?.goal?.goal_type,
-    goal?.subtype
+    goal?.subtype,
+    goal?.type_name
   ];
 
   return values.some(
     (value: any) =>
       String(
-        value ?? ""
+        value ??
+        ""
       )
         .trim()
         .toLowerCase()
@@ -345,21 +339,47 @@ function isOwnGoal(
   );
 }
 
+function cleanScorerName(
+  name: any
+): string {
+  if (
+    typeof name !== "string" ||
+    !name.trim()
+  ) {
+    return "Unknown";
+  }
+
+  const cleaned =
+    name
+      .replace(
+        /\(\s*og\s*\)/gi,
+        ""
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
+
+  return surname(
+    cleaned
+  );
+}
+
 function formatGoal(
   goal: any
 ): string {
-  const player =
-    surname(
+  const scorer =
+    cleanScorerName(
       goal?.player_name
     );
 
-  const og = isOwnGoal(
-    goal
-  )
-    ? " (OG)"
-    : "";
+  const og =
+    isOwnGoal(goal)
+      ? " (OG)"
+      : "";
 
-  return `${player}${og} ${formatMinute(
+  return `${scorer}${og} ${formatMinute(
     goal?.minute
   )}`;
 }
@@ -383,11 +403,11 @@ function getMatchEvents(
         (a, b) =>
           Number(
             a?.minute ??
-              9999
+            9999
           ) -
           Number(
             b?.minute ??
-              9999
+            9999
           )
       );
 
@@ -411,7 +431,7 @@ function getMatchEvents(
           const type =
             String(
               card?.card_type ??
-                ""
+              ""
             ).toLowerCase();
 
           return (
@@ -428,11 +448,11 @@ function getMatchEvents(
         (a, b) =>
           Number(
             a?.minute ??
-              9999
+            9999
           ) -
           Number(
             b?.minute ??
-              9999
+            9999
           )
       );
 
@@ -614,6 +634,28 @@ export default async function Home() {
   const events =
     getMatchEvents(
       lastFixture
+    );
+
+  const hamzaPlayerId =
+    Number(
+      data.player_id
+    );
+
+  const hamzaScored =
+    events.goals.some(
+      (goal: any) =>
+        Number(
+          goal?.player_id
+        ) === hamzaPlayerId &&
+        !isOwnGoal(goal)
+    );
+
+  const hamzaAssisted =
+    events.assists.some(
+      (goal: any) =>
+        Number(
+          goal?.assist_id
+        ) === hamzaPlayerId
     );
 
   const latestDate =
@@ -999,7 +1041,7 @@ export default async function Home() {
           display: grid;
           grid-template-columns:
             repeat(
-              4,
+              3,
               minmax(0, 1fr)
             );
           gap: 10px;
@@ -1024,6 +1066,42 @@ export default async function Home() {
           margin-top: 6px;
           font-size: 20px;
           line-height: 1.1;
+          font-weight: 900;
+        }
+
+        .hamza-outcomes {
+          margin-top: 14px;
+          border-top:
+            1px solid
+            #dfe4ea;
+        }
+
+        .hamza-outcome {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 18px;
+          padding: 11px 0;
+          border-bottom:
+            1px solid
+            #edf0f3;
+          font-size: 14px;
+          font-weight: 800;
+        }
+
+        .hamza-outcome:last-child {
+          border-bottom: 0;
+        }
+
+        .hamza-outcome-label {
+          color: #7084a1;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+
+        .hamza-outcome-value {
           font-weight: 900;
         }
 
@@ -1287,11 +1365,7 @@ export default async function Home() {
           }
 
           .detail-stats {
-            grid-template-columns:
-              repeat(
-                2,
-                minmax(0, 1fr)
-              );
+            grid-template-columns: 1fr;
           }
 
           .event-line {
@@ -1397,9 +1471,7 @@ export default async function Home() {
                               (
                                 goal: any
                               ) =>
-                                formatGoal(
-                                  goal
-                                )
+                                formatGoal(goal)
                             )
                             .join(
                               " · "
@@ -1421,11 +1493,7 @@ export default async function Home() {
                               (
                                 goal: any
                               ) =>
-                                `${surname(
-                                  goal.assist_name
-                                )} ${formatMinute(
-                                  goal.minute
-                                )}`
+                                `${surname(goal.assist_name)} ${formatMinute(goal.minute)}`
                             )
                             .join(
                               " · "
@@ -1447,11 +1515,7 @@ export default async function Home() {
                               (
                                 card: any
                               ) =>
-                                `${surname(
-                                  card.player_name
-                                )} ${formatMinute(
-                                  card.minute
-                                )}`
+                                `${surname(card.player_name)} ${formatMinute(card.minute)}`
                             )
                             .join(
                               " · "
@@ -1503,24 +1567,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Subbed On
-                  </div>
-
-                  <div className="detail-stat-value">
-                    {appearance
-                      ?.subbed_on_minute !==
-                      null &&
-                    appearance
-                      ?.subbed_on_minute !==
-                      undefined
-                      ? `${appearance.subbed_on_minute}'`
-                      : "—"}
-                  </div>
-                </div>
-
-                <div className="detail-stat">
-                  <div className="detail-stat-label">
-                    Subbed Off
+                    Subbed off
                   </div>
 
                   <div className="detail-stat-value">
@@ -1532,6 +1579,28 @@ export default async function Home() {
                       undefined
                       ? `${appearance.subbed_off_minute}'`
                       : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="hamza-outcomes">
+                <div className="hamza-outcome">
+                  <div className="hamza-outcome-label">
+                    Did Hamza score?
+                  </div>
+
+                  <div className="hamza-outcome-value">
+                    {hamzaScored ? "Yes" : "No"}
+                  </div>
+                </div>
+
+                <div className="hamza-outcome">
+                  <div className="hamza-outcome-label">
+                    Did Hamza assist?
+                  </div>
+
+                  <div className="hamza-outcome-value">
+                    {hamzaAssisted ? "Yes" : "No"}
                   </div>
                 </div>
               </div>
@@ -1621,9 +1690,7 @@ export default async function Home() {
                 )}
               </div>
 
-              {fixtureTimes(
-                next
-              )}
+              {fixtureTimes(next)}
             </>
           )}
 
@@ -1677,9 +1744,7 @@ export default async function Home() {
                     className="fixture-row"
                     key={
                       fixture?.id ??
-                      `${fixtureTimestamp(
-                        fixture
-                      )}-${index}`
+                      `${fixtureTimestamp(fixture)}-${index}`
                     }
                   >
                     <div className="fixture-title">
@@ -1698,17 +1763,13 @@ export default async function Home() {
 
                     <div className="fixture-time">
                       {date
-                        ? `${formatUKTime(
-                            fixture
-                          )} (UK)`
+                        ? `${formatUKTime(fixture)} (UK)`
                         : ""}
                     </div>
 
                     <div className="fixture-time">
                       {date
-                        ? `${formatBangladeshTime(
-                            fixture
-                          )} (Bangladesh)`
+                        ? `${formatBangladeshTime(fixture)} (Bangladesh)`
                         : ""}
                     </div>
                   </div>
