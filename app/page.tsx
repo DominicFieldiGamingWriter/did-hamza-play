@@ -406,9 +406,9 @@ function appearanceSummary(
 
     if (
       appearance?.subbed_on_minute !==
-      null &&
+        null &&
       appearance?.subbed_on_minute !==
-      undefined
+        undefined
     ) {
       return "Didn't start. Subbed on.";
     }
@@ -576,6 +576,12 @@ export default async function Home() {
   const nextDate =
     dateValue(next);
 
+  const appearanceSummaryText =
+    appearanceSummary(
+      appearance,
+      latestStatus
+    );
+
   return (
     <>
       <style>{`
@@ -669,8 +675,8 @@ export default async function Home() {
         .recent-grid {
           display: grid;
           grid-template-columns:
-            minmax(0, 1.42fr)
-            minmax(330px, 0.88fr);
+            minmax(0, 1.35fr)
+            minmax(390px, 0.95fr);
           gap: 38px;
           align-items: start;
         }
@@ -762,10 +768,11 @@ export default async function Home() {
 
         .details-main {
           margin-top: 10px;
-          font-size: 28px;
-          line-height: 1.13;
+          font-size: 24px;
+          line-height: 1.15;
           font-weight: 900;
           letter-spacing: -0.8px;
+          white-space: nowrap;
         }
 
         .details-supporting {
@@ -986,6 +993,11 @@ export default async function Home() {
               #dfe4ea;
           }
 
+          .details-main {
+            white-space: normal;
+            font-size: 28px;
+          }
+
           .availability {
             display: block;
           }
@@ -1182,10 +1194,7 @@ export default async function Home() {
               </div>
 
               <div className="details-main">
-                {appearanceSummary(
-                  appearance,
-                  latestStatus
-                )}
+                {appearanceSummaryText}
               </div>
 
               <div className="details-supporting">
@@ -1229,7 +1238,7 @@ export default async function Home() {
                     null &&
                     appearance
                       ?.subbed_off_minute !==
-                      undefined
+                    undefined
                       ? `${appearance.subbed_off_minute}'`
                       : "—"}
                   </div>
