@@ -77,7 +77,8 @@ function getId(
   }
 
   if (
-    typeof value === "string"
+    typeof value === "string" &&
+    value.trim()
   ) {
     const id =
       Number(value);
@@ -287,15 +288,12 @@ function playerPlayed(
 
   const text =
     JSON.stringify(
-      lineups ??
-      []
+      lineups ?? []
     ).toLowerCase();
 
   if (
     target &&
-    text.includes(
-      target
-    )
+    text.includes(target)
   ) {
     return {
       played: true,
@@ -549,49 +547,35 @@ async function normaliseIncidents(
 
           return {
             type,
-
             minute,
-
             player_id:
               playerId,
-
             player_name:
               playerName,
-
             assist_id:
               assistId,
-
             assist_name:
               assistName,
-
             player_in_id:
               playerInId,
-
             player_in_name:
               playerInName,
-
             player_out_id:
               playerOutId,
-
             player_out_name:
               playerOutName,
-
             is_home:
               incident?.is_home ??
               null,
-
             card_type:
               incident?.card_type ??
               null,
-
             goal_type:
               incident?.goal_type ??
               null,
-
             added_time:
               incident?.added_time ??
               null,
-
             length:
               incident?.length ??
               null
@@ -777,9 +761,6 @@ function buildAppearanceDetails(
     | number
     | null = null;
 
-  /*
-   * Started -> off.
-   */
   if (
     started &&
     subbedOff !== null
@@ -788,9 +769,6 @@ function buildAppearanceDetails(
       subbedOff;
   }
 
-  /*
-   * Substitute -> off.
-   */
   if (
     subbedOn !== null &&
     subbedOff !== null
@@ -803,9 +781,6 @@ function buildAppearanceDetails(
       );
   }
 
-  /*
-   * Substitute -> full time.
-   */
   if (
     subbedOn !== null &&
     subbedOff === null
@@ -820,11 +795,6 @@ function buildAppearanceDetails(
       );
   }
 
-  /*
-   * Only use the statistics feed if
-   * substitution timing hasn't already
-   * given us the answer.
-   */
   if (
     minutes === null
   ) {
@@ -849,9 +819,7 @@ function buildAppearanceDetails(
       const candidate of candidates
     ) {
       const number =
-        Number(
-          candidate
-        );
+        Number(candidate);
 
       if (
         Number.isFinite(
@@ -902,35 +870,27 @@ function buildAppearanceDetails(
 
   return {
     minutes,
-
     started,
-
     subbed_on_minute:
       subbedOn,
-
     subbed_off_minute:
       subbedOff,
-
     came_on_for:
       subbedOnIncident
         ?.player_out_name ??
       null,
-
     came_on_for_id:
       subbedOnIncident
         ?.player_out_id ??
       null,
-
     went_off_for:
       subbedOffIncident
         ?.player_in_name ??
       null,
-
     went_off_for_id:
       subbedOffIncident
         ?.player_in_id ??
       null,
-
     summary
   };
 }
@@ -1016,7 +976,7 @@ function getTeamInfo(
 ) {
   if (
     typeof value ===
-      "string"
+    "string"
   ) {
     return {
       id: 0,
@@ -1050,9 +1010,7 @@ function getTeamInfo(
     const candidate of ids
   ) {
     const number =
-      Number(
-        candidate
-      );
+      Number(candidate);
 
     if (
       Number.isFinite(
@@ -1177,6 +1135,7 @@ function normaliseFixture(
 
   const date =
     fixture?.time?.kickoff_at ??
+    fixture?.time?.start_time ??
     fixture?.kickoff_at ??
     fixture?.kickoff ??
     fixture?.event_date ??
@@ -1292,6 +1251,7 @@ export async function refreshPlayerPage() {
     ) ?? null;
 
   const {
+    live,
     last,
     next
   } =
@@ -1365,6 +1325,14 @@ export async function refreshPlayerPage() {
       team.id
     );
 
+  const normalisedLive =
+    live
+      ? normaliseFixture(
+          live,
+          team.id
+        )
+      : null;
+
   const normalisedNext =
     next.map(
       (
@@ -1400,6 +1368,9 @@ export async function refreshPlayerPage() {
       player?.photo ??
       squadPlayer?.photo ??
       null,
+
+    live_fixture:
+      normalisedLive,
 
     last_fixture: {
       ...normalisedLast,
