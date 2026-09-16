@@ -493,7 +493,7 @@ function playerPlayed(
   ) {
     return {
       played: false,
-      type: "not_selected",
+      type: "unused_substitute",
       label: "Did not play"
     };
   }
@@ -505,7 +505,30 @@ function playerPlayed(
     );
 
   if (
-    minutes !== null
+    minutes !== null &&
+    minutes > 0
+  ) {
+    return {
+      played: true,
+      type: "played",
+      label: "Played"
+    };
+  }
+
+  const target =
+    playerName
+      .trim()
+      .toLowerCase();
+
+  const text =
+    JSON.stringify(
+      lineups ?? []
+    ).toLowerCase();
+
+  if (
+    target &&
+    text.includes(target) &&
+    lineupRole !== "substitute"
   ) {
     return {
       played: true,
@@ -520,6 +543,7 @@ function playerPlayed(
     label: "Did not play"
   };
 }
+
 function getMinute(
   value: any
 ): number | null {
@@ -624,8 +648,14 @@ async function resolvePlayerName(
       directValue
     );
 
+  const looksLikeOwnGoalMarker =
+    /\(\s*og\s*\)/i.test(
+      directName
+    );
+
   if (
-    directName
+    directName &&
+    !looksLikeOwnGoalMarker
   ) {
     return directName;
   }
@@ -679,13 +709,15 @@ function isOwnGoal(
     incident?.goalType,
     incident?.goal?.type,
     incident?.goal?.goal_type,
-    incident?.subtype
+    incident?.subtype,
+    incident?.type_name
   ];
 
   return values.some(
     (value: any) =>
       String(
-        value ?? ""
+        value ??
+        ""
       )
         .trim()
         .toLowerCase()
@@ -778,17 +810,6 @@ async function normaliseIncidents(
               )
             ]);
 
-          const displayPlayerName =
-            isOwnGoal(
-              incident
-            ) &&
-            playerName &&
-            !/(\\(og\\))$/i.test(
-              playerName
-            )
-              ? `${playerName} (OG)`
-              : playerName;
-
           return {
             type,
             minute,
@@ -797,12 +818,7 @@ async function normaliseIncidents(
               playerId,
 
             player_name:
-              displayPlayerName,
-
-            is_own_goal:
-              isOwnGoal(
-                incident
-              ),
+              playerName,
 
             assist_id:
               assistId,
@@ -833,6 +849,11 @@ async function normaliseIncidents(
             goal_type:
               incident?.goal_type ??
               null,
+
+            is_own_goal:
+              isOwnGoal(
+                incident
+              ),
 
             added_time:
               incident?.added_time ??
