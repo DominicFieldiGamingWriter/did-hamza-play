@@ -1041,7 +1041,7 @@ export default async function Home() {
           display: grid;
           grid-template-columns:
             repeat(
-              4,
+              5,
               minmax(0, 1fr)
             );
           gap: 10px;
@@ -1563,6 +1563,19 @@ export default async function Home() {
 
                   <div className="detail-stat-value">
                     {appearance?.started ===
+                    true
+                      ? "Yes"
+                      : "No"}
+                  </div>
+                </div>
+
+                <div className="detail-stat">
+                  <div className="detail-stat-label">
+                    Bench
+                  </div>
+
+                  <div className="detail-stat-value">
+                    {appearance?.bench ===
                     true
                       ? "Yes"
                       : "No"}
