@@ -39,14 +39,6 @@ async function bsdGet<T>(
   return response.json() as Promise<T>;
 }
 
-function asArray(value: any): any[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-
-  return [];
-}
-
 function responseArray(data: any): any[] {
   if (Array.isArray(data)) {
     return data;
@@ -57,6 +49,10 @@ function responseArray(data: any): any[] {
   }
 
   return [];
+}
+
+function asArray(value: any): any[] {
+  return Array.isArray(value) ? value : [];
 }
 
 export async function getPlayer(playerId: number) {
@@ -92,39 +88,40 @@ export async function getTeamSquad(teamId: number) {
 export async function getTeamFixtures(teamId: number) {
   const [finishedData, upcomingData] =
     await Promise.all([
-      bsdGet<any>(
-        `/teams/${teamId}/fixtures/`,
-        {
-          status: "finished",
-          limit: 10
-        }
-      ),
+      bsdGet<any>("/events/", {
+        team_id: teamId,
+        status: "finished",
+        limit: 20
+      }),
 
-      bsdGet<any>(
-        `/teams/${teamId}/fixtures/`,
-        {
-          status: "upcoming",
-          limit: 10
-        }
-      )
+      bsdGet<any>("/events/", {
+        team_id: teamId,
+        status: "upcoming",
+        limit: 20
+      })
     ]);
 
-  const finished =
-    responseArray(finishedData);
-
-  const upcoming =
-    responseArray(upcomingData);
+  const finished = responseArray(finishedData);
+  const upcoming = responseArray(upcomingData);
 
   finished.sort(
     (a, b) =>
-      new Date(b.date).getTime() -
-      new Date(a.date).getTime()
+      new Date(
+        b.date ?? b.start_time
+      ).getTime() -
+      new Date(
+        a.date ?? a.start_time
+      ).getTime()
   );
 
   upcoming.sort(
     (a, b) =>
-      new Date(a.date).getTime() -
-      new Date(b.date).getTime()
+      new Date(
+        a.date ?? a.start_time
+      ).getTime() -
+      new Date(
+        b.date ?? b.start_time
+      ).getTime()
   );
 
   return {
