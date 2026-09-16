@@ -483,7 +483,11 @@ export default async function Home() {
     return (
       <main className="page">
         <h1 className="main-heading">
-          DID HAMZA PLAY?
+          DID{" "}
+          <span className="hamza-name">
+            HAMZA
+          </span>{" "}
+          PLAY?
         </h1>
 
         <div className="error-card">
@@ -665,6 +669,10 @@ export default async function Home() {
           font-weight: 900;
           letter-spacing: -3px;
           white-space: nowrap;
+        }
+
+        .hamza-name {
+          color: #f42a41;
         }
 
         .top-row {
@@ -1256,7 +1264,11 @@ export default async function Home() {
       <main className="page">
         <div className="top-row">
           <h1 className="main-heading">
-            DID HAMZA PLAY?
+            DID{" "}
+            <span className="hamza-name">
+              HAMZA
+            </span>{" "}
+            PLAY?
           </h1>
 
           <div
