@@ -1319,6 +1319,52 @@ export async function refreshPlayerPage() {
       squadPlayer
     );
 
+  /*
+   * Live-match player status.
+   *
+   * We only set this when BSD returns a live
+   * fixture and a lineup response is available.
+   *
+   * selected = true means Hamza appears in
+   * the live match lineup data.
+   *
+   * selected = false means he does not appear
+   * in the live match lineup data.
+   */
+  let livePlayerStatus:
+    | {
+        selected: boolean;
+        lineup_status: string;
+      }
+    | null = null;
+
+  if (
+    live?.id
+  ) {
+    try {
+      const liveLineupData =
+        await getLineups(
+          Number(
+            live.id
+          )
+        );
+
+      const selected =
+        hasPlayer(
+          liveLineupData.lineups,
+          playerId
+        );
+
+      livePlayerStatus = {
+        selected,
+        lineup_status:
+          liveLineupData.status
+      };
+    } catch {
+      livePlayerStatus = null;
+    }
+  }
+
   const normalisedLast =
     normaliseFixture(
       last,
@@ -1327,10 +1373,15 @@ export async function refreshPlayerPage() {
 
   const normalisedLive =
     live
-      ? normaliseFixture(
-          live,
-          team.id
-        )
+      ? {
+          ...normaliseFixture(
+            live,
+            team.id
+          ),
+
+          player_status:
+            livePlayerStatus
+        }
       : null;
 
   const normalisedNext =
