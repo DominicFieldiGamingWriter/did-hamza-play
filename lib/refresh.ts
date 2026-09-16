@@ -12,6 +12,56 @@ import {
   getSupabaseAdmin
 } from "./supabase";
 
+function responseArray(
+  data: any
+): any[] {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (
+    Array.isArray(
+      data?.results
+    )
+  ) {
+    return data.results;
+  }
+
+  if (
+    Array.isArray(
+      data?.data
+    )
+  ) {
+    return data.data;
+  }
+
+  if (
+    Array.isArray(
+      data?.fixtures
+    )
+  ) {
+    return data.fixtures;
+  }
+
+  if (
+    Array.isArray(
+      data?.events
+    )
+  ) {
+    return data.events;
+  }
+
+  if (
+    Array.isArray(
+      data?.incidents
+    )
+  ) {
+    return data.incidents;
+  }
+
+  return [];
+}
+
 function getId(
   value: any
 ): number | null {
@@ -550,13 +600,11 @@ async function normaliseIncidents(
       )
     );
 
-  /*
-   * Always sort incident data chronologically.
-   * BSD currently returns these in reverse
-   * chronological order.
-   */
   normalised.sort(
-    (a, b) =>
+    (
+      a,
+      b
+    ) =>
       (a.minute ?? 9999) -
       (b.minute ?? 9999)
   );
@@ -570,18 +618,24 @@ function finalMinute(
   const periods =
     incidents
       .filter(
-        (incident) =>
+        (
+          incident
+        ) =>
           incident.type ===
           "period"
       )
       .map(
-        (incident) =>
+        (
+          incident
+        ) =>
           Number(
             incident.minute
           )
       )
       .filter(
-        (minute) =>
+        (
+          minute
+        ) =>
           Number.isFinite(
             minute
           )
@@ -625,28 +679,20 @@ function buildAppearanceDetails(
       };
     }
 
-    const substitutions =
-      incidents.filter(
-        (incident) =>
-          incident.type ===
-          "substitution"
-      );
-
     const subbedOn =
-      substitutions.find(
-        (incident) =>
+      incidents.find(
+        (
+          incident
+        ) =>
+          incident.type ===
+            "substitution" &&
           incident.player_in_id ===
-          playerId
+            playerId
       ) ?? null;
 
     if (
       subbedOn
     ) {
-      /*
-       * This should normally be caught
-       * as a played appearance, but keep
-       * the state logically correct.
-       */
       return {
         minutes: null,
         started: false,
@@ -660,8 +706,10 @@ function buildAppearanceDetails(
         came_on_for_id:
           subbedOn.player_out_id ??
           null,
-        went_off_for: null,
-        went_off_for_id: null,
+        went_off_for:
+          null,
+        went_off_for_id:
+          null,
         summary:
           "Didn't start. Subbed on."
       };
@@ -670,12 +718,18 @@ function buildAppearanceDetails(
     return {
       minutes: null,
       started: false,
-      subbed_on_minute: null,
-      subbed_off_minute: null,
-      came_on_for: null,
-      came_on_for_id: null,
-      went_off_for: null,
-      went_off_for_id: null,
+      subbed_on_minute:
+        null,
+      subbed_off_minute:
+        null,
+      came_on_for:
+        null,
+      came_on_for_id:
+        null,
+      went_off_for:
+        null,
+      went_off_for_id:
+        null,
       summary:
         "Didn't start. Didn't come on."
     };
@@ -683,21 +737,27 @@ function buildAppearanceDetails(
 
   const substitutions =
     incidents.filter(
-      (incident) =>
+      (
+        incident
+      ) =>
         incident.type ===
         "substitution"
     );
 
   const subbedOnIncident =
     substitutions.find(
-      (incident) =>
+      (
+        incident
+      ) =>
         incident.player_in_id ===
         playerId
     ) ?? null;
 
   const subbedOffIncident =
     substitutions.find(
-      (incident) =>
+      (
+        incident
+      ) =>
         incident.player_out_id ===
         playerId
     ) ?? null;
@@ -729,7 +789,7 @@ function buildAppearanceDetails(
   }
 
   /*
-   * Came on -> off.
+   * Substitute -> off.
    */
   if (
     subbedOn !== null &&
@@ -744,7 +804,7 @@ function buildAppearanceDetails(
   }
 
   /*
-   * Came on -> full time.
+   * Substitute -> full time.
    */
   if (
     subbedOn !== null &&
@@ -761,9 +821,9 @@ function buildAppearanceDetails(
   }
 
   /*
-   * If no substitution timing exists,
-   * use an explicit minutes-played value
-   * supplied by BSD.
+   * Only use the statistics feed if
+   * substitution timing hasn't already
+   * given us the answer.
    */
   if (
     minutes === null
@@ -802,16 +862,11 @@ function buildAppearanceDetails(
       ) {
         minutes =
           number;
-
         break;
       }
     }
   }
 
-  /*
-   * Final fallback for a player who
-   * started and stayed on.
-   */
   if (
     minutes === null &&
     started
@@ -995,7 +1050,9 @@ function getTeamInfo(
     const candidate of ids
   ) {
     const number =
-      Number(candidate);
+      Number(
+        candidate
+      );
 
     if (
       Number.isFinite(
@@ -1061,10 +1118,14 @@ function normaliseFixture(
     null;
 
   const homeInfo =
-    getTeamInfo(home);
+    getTeamInfo(
+      home
+    );
 
   const awayInfo =
-    getTeamInfo(away);
+    getTeamInfo(
+      away
+    );
 
   const homeId =
     homeInfo.id ||
