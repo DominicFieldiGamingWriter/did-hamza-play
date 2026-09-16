@@ -409,30 +409,77 @@ function lineupRoleFromValue(
   return "unknown";
 }
 
+function playerStatsMinutes(
+  playerId: number,
+  playerStats: any[]
+): number | null {
+  const playerRecord =
+    findPlayerRecord(
+      playerStats,
+      playerId
+    );
+
+  if (!playerRecord) {
+    return null;
+  }
+
+  const candidates = [
+    playerRecord?.minutes,
+    playerRecord?.minutes_played,
+    playerRecord?.played_minutes,
+    playerRecord?.min,
+    playerRecord?.games?.minutes,
+    playerRecord?.stats?.minutes,
+    playerRecord?.statistics?.minutes,
+    playerRecord?.statistics?.[0]?.minutes
+  ];
+
+  for (
+    const candidate of candidates
+  ) {
+    const minutes =
+      Number(candidate);
+
+    if (
+      Number.isFinite(minutes) &&
+      minutes > 0 &&
+      minutes <= 130
+    ) {
+      return minutes;
+    }
+  }
+
+  return null;
+}
+
 function playerPlayed(
   playerId: number,
   playerName: string,
   lineups: any[],
-  playerStats: any[]
+  playerStats: any[],
+  incidents: any[]
 ) {
-  if (
-    hasPlayer(
-      playerStats,
-      playerId
-    )
-  ) {
-    return {
-      played: true,
-      type: "played",
-      label: "Played"
-    };
-  }
-
-  if (
-    hasPlayer(
+  const lineupRole =
+    lineupRoleFromValue(
       lineups,
       playerId
-    )
+    );
+
+  const subbedOn =
+    incidents.some(
+      (incident: any) =>
+        getIncidentType(
+          incident
+        ) === "substitution" &&
+        resolveIncidentPlayerId(
+          incident,
+          "player_in"
+        ) === playerId
+    );
+
+  if (
+    subbedOn ||
+    lineupRole === "starting"
   ) {
     return {
       played: true,
@@ -441,19 +488,24 @@ function playerPlayed(
     };
   }
 
-  const target =
-    playerName
-      .trim()
-      .toLowerCase();
+  if (
+    lineupRole === "substitute"
+  ) {
+    return {
+      played: false,
+      type: "not_selected",
+      label: "Did not play"
+    };
+  }
 
-  const text =
-    JSON.stringify(
-      lineups ?? []
-    ).toLowerCase();
+  const minutes =
+    playerStatsMinutes(
+      playerId,
+      playerStats
+    );
 
   if (
-    target &&
-    text.includes(target)
+    minutes !== null
   ) {
     return {
       played: true,
@@ -468,7 +520,6 @@ function playerPlayed(
     label: "Did not play"
   };
 }
-
 function getMinute(
   value: any
 ): number | null {
@@ -620,6 +671,32 @@ async function resolvePlayerName(
   }
 }
 
+function isOwnGoal(
+  incident: any
+): boolean {
+  const values = [
+    incident?.goal_type,
+    incident?.goalType,
+    incident?.goal?.type,
+    incident?.goal?.goal_type,
+    incident?.subtype
+  ];
+
+  return values.some(
+    (value: any) =>
+      String(
+        value ?? ""
+      )
+        .trim()
+        .toLowerCase()
+        .replace(
+          /[-_ ]/g,
+          ""
+        )
+        .includes("owngoal")
+  );
+}
+
 async function normaliseIncidents(
   incidents: any[]
 ) {
@@ -701,6 +778,17 @@ async function normaliseIncidents(
               )
             ]);
 
+          const displayPlayerName =
+            isOwnGoal(
+              incident
+            ) &&
+            playerName &&
+            !/(\\(og\\))$/i.test(
+              playerName
+            )
+              ? `${playerName} (OG)`
+              : playerName;
+
           return {
             type,
             minute,
@@ -709,7 +797,12 @@ async function normaliseIncidents(
               playerId,
 
             player_name:
-              playerName,
+              displayPlayerName,
+
+            is_own_goal:
+              isOwnGoal(
+                incident
+              ),
 
             assist_id:
               assistId,
@@ -1619,7 +1712,8 @@ export async function refreshPlayerPage() {
       playerId,
       actualPlayerName,
       lineupData.lineups,
-      playerStats
+      playerStats,
+      incidents
     );
 
   const appearanceDetails =
