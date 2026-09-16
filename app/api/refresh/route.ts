@@ -1,29 +1,82 @@
-import { NextRequest } from "next/server";
-import { refreshPlayerPage } from "@/lib/refresh";
+import { NextResponse } from "next/server";
+import { refreshPlayerPage } from "../../../lib/refresh";
 
-export const runtime = "nodejs";
+export async function GET(
+  request: Request
+) {
+  const expectedSecret =
+    process.env.CRON_SECRET;
 
-export async function GET(request: NextRequest) {
-  const expected = process.env.CRON_SECRET;
-  const auth = request.headers.get("authorization");
+  const authorization =
+    request.headers.get(
+      "authorization"
+    );
 
-  if (!expected || auth !== `Bearer ${expected}`) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const suppliedSecret =
+    authorization?.startsWith(
+      "Bearer "
+    )
+      ? authorization.slice(
+          7
+        )
+      : "";
+
+  if (
+    !expectedSecret ||
+    suppliedSecret !==
+      expectedSecret
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Unauthorized"
+      },
+      {
+        status: 401
+      }
+    );
   }
 
   try {
-    const result = await refreshPlayerPage();
-    return Response.json({
+    const result =
+      await refreshPlayerPage();
+
+    return NextResponse.json({
       ok: true,
-      player: result.player_name,
-      team: result.team_name,
-      updated_at: result.updated_at
+
+      player:
+        result.player,
+
+      team:
+        result.team,
+
+      updated_at:
+        result.updated_at,
+
+      incident_count:
+        result.incident_count,
+
+      incident_types:
+        result.incident_types
     });
   } catch (error) {
-    console.error(error);
-    return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+    console.error(
+      "Refresh failed:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Refresh failed"
+      },
+      {
+        status: 500
+      }
     );
   }
 }
