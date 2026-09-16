@@ -110,43 +110,159 @@ function fixtureTimestamp(
     : timestamp;
 }
 
-function fixtureStatus(
-  fixture: any
-): string {
-  const value =
-    fixture?.status ??
-    fixture?.match_status ??
-    fixture?.state ??
-    fixture?.time?.status ??
-    "";
+function teamId(value: any): number {
+  const candidates = [
+    value?.id,
+    value?.team_id,
+    value?.team?.id,
+    value?.team?.team_id
+  ];
 
-  if (
-    typeof value === "object" &&
-    value !== null
-  ) {
-    return String(
-      value?.name ??
-      value?.type ??
-      value?.status ??
-      ""
-    ).toLowerCase();
+  for (const candidate of candidates) {
+    const id = Number(candidate);
+
+    if (
+      Number.isFinite(id) &&
+      id > 0
+    ) {
+      return id;
+    }
   }
 
-  return String(value)
-    .toLowerCase();
+  return 0;
 }
 
-function isCancelledOrPostponed(
-  fixture: any
-): boolean {
-  const status =
-    fixtureStatus(fixture);
+function teamName(value: any): string {
+  const candidates = [
+    value?.name,
+    value?.team_name,
+    value?.team?.name,
+    value?.team?.team_name,
+    value?.full_name,
+    value?.short_name
+  ];
 
-  return (
-    status.includes("cancel") ||
-    status.includes("postpon") ||
-    status.includes("abandon")
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === "string" &&
+      candidate.trim()
+    ) {
+      return candidate.trim();
+    }
+  }
+
+  return "Unknown";
+}
+
+function extractHomeAway(
+  fixture: any
+) {
+  const home =
+    fixture?.home ??
+    fixture?.home_team ??
+    fixture?.homeTeam ??
+    fixture?.teams?.home ??
+    fixture?.teams?.home_team ??
+    fixture?.participants?.home ??
+    fixture?.participants?.home_team ??
+    null;
+
+  const away =
+    fixture?.away ??
+    fixture?.away_team ??
+    fixture?.awayTeam ??
+    fixture?.teams?.away ??
+    fixture?.teams?.away_team ??
+    fixture?.participants?.away ??
+    fixture?.participants?.away_team ??
+    null;
+
+  return {
+    homeId:
+      teamId(home) ||
+      Number(
+        fixture?.home_team_id ??
+        fixture?.home_id ??
+        0
+      ),
+
+    awayId:
+      teamId(away) ||
+      Number(
+        fixture?.away_team_id ??
+        fixture?.away_id ??
+        0
+      ),
+
+    homeName:
+      teamName(home) !== "Unknown"
+        ? teamName(home)
+        : (
+            fixture?.home_team_name ??
+            fixture?.home_name ??
+            "Unknown"
+          ),
+
+    awayName:
+      teamName(away) !== "Unknown"
+        ? teamName(away)
+        : (
+            fixture?.away_team_name ??
+            fixture?.away_name ??
+            "Unknown"
+          )
+  };
+}
+
+async function getEvent(
+  eventId: number
+) {
+  return bsdGet<any>(
+    `/events/${eventId}/`
   );
+}
+
+async function enrichFixture(
+  fixture: any
+) {
+  const eventId =
+    Number(
+      fixture?.id ??
+      fixture?.event_id
+    );
+
+  if (
+    !Number.isFinite(eventId) ||
+    eventId <= 0
+  ) {
+    return fixture;
+  }
+
+  try {
+    const event =
+      await getEvent(eventId);
+
+    /*
+     * BSD's event detail contains the
+     * authoritative home/away team data.
+     */
+    return {
+      ...fixture,
+      ...event,
+
+      /*
+       * Preserve the original fixture ID.
+       */
+      id: event?.id ?? eventId
+    };
+  } catch {
+    /*
+     * If enrichment fails, retain the
+     * original fixture rather than breaking
+     * the entire refresh.
+     */
+    return fixture;
+  }
 }
 
 export async function getPlayer(
@@ -160,13 +276,14 @@ export async function getPlayer(
 export async function findPlayer(
   name: string
 ) {
-  const data = await bsdGet<any>(
-    "/players/",
-    {
-      name,
-      limit: 20,
-    }
-  );
+  const data =
+    await bsdGet<any>(
+      "/players/",
+      {
+        name,
+        limit: 20
+      }
+    );
 
   return responseArray(data);
 }
@@ -174,13 +291,14 @@ export async function findPlayer(
 export async function findTeam(
   name: string
 ) {
-  const data = await bsdGet<any>(
-    "/teams/",
-    {
-      name,
-      limit: 20,
-    }
-  );
+  const data =
+    await bsdGet<any>(
+      "/teams/",
+      {
+        name,
+        limit: 20
+      }
+    );
 
   return responseArray(data);
 }
@@ -188,9 +306,10 @@ export async function findTeam(
 export async function getTeamSquad(
   teamId: number
 ) {
-  const data = await bsdGet<any>(
-    `/teams/${teamId}/squad/`
-  );
+  const data =
+    await bsdGet<any>(
+      `/teams/${teamId}/squad/`
+    );
 
   return responseArray(data);
 }
@@ -200,8 +319,8 @@ export async function getTeamFixtures(
 ) {
   /*
    * BSD's team fixtures endpoint contains
-   * every fixture and result for the team,
-   * including cup matches.
+   * every fixture and result, including
+   * cup competitions.
    */
   const data =
     await bsdGet<any>(
@@ -219,22 +338,9 @@ export async function getTeamFixtures(
       (fixture) =>
         fixtureTimestamp(
           fixture
-        ) > 0 &&
-        !isCancelledOrPostponed(
-          fixture
-        )
+        ) > 0
     );
 
-  /*
-   * Completed fixtures:
-   *
-   * Use the fixture date rather than relying
-   * exclusively on BSD's status naming.
-   *
-   * This makes the latest completed match
-   * reliable even if BSD uses a different
-   * status label.
-   */
   const finished =
     validFixtures
       .filter(
@@ -249,15 +355,6 @@ export async function getTeamFixtures(
           fixtureTimestamp(a)
       );
 
-  /*
-   * Upcoming fixtures:
-   *
-   * Every future fixture is retained,
-   * regardless of competition.
-   *
-   * This is what brings cup matches such
-   * as Fleetwood Town into the feed.
-   */
   const upcoming =
     validFixtures
       .filter(
@@ -272,12 +369,37 @@ export async function getTeamFixtures(
           fixtureTimestamp(b)
       );
 
+  /*
+   * Enrich the fixtures with BSD's event
+   * detail endpoint. This is the important
+   * part: the event detail has the actual
+   * home and away team names.
+   */
+  const upcomingEnriched =
+    await Promise.all(
+      upcoming
+        .slice(0, 6)
+        .map(
+          (fixture) =>
+            enrichFixture(
+              fixture
+            )
+        )
+    );
+
+  const lastEnriched =
+    finished[0]
+      ? await enrichFixture(
+          finished[0]
+        )
+      : null;
+
   return {
     last:
-      finished[0] ?? null,
+      lastEnriched,
 
     next:
-      upcoming.slice(0, 6),
+      upcomingEnriched
   };
 }
 
@@ -294,7 +416,7 @@ export async function getLineups(
       data?.lineup_status ??
       "unavailable",
 
-    lineups: [data],
+    lineups: [data]
   };
 }
 
