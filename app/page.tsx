@@ -5,15 +5,11 @@ function dateValue(
 ): string | null {
   if (!value) return null;
 
-  if (
-    typeof value === "string"
-  ) {
+  if (typeof value === "string") {
     return value;
   }
 
-  if (
-    typeof value === "object"
-  ) {
+  if (typeof value === "object") {
     return (
       value?.kickoff_at ??
       value?.kickoff ??
@@ -274,8 +270,7 @@ function surname(
   name: any
 ): string {
   if (
-    typeof name !==
-      "string" ||
+    typeof name !== "string" ||
     !name.trim()
   ) {
     return "Unknown";
@@ -395,6 +390,85 @@ function getMatchEvents(
   };
 }
 
+function appearanceSummary(
+  appearance: any,
+  latestStatus: any
+): string {
+  if (
+    !latestStatus?.played
+  ) {
+    if (
+      appearance?.summary ===
+      "Not in the squad."
+    ) {
+      return "Not in the squad.";
+    }
+
+    if (
+      appearance?.subbed_on_minute !==
+      null &&
+      appearance?.subbed_on_minute !==
+      undefined
+    ) {
+      return "Didn't start. Subbed on.";
+    }
+
+    return "Didn't start. Didn't come on.";
+  }
+
+  const started =
+    appearance?.started ===
+    true;
+
+  const subbedOn =
+    appearance
+      ?.subbed_on_minute ??
+    null;
+
+  const subbedOff =
+    appearance
+      ?.subbed_off_minute ??
+    null;
+
+  const minutes =
+    appearance?.minutes ??
+    null;
+
+  if (
+    started &&
+    subbedOff !== null
+  ) {
+    return (
+      `Started. Subbed off. Played ${
+        minutes ??
+        subbedOff
+      } mins.`
+    );
+  }
+
+  if (
+    started
+  ) {
+    return (
+      minutes !== null
+        ? `Started. Played ${minutes} mins.`
+        : "Started. Played."
+    );
+  }
+
+  if (
+    subbedOn !== null
+  ) {
+    return (
+      minutes !== null
+        ? `Didn't start. Subbed on. Played ${minutes} mins.`
+        : "Didn't start. Subbed on."
+    );
+  }
+
+  return "Played.";
+}
+
 export default async function Home() {
   const supabase =
     getSupabaseAdmin();
@@ -501,14 +575,6 @@ export default async function Home() {
 
   const nextDate =
     dateValue(next);
-
-  const appearanceSummary =
-    appearance?.summary ??
-    (
-      latestPlayed
-        ? "Played."
-        : "Did not play."
-    );
 
   return (
     <>
@@ -1116,7 +1182,10 @@ export default async function Home() {
               </div>
 
               <div className="details-main">
-                {appearanceSummary}
+                {appearanceSummary(
+                  appearance,
+                  latestStatus
+                )}
               </div>
 
               <div className="details-supporting">
