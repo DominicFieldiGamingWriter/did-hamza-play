@@ -1,12 +1,109 @@
 import { NextResponse } from "next/server";
+import { refreshPlayerPage } from "../../../lib/refresh";
 import {
-  refreshPlayerPage
-} from "../../../lib/refresh";
-import {
-  findTeam,
-  getTeamFixtures,
-  getLineups
+  findTeam
 } from "../../../lib/api-football";
+
+const BASE_URL =
+  "https://sports.bzzoiro.com/api/v2";
+
+function getKey() {
+  const key =
+    process.env.BSD_API_KEY;
+
+  if (!key) {
+    throw new Error(
+      "BSD_API_KEY is not configured."
+    );
+  }
+
+  return key;
+}
+
+async function bsdGet(
+  path: string,
+  params: Record<
+    string,
+    string | number | undefined
+  > = {}
+) {
+  const url =
+    new URL(
+      `${BASE_URL}${path}`
+    );
+
+  for (
+    const [key, value] of Object.entries(
+      params
+    )
+  ) {
+    if (
+      value !== undefined &&
+      value !== ""
+    ) {
+      url.searchParams.set(
+        key,
+        String(value)
+      );
+    }
+  }
+
+  const response =
+    await fetch(url, {
+      headers: {
+        Authorization:
+          `Token ${getKey()}`,
+        Accept:
+          "application/json"
+      },
+      cache:
+        "no-store"
+    });
+
+  if (!response.ok) {
+    throw new Error(
+      `BSD API ${response.status}: ${await response.text()}`
+    );
+  }
+
+  return response.json();
+}
+
+function responseArray(
+  data: any
+): any[] {
+  if (
+    Array.isArray(data)
+  ) {
+    return data;
+  }
+
+  if (
+    Array.isArray(
+      data?.results
+    )
+  ) {
+    return data.results;
+  }
+
+  if (
+    Array.isArray(
+      data?.data
+    )
+  ) {
+    return data.data;
+  }
+
+  if (
+    Array.isArray(
+      data?.events
+    )
+  ) {
+    return data.events;
+  }
+
+  return [];
+}
 
 export async function GET(
   request: Request
@@ -20,7 +117,9 @@ export async function GET(
     );
 
   const suppliedSecret =
-    authorization?.startsWith("Bearer ")
+    authorization?.startsWith(
+      "Bearer "
+    )
       ? authorization.slice(7)
       : "";
 
@@ -44,13 +143,19 @@ export async function GET(
       await refreshPlayerPage();
 
     const teams =
-      await findTeam("Sheffield United");
+      await findTeam(
+        "Sheffield United"
+      );
 
     const team =
       teams?.find(
         (item: any) =>
-          Number(item?.id) > 0
-      ) ?? null;
+          String(
+            item?.name ?? ""
+          ).toLowerCase() ===
+          "sheffield united"
+      ) ??
+      teams?.[0];
 
     if (!team?.id) {
       throw new Error(
@@ -58,78 +163,100 @@ export async function GET(
       );
     }
 
-    const fixtures =
-      await getTeamFixtures(
-        Number(team.id)
+    const allEvents =
+      await bsdGet(
+        "/events/",
+        {
+          team_id:
+            Number(team.id),
+          limit:
+            100
+        }
       );
 
-    const nextFixture =
-      fixtures.next?.[0] ?? null;
+    const events =
+      responseArray(
+        allEvents
+      );
 
-    let lineupData: any = null;
+    const simplified =
+      events.map(
+        (event: any) => ({
+          id:
+            event?.id ??
+            event?.event_id ??
+            null,
 
-    if (
-      nextFixture?.id
-    ) {
-      try {
-        lineupData =
-          await getLineups(
-            Number(
-              nextFixture.id
-            )
-          );
-      } catch (error) {
-        lineupData = {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Lineup request failed"
-        };
-      }
-    }
+          status:
+            event?.status ??
+            event?.state ??
+            event?.match_status ??
+            event?.event_status ??
+            null,
 
-    return NextResponse.json({
-      ok: true,
+          date:
+            event?.time?.kickoff_at ??
+            event?.time?.start_time ??
+            event?.kickoff_at ??
+            event?.kickoff ??
+            event?.event_date ??
+            event?.date ??
+            event?.start_time ??
+            null,
 
-      player:
-        result.player,
+          home:
+            event?.home?.name ??
+            event?.home_team?.name ??
+            event?.home_team_name ??
+            null,
 
-      team:
-        result.team,
+          away:
+            event?.away?.name ??
+            event?.away_team?.name ??
+            event?.away_team_name ??
+            null,
 
-      updated_at:
-        result.updated_at,
-
-      next_fixture:
-        nextFixture
-          ? {
-              id:
-                nextFixture.id,
-
-              date:
-                nextFixture.date,
-
-              home_team:
-                nextFixture.home_team,
-
-              away_team:
-                nextFixture.away_team,
-
+          raw_status_keys:
+            {
               status:
-                nextFixture.status,
+                event?.status ??
+                null,
 
-              unavailable_players:
-                nextFixture.unavailable_players ??
+              state:
+                event?.state ??
+                null,
+
+              match_status:
+                event?.match_status ??
+                null,
+
+              event_status:
+                event?.event_status ??
                 null
             }
-          : null,
+        })
+      );
 
-      lineup:
-        lineupData
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        player:
+          result.player,
+        team:
+          result.team,
+        updated_at:
+          result.updated_at,
+
+        event_count:
+          simplified.length,
+
+        events:
+          simplified
+      }
+    );
   } catch (error) {
     console.error(
-      "Refresh failed:",
+      "Refresh diagnostic failed:",
       error
     );
 
@@ -139,7 +266,7 @@ export async function GET(
         error:
           error instanceof Error
             ? error.message
-            : "Refresh failed"
+            : "Refresh diagnostic failed"
       },
       {
         status: 500
