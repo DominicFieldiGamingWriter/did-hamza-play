@@ -9,7 +9,7 @@ import {
 
 import { getSupabaseAdmin } from "./supabase";
 
-function getPlayerId(value: any): number | null {
+function getId(value: any): number | null {
   const ids = [
     value?.id,
     value?.player_id,
@@ -28,7 +28,7 @@ function getPlayerId(value: any): number | null {
   return null;
 }
 
-function getPlayerName(value: any): string {
+function getName(value: any): string {
   const names = [
     value?.name,
     value?.player_name,
@@ -38,8 +38,13 @@ function getPlayerName(value: any): string {
   ];
 
   for (const name of names) {
-    if (typeof name === "string" && name.trim()) {
-      return name.trim().toLowerCase();
+    if (
+      typeof name === "string" &&
+      name.trim()
+    ) {
+      return name
+        .trim()
+        .toLowerCase();
     }
   }
 
@@ -47,16 +52,18 @@ function getPlayerName(value: any): string {
 }
 
 function hasMinutes(value: any): boolean {
-  if (!value || typeof value !== "object") {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
     return false;
   }
 
-  const values = [
+  const minuteValues = [
     value.minutes,
     value.minutes_played,
     value.played_minutes,
     value.min,
-    value.played,
     value.games?.minutes,
     value.stats?.minutes,
     value.statistics?.minutes,
@@ -64,29 +71,34 @@ function hasMinutes(value: any): boolean {
     value.statistics?.[0]?.games?.minutes
   ];
 
-  for (const value of values) {
-    const minutes = Number(value);
+  return minuteValues.some(
+    (minutes) => {
+      const numberMinutes =
+        Number(minutes);
 
-    if (Number.isFinite(minutes) && minutes > 0) {
-      return true;
+      return (
+        Number.isFinite(numberMinutes) &&
+        numberMinutes > 0
+      );
     }
-  }
-
-  return false;
+  );
 }
 
-function findPlayerRecord(
+function findPlayerWithMinutes(
   value: any,
   playerId: number,
   playerName: string
 ): boolean {
-  if (!value || typeof value !== "object") {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
     return false;
   }
 
   if (Array.isArray(value)) {
     return value.some((entry) =>
-      findPlayerRecord(
+      findPlayerWithMinutes(
         entry,
         playerId,
         playerName
@@ -94,8 +106,8 @@ function findPlayerRecord(
     );
   }
 
-  const id = getPlayerId(value);
-  const name = getPlayerName(value);
+  const id = getId(value);
+  const name = getName(value);
 
   const idMatches =
     id !== null &&
@@ -113,21 +125,69 @@ function findPlayerRecord(
     return true;
   }
 
-  for (const child of Object.values(value)) {
-    if (
+  return Object.values(value).some(
+    (child) =>
       child &&
       typeof child === "object" &&
-      findPlayerRecord(
+      findPlayerWithMinutes(
         child,
         playerId,
         playerName
       )
-    ) {
-      return true;
-    }
+  );
+}
+
+function findPlayerAnywhere(
+  value: any,
+  playerId: number,
+  playerName: string
+): boolean {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return false;
   }
 
-  return false;
+  if (Array.isArray(value)) {
+    return value.some((entry) =>
+      findPlayerAnywhere(
+        entry,
+        playerId,
+        playerName
+      )
+    );
+  }
+
+  const id = getId(value);
+  const name = getName(value);
+
+  const idMatches =
+    id !== null &&
+    id === playerId;
+
+  const nameMatches =
+    name === playerName ||
+    name.includes(playerName) ||
+    playerName.includes(name);
+
+  if (
+    idMatches ||
+    nameMatches
+  ) {
+    return true;
+  }
+
+  return Object.values(value).some(
+    (child) =>
+      child &&
+      typeof child === "object" &&
+      findPlayerAnywhere(
+        child,
+        playerId,
+        playerName
+      )
+  );
 }
 
 function playerPlayed(
@@ -136,14 +196,15 @@ function playerPlayed(
   lineups: any[],
   playerStats: any[]
 ) {
-  const normalizedName =
-    playerName.trim().toLowerCase();
-
+  /*
+   * First choice: an actual player-stat record
+   * containing minutes.
+   */
   if (
-    findPlayerRecord(
+    findPlayerWithMinutes(
       playerStats,
       playerId,
-      normalizedName
+      playerName
     )
   ) {
     return {
@@ -153,11 +214,15 @@ function playerPlayed(
     };
   }
 
+  /*
+   * Second choice: player appears anywhere in
+   * the official lineup response.
+   */
   if (
-    findPlayerRecord(
+    findPlayerAnywhere(
       lineups,
       playerId,
-      normalizedName
+      playerName
     )
   ) {
     return {
@@ -185,26 +250,34 @@ function getAvailabilityStatus(
   const reason =
     squadPlayer?.injury_type ?? "";
 
-  if (availability === "injured") {
+  if (
+    availability === "injured"
+  ) {
     return {
       status: "unavailable",
       type: "injured",
       label: "Unavailable",
-      reason: reason || "Injured"
+      reason:
+        reason || "Injured"
     };
   }
 
-  if (availability === "doubtful") {
+  if (
+    availability === "doubtful"
+  ) {
     return {
       status: "doubtful",
       type: "doubtful",
       label: "Doubtful",
       reason:
-        reason || "Listed as doubtful"
+        reason ||
+        "Listed as doubtful"
     };
   }
 
-  if (availability === "suspended") {
+  if (
+    availability === "suspended"
+  ) {
     return {
       status: "unavailable",
       type: "suspended",
@@ -220,6 +293,102 @@ function getAvailabilityStatus(
     label: "Likely available",
     reason:
       "No current injury, doubt or suspension is listed."
+  };
+}
+
+function normaliseFixture(
+  fixture: any,
+  teamId: number
+) {
+  const home =
+    fixture?.home ??
+    fixture?.home_team ??
+    fixture?.homeTeam ??
+    null;
+
+  const away =
+    fixture?.away ??
+    fixture?.away_team ??
+    fixture?.awayTeam ??
+    null;
+
+  const homeId =
+    Number(
+      home?.id ??
+      fixture?.home_team_id ??
+      fixture?.home_id ??
+      0
+    );
+
+  const awayId =
+    Number(
+      away?.id ??
+      fixture?.away_team_id ??
+      fixture?.away_id ??
+      0
+    );
+
+  const homeName =
+    home?.name ??
+    fixture?.home_team_name ??
+    "Unknown";
+
+  const awayName =
+    away?.name ??
+    fixture?.away_team_name ??
+    "Unknown";
+
+  const scoreHome =
+    fixture?.score?.home ??
+    fixture?.home_score ??
+    fixture?.home_team_score ??
+    null;
+
+  const scoreAway =
+    fixture?.score?.away ??
+    fixture?.away_score ??
+    fixture?.away_team_score ??
+    null;
+
+  const date =
+    fixture?.kickoff ??
+    fixture?.time?.kickoff_at ??
+    fixture?.event_date ??
+    fixture?.date ??
+    fixture?.start_time ??
+    null;
+
+  return {
+    ...fixture,
+
+    date,
+
+    home_team: {
+      id: homeId,
+      name: homeName
+    },
+
+    away_team: {
+      id: awayId,
+      name: awayName
+    },
+
+    home_score: scoreHome,
+    away_score: scoreAway,
+
+    opponent_name:
+      homeId === teamId
+        ? awayName
+        : awayName === "Unknown"
+        ? homeName
+        : homeName,
+
+    opponent_id:
+      homeId === teamId
+        ? awayId
+        : awayId === teamId
+        ? homeId
+        : null
   };
 }
 
@@ -242,12 +411,15 @@ export async function refreshPlayerPage() {
   }
 
   const teams =
-    await findTeam("Sheffield United");
+    await findTeam(
+      "Sheffield United"
+    );
 
   const team =
     teams.find(
       (t: any) =>
-        String(t.name).toLowerCase() ===
+        String(t.name)
+          .toLowerCase() ===
         "sheffield united"
     ) ??
     teams[0];
@@ -274,7 +446,9 @@ export async function refreshPlayerPage() {
     last,
     next
   } =
-    await getTeamFixtures(team.id);
+    await getTeamFixtures(
+      team.id
+    );
 
   if (!last) {
     throw new Error(
@@ -308,15 +482,32 @@ export async function refreshPlayerPage() {
       squadPlayer
     );
 
+  const normalisedLast =
+    normaliseFixture(
+      last,
+      team.id
+    );
+
+  const normalisedNext =
+    next.map(
+      (fixture: any) =>
+        normaliseFixture(
+          fixture,
+          team.id
+        )
+    );
+
   const payload = {
     id: 1,
 
-    player_id: playerId,
+    player_id:
+      playerId,
 
     player_name:
       actualPlayerName,
 
-    team_id: team.id,
+    team_id:
+      team.id,
 
     team_name:
       team.name,
@@ -330,13 +521,14 @@ export async function refreshPlayerPage() {
       null,
 
     last_fixture: {
-      ...last,
+      ...normalisedLast,
+
       player_status:
         lastStatus
     },
 
     next_fixtures:
-      next,
+      normalisedNext,
 
     player_status: {
       latest_match:
