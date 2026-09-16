@@ -1044,28 +1044,35 @@ export default async function Home() {
               5,
               minmax(0, 1fr)
             );
-          gap: 10px;
+          gap: 8px;
           margin-top: 20px;
         }
 
         .detail-stat {
+          min-width: 0;
+          min-height: 110px;
           background: #f3f6f8;
           border-radius: 16px;
-          padding: 16px;
+          padding: 14px 11px;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
         }
 
         .detail-stat-label {
           color: #7084a1;
-          font-size: 10px;
+          font-size: 9px;
+          line-height: 1.05;
           font-weight: 900;
-          letter-spacing: 1px;
+          letter-spacing: .8px;
           text-transform: uppercase;
+          overflow-wrap: normal;
         }
 
         .detail-stat-value {
-          margin-top: 6px;
-          font-size: 20px;
-          line-height: 1.1;
+          margin-top: 8px;
+          font-size: 19px;
+          line-height: 1.05;
           font-weight: 900;
         }
 
