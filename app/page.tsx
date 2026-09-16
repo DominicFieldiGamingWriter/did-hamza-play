@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+
 import { getSupabaseAdmin } from "../lib/supabase";
 
 function dateValue(value: any): string | null {
@@ -41,11 +42,10 @@ function teamName(
   fixture: any,
   side: "home" | "away"
 ): string {
-  const team =
-    rawTeamValue(
-      fixture,
-      side
-    );
+  const team = rawTeamValue(
+    fixture,
+    side
+  );
 
   const candidates = [
     team?.name,
@@ -96,13 +96,15 @@ function scoreValue(
 function formatDate(
   value: any
 ): string {
-  const date =
-    dateValue(value);
+  const date = dateValue(
+    value
+  );
 
   if (!date) return "";
 
-  const parsed =
-    new Date(date);
+  const parsed = new Date(
+    date
+  );
 
   if (
     Number.isNaN(
@@ -128,13 +130,15 @@ function formatDate(
 function formatUKTime(
   value: any
 ): string {
-  const date =
-    dateValue(value);
+  const date = dateValue(
+    value
+  );
 
   if (!date) return "";
 
-  const parsed =
-    new Date(date);
+  const parsed = new Date(
+    date
+  );
 
   if (
     Number.isNaN(
@@ -159,13 +163,15 @@ function formatUKTime(
 function formatBangladeshTime(
   value: any
 ): string {
-  const date =
-    dateValue(value);
+  const date = dateValue(
+    value
+  );
 
   if (!date) return "";
 
-  const parsed =
-    new Date(date);
+  const parsed = new Date(
+    date
+  );
 
   if (
     Number.isNaN(
@@ -191,8 +197,9 @@ function fixtureTimes(
   fixture: any,
   className = "times"
 ) {
-  const date =
-    dateValue(fixture);
+  const date = dateValue(
+    fixture
+  );
 
   if (!date) return null;
 
@@ -218,13 +225,15 @@ function fixtureTimes(
 function fixtureTimestamp(
   fixture: any
 ): number {
-  const date =
-    dateValue(fixture);
+  const date = dateValue(
+    fixture
+  );
 
   if (!date) return 0;
 
-  const timestamp =
-    new Date(date).getTime();
+  const timestamp = new Date(
+    date
+  ).getTime();
 
   return Number.isNaN(
     timestamp
@@ -272,16 +281,13 @@ function surname(
     return "Unknown";
   }
 
-  const parts =
-    name.trim().split(
-      /\s+/
-    );
+  const parts = name
+    .trim()
+    .split(/\s+/);
 
-  return (
-    parts[
-      parts.length - 1
-    ]
-  );
+  return parts[
+    parts.length - 1
+  ];
 }
 
 function formatMinute(
@@ -307,6 +313,57 @@ function getIncidents(
     : [];
 }
 
+function isOwnGoal(
+  goal: any
+): boolean {
+  if (
+    goal?.is_own_goal === true
+  ) {
+    return true;
+  }
+
+  const values = [
+    goal?.goal_type,
+    goal?.goalType,
+    goal?.goal?.type,
+    goal?.goal?.goal_type,
+    goal?.subtype
+  ];
+
+  return values.some(
+    (value: any) =>
+      String(
+        value ?? ""
+      )
+        .trim()
+        .toLowerCase()
+        .replace(
+          /[-_ ]/g,
+          ""
+        )
+        .includes("owngoal")
+  );
+}
+
+function formatGoal(
+  goal: any
+): string {
+  const player =
+    surname(
+      goal?.player_name
+    );
+
+  const og = isOwnGoal(
+    goal
+  )
+    ? " (OG)"
+    : "";
+
+  return `${player}${og} ${formatMinute(
+    goal?.minute
+  )}`;
+}
+
 function getMatchEvents(
   fixture: any
 ) {
@@ -326,11 +383,11 @@ function getMatchEvents(
         (a, b) =>
           Number(
             a?.minute ??
-            9999
+              9999
           ) -
           Number(
             b?.minute ??
-            9999
+              9999
           )
       );
 
@@ -354,7 +411,7 @@ function getMatchEvents(
           const type =
             String(
               card?.card_type ??
-              ""
+                ""
             ).toLowerCase();
 
           return (
@@ -371,11 +428,11 @@ function getMatchEvents(
         (a, b) =>
           Number(
             a?.minute ??
-            9999
+              9999
           ) -
           Number(
             b?.minute ??
-            9999
+              9999
           )
       );
 
@@ -942,7 +999,7 @@ export default async function Home() {
           display: grid;
           grid-template-columns:
             repeat(
-              3,
+              4,
               minmax(0, 1fr)
             );
           gap: 10px;
@@ -1230,7 +1287,11 @@ export default async function Home() {
           }
 
           .detail-stats {
-            grid-template-columns: 1fr;
+            grid-template-columns:
+              repeat(
+                2,
+                minmax(0, 1fr)
+              );
           }
 
           .event-line {
@@ -1336,7 +1397,9 @@ export default async function Home() {
                               (
                                 goal: any
                               ) =>
-                                `${surname(goal.player_name)} ${formatMinute(goal.minute)}`
+                                formatGoal(
+                                  goal
+                                )
                             )
                             .join(
                               " · "
@@ -1358,7 +1421,11 @@ export default async function Home() {
                               (
                                 goal: any
                               ) =>
-                                `${surname(goal.assist_name)} ${formatMinute(goal.minute)}`
+                                `${surname(
+                                  goal.assist_name
+                                )} ${formatMinute(
+                                  goal.minute
+                                )}`
                             )
                             .join(
                               " · "
@@ -1380,7 +1447,11 @@ export default async function Home() {
                               (
                                 card: any
                               ) =>
-                                `${surname(card.player_name)} ${formatMinute(card.minute)}`
+                                `${surname(
+                                  card.player_name
+                                )} ${formatMinute(
+                                  card.minute
+                                )}`
                             )
                             .join(
                               " · "
@@ -1432,7 +1503,24 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Subbed off
+                    Subbed On
+                  </div>
+
+                  <div className="detail-stat-value">
+                    {appearance
+                      ?.subbed_on_minute !==
+                      null &&
+                    appearance
+                      ?.subbed_on_minute !==
+                      undefined
+                      ? `${appearance.subbed_on_minute}'`
+                      : "—"}
+                  </div>
+                </div>
+
+                <div className="detail-stat">
+                  <div className="detail-stat-label">
+                    Subbed Off
                   </div>
 
                   <div className="detail-stat-value">
@@ -1533,7 +1621,9 @@ export default async function Home() {
                 )}
               </div>
 
-              {fixtureTimes(next)}
+              {fixtureTimes(
+                next
+              )}
             </>
           )}
 
@@ -1587,7 +1677,9 @@ export default async function Home() {
                     className="fixture-row"
                     key={
                       fixture?.id ??
-                      `${fixtureTimestamp(fixture)}-${index}`
+                      `${fixtureTimestamp(
+                        fixture
+                      )}-${index}`
                     }
                   >
                     <div className="fixture-title">
@@ -1606,13 +1698,17 @@ export default async function Home() {
 
                     <div className="fixture-time">
                       {date
-                        ? `${formatUKTime(fixture)} (UK)`
+                        ? `${formatUKTime(
+                            fixture
+                          )} (UK)`
                         : ""}
                     </div>
 
                     <div className="fixture-time">
                       {date
-                        ? `${formatBangladeshTime(fixture)} (Bangladesh)`
+                        ? `${formatBangladeshTime(
+                            fixture
+                          )} (Bangladesh)`
                         : ""}
                     </div>
                   </div>
