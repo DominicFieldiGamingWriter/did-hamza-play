@@ -1,13 +1,19 @@
 import { getSupabaseAdmin } from "../lib/supabase";
 
-function dateValue(value: any): string | null {
+function dateValue(
+  value: any
+): string | null {
   if (!value) return null;
 
-  if (typeof value === "string") {
+  if (
+    typeof value === "string"
+  ) {
     return value;
   }
 
-  if (typeof value === "object") {
+  if (
+    typeof value === "object"
+  ) {
     return (
       value?.kickoff_at ??
       value?.kickoff ??
@@ -54,7 +60,9 @@ function teamName(
     fixture?.[`${side}_name`]
   ];
 
-  for (const value of candidates) {
+  for (
+    const value of candidates
+  ) {
     if (
       typeof value === "string" &&
       value.trim()
@@ -70,8 +78,13 @@ function fixtureName(
   fixture: any
 ): string {
   return (
-    `${teamName(fixture, "home")} vs ` +
-    `${teamName(fixture, "away")}`
+    `${teamName(
+      fixture,
+      "home"
+    )} vs ${teamName(
+      fixture,
+      "away"
+    )}`
   );
 }
 
@@ -183,7 +196,8 @@ function formatBangladeshTime(
 
 function fixtureTimes(
   fixture: any,
-  className = "times"
+  className =
+    "times"
 ) {
   const date =
     dateValue(fixture);
@@ -193,14 +207,16 @@ function fixtureTimes(
   return (
     <div className={className}>
       <span>
-        {formatUKTime(fixture)}
-        {" "}
+        {formatUKTime(
+          fixture
+        )}{" "}
         (UK)
       </span>
 
       <span>
-        {formatBangladeshTime(fixture)}
-        {" "}
+        {formatBangladeshTime(
+          fixture
+        )}{" "}
         (Bangladesh)
       </span>
     </div>
@@ -242,17 +258,6 @@ function sortUpcomingFixtures(
     );
 }
 
-function formatMinute(
-  minute: any
-) {
-  const value =
-    Number(minute);
-
-  return Number.isFinite(value)
-    ? `${value}'`
-    : "";
-}
-
 function getAppearance(
   fixture: any,
   status: any
@@ -265,394 +270,119 @@ function getAppearance(
   );
 }
 
-function collectEventArrays(
-  value: any,
-  result: any[] = [],
-  depth = 0
-): any[] {
+function surname(
+  name: any
+): string {
   if (
-    !value ||
-    typeof value !== "object" ||
-    depth > 8
+    typeof name !== "string" ||
+    !name.trim()
   ) {
-    return result;
+    return "Unknown";
   }
 
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectEventArrays(
-        item,
-        result,
-        depth + 1
-      );
-    }
+  const parts =
+    name.trim().split(
+      /\s+/
+    );
 
-    return result;
-  }
-
-  for (const [
-    key,
-    child
-  ] of Object.entries(value)) {
-    const lower =
-      key.toLowerCase();
-
-    if (
-      Array.isArray(child) &&
-      (
-        lower === "events" ||
-        lower === "incidents" ||
-        lower === "event" ||
-        lower === "timeline" ||
-        lower === "match_events" ||
-        lower === "match_events_data"
-      )
-    ) {
-      result.push(
-        ...child
-      );
-    }
-
-    if (
-      child &&
-      typeof child === "object"
-    ) {
-      collectEventArrays(
-        child,
-        result,
-        depth + 1
-      );
-    }
-  }
-
-  return result;
+  return (
+    parts[parts.length - 1]
+  );
 }
 
-function eventMinute(
-  event: any
-): number | null {
-  const candidates = [
-    event?.minute,
-    event?.min,
-    event?.event_minute,
-    event?.time?.minute
-  ];
-
-  for (const candidate of candidates) {
-    const number =
-      Number(candidate);
-
-    if (
-      Number.isFinite(number) &&
-      number >= 0
-    ) {
-      return number;
-    }
-  }
-
-  return null;
-}
-
-function eventPlayer(
-  event: any
+function formatMinute(
+  minute: any
 ): string {
-  const candidates = [
-    event?.player?.name,
-    event?.player_name,
-    event?.player?.full_name,
-    event?.scorer?.name,
-    event?.card?.player?.name,
-    event?.name
-  ];
+  const value =
+    Number(minute);
 
-  for (const value of candidates) {
-    if (
-      typeof value === "string" &&
-      value.trim()
-    ) {
-      return value.trim();
-    }
-  }
-
-  return "";
+  return Number.isFinite(
+    value
+  )
+    ? `${value}'`
+    : "";
 }
 
-function eventTeam(
-  event: any
-): string {
-  const candidates = [
-    event?.team?.name,
-    event?.team_name
-  ];
-
-  for (const value of candidates) {
-    if (
-      typeof value === "string" &&
-      value.trim()
-    ) {
-      return value.trim();
-    }
-  }
-
-  return "";
+function getIncidents(
+  fixture: any
+): any[] {
+  return Array.isArray(
+    fixture?.incidents
+  )
+    ? fixture.incidents
+    : [];
 }
 
-function eventType(
-  event: any
-): string {
-  const candidates = [
-    event?.type,
-    event?.event_type,
-    event?.kind,
-    event?.incident_type,
-    event?.event
-  ];
-
-  for (const value of candidates) {
-    if (
-      typeof value === "string"
-    ) {
-      return value.toLowerCase();
-    }
-  }
-
-  return "";
-}
-
-function eventAssist(
-  event: any
-): string {
-  const candidates = [
-    event?.assist?.name,
-    event?.assist_player?.name,
-    event?.assistant?.name
-  ];
-
-  for (const value of candidates) {
-    if (
-      typeof value === "string" &&
-      value.trim()
-    ) {
-      return value.trim();
-    }
-  }
-
-  return "";
-}
-
-function extractMatchEvents(
+function getMatchEvents(
   fixture: any
 ) {
-  const events =
-    collectEventArrays(
+  const incidents =
+    getIncidents(
       fixture
     );
 
-  const goals: any[] = [];
-  const yellows: any[] = [];
-  const reds: any[] = [];
+  const goals =
+    incidents.filter(
+      (incident) =>
+        incident?.type ===
+        "goal"
+    );
 
-  const seen =
-    new Set<string>();
+  const cards =
+    incidents.filter(
+      (incident) =>
+        incident?.type ===
+        "card"
+    );
 
-  for (const event of events) {
-    const type =
-      eventType(event);
+  const yellowCards =
+    cards.filter(
+      (card) =>
+        String(
+          card?.card_type ??
+          ""
+        ).toLowerCase()
+          .includes(
+            "yellow"
+          )
+    );
 
-    const text =
-      (() => {
-        try {
-          return JSON.stringify(
-            event
+  const redCards =
+    cards.filter(
+      (card) => {
+        const type =
+          String(
+            card?.card_type ??
+            ""
           ).toLowerCase();
-        } catch {
-          return "";
-        }
-      })();
 
-    const minute =
-      eventMinute(event);
-
-    const player =
-      eventPlayer(event);
-
-    const team =
-      eventTeam(event);
-
-    const assist =
-      eventAssist(event);
-
-    const goal =
-      type.includes("goal") ||
-      (
-        text.includes(
-          "\"goal\""
-        ) &&
-        !text.includes(
-          "no goal"
-        )
-      );
-
-    const red =
-      type.includes(
-        "red"
-      ) ||
-      text.includes(
-        "red card"
-      ) ||
-      text.includes(
-        "red_card"
-      ) ||
-      text.includes(
-        "sent off"
-      ) ||
-      text.includes(
-        "sending off"
-      );
-
-    const yellow =
-      !red &&
-      (
-        type.includes(
-          "yellow"
-        ) ||
-        text.includes(
-          "yellow card"
-        ) ||
-        text.includes(
-          "yellow_card"
-        )
-      );
-
-    if (goal) {
-      const key =
-        `goal-${minute}-${player}-${team}`;
-
-      if (!seen.has(key)) {
-        seen.add(key);
-
-        goals.push({
-          minute,
-          player,
-          team,
-          assist
-        });
+        return (
+          type.includes(
+            "red"
+          ) ||
+          type.includes(
+            "second"
+          )
+        );
       }
-    }
-
-    if (yellow) {
-      const key =
-        `yellow-${minute}-${player}-${team}`;
-
-      if (!seen.has(key)) {
-        seen.add(key);
-
-        yellows.push({
-          minute,
-          player,
-          team
-        });
-      }
-    }
-
-    if (red) {
-      const key =
-        `red-${minute}-${player}-${team}`;
-
-      if (!seen.has(key)) {
-        seen.add(key);
-
-        reds.push({
-          minute,
-          player,
-          team
-        });
-      }
-    }
-  }
-
-  goals.sort(
-    (a, b) =>
-      (a.minute ?? 999) -
-      (b.minute ?? 999)
-  );
-
-  yellows.sort(
-    (a, b) =>
-      (a.minute ?? 999) -
-      (b.minute ?? 999)
-  );
-
-  reds.sort(
-    (a, b) =>
-      (a.minute ?? 999) -
-      (b.minute ?? 999)
-  );
+    );
 
   /*
-   * Safety fallback for the current
-   * Sheffield United v Wolves match.
-   *
-   * These are documented match events,
-   * and this prevents the visible page
-   * from showing "None" while BSD's event
-   * payload is incomplete.
+   * Assists are taken directly from
+   * BSD's goal incident "assist" field,
+   * after refresh.ts has resolved it.
    */
-  const title =
-    fixtureName(
-      fixture
+  const assists =
+    goals.filter(
+      (goal) =>
+        goal?.assist_name
     );
-
-  if (
-    title.includes(
-      "Sheffield United"
-    ) &&
-    title.includes(
-      "Wolverhampton"
-    ) &&
-    goals.length === 0
-  ) {
-    goals.push({
-      minute: 90,
-      player: "Raúl Jiménez",
-      team: "Wolverhampton Wanderers"
-    });
-  }
-
-  if (
-    title.includes(
-      "Sheffield United"
-    ) &&
-    title.includes(
-      "Wolverhampton"
-    ) &&
-    yellows.length === 0
-  ) {
-    yellows.push(
-      {
-        minute: 2,
-        player: "Sam McCallum",
-        team: "Sheffield United"
-      },
-      {
-        minute: 17,
-        player: "Ladislav Krejčí",
-        team: "Wolverhampton Wanderers"
-      },
-      {
-        minute: 48,
-        player: "Japhet Tanganga",
-        team: "Sheffield United"
-      }
-    );
-  }
 
   return {
     goals,
-    yellowCards:
-      yellows,
-    redCards:
-      reds
+    assists,
+    yellowCards,
+    redCards
   };
 }
 
@@ -738,8 +468,8 @@ export default async function Home() {
       latestStatus
     );
 
-  const matchEvents =
-    extractMatchEvents(
+  const events =
+    getMatchEvents(
       lastFixture
     );
 
@@ -762,6 +492,14 @@ export default async function Home() {
 
   const nextDate =
     dateValue(next);
+
+  const appearanceSummary =
+    appearance?.summary ??
+    (
+      latestPlayed
+        ? "Played."
+        : "Did not play."
+    );
 
   return (
     <>
@@ -937,7 +675,7 @@ export default async function Home() {
           text-align: right;
           font-size: 14px;
           font-weight: 800;
-          line-height: 1.35;
+          line-height: 1.4;
         }
 
         .details-panel {
@@ -948,18 +686,18 @@ export default async function Home() {
         }
 
         .details-main {
-          margin-top: 11px;
+          margin-top: 10px;
           font-size: 28px;
-          line-height: 1.12;
+          line-height: 1.13;
           font-weight: 900;
-          letter-spacing: -0.9px;
+          letter-spacing: -0.8px;
         }
 
         .details-supporting {
           margin-top: 12px;
           color: #52647d;
           font-size: 15px;
-          line-height: 1.48;
+          line-height: 1.5;
         }
 
         .detail-stats {
@@ -1231,6 +969,10 @@ export default async function Home() {
           .score {
             font-size: 48px;
           }
+
+          .times {
+            gap: 14px;
+          }
         }
       `}</style>
 
@@ -1296,15 +1038,37 @@ export default async function Home() {
                     </div>
 
                     <div className="event-value">
-                      {matchEvents.goals.length ===
+                      {events.goals.length ===
                       0
                         ? "None"
-                        : matchEvents.goals
+                        : events.goals
                             .map(
                               (
                                 goal: any
                               ) =>
-                                `${goal.player || "Unknown"} ${formatMinute(goal.minute)}`
+                                `${surname(goal.player_name)} ${formatMinute(goal.minute)}`
+                            )
+                            .join(
+                              " · "
+                            )}
+                    </div>
+                  </div>
+
+                  <div className="event-line">
+                    <div className="event-label">
+                      ASSISTS
+                    </div>
+
+                    <div className="event-value">
+                      {events.assists.length ===
+                      0
+                        ? "None"
+                        : events.assists
+                            .map(
+                              (
+                                goal: any
+                              ) =>
+                                `${surname(goal.assist_name)} ${formatMinute(goal.minute)}`
                             )
                             .join(
                               " · "
@@ -1318,15 +1082,15 @@ export default async function Home() {
                     </div>
 
                     <div className="event-value">
-                      {matchEvents.yellowCards.length ===
+                      {events.yellowCards.length ===
                       0
                         ? "None"
-                        : matchEvents.yellowCards
+                        : events.yellowCards
                             .map(
                               (
                                 card: any
                               ) =>
-                                `${card.player || "Unknown"} ${formatMinute(card.minute)}`
+                                `${surname(card.player_name)} ${formatMinute(card.minute)}`
                             )
                             .join(
                               " · "
@@ -1340,15 +1104,15 @@ export default async function Home() {
                     </div>
 
                     <div className="event-value">
-                      {matchEvents.redCards.length ===
+                      {events.redCards.length ===
                       0
                         ? "None"
-                        : matchEvents.redCards
+                        : events.redCards
                             .map(
                               (
                                 card: any
                               ) =>
-                                `${card.player || "Unknown"} ${formatMinute(card.minute)}`
+                                `${surname(card.player_name)} ${formatMinute(card.minute)}`
                             )
                             .join(
                               " · "
@@ -1365,12 +1129,7 @@ export default async function Home() {
               </div>
 
               <div className="details-main">
-                {appearance?.summary ??
-                  (
-                    latestPlayed
-                      ? "Played."
-                      : "Did not play."
-                  )}
+                {appearanceSummary}
               </div>
 
               <div className="details-supporting">
@@ -1386,7 +1145,6 @@ export default async function Home() {
 
                   <div className="detail-stat-value">
                     {appearance?.minutes ??
-                      latestStatus?.minutes ??
                       "—"}
                   </div>
                 </div>
@@ -1412,7 +1170,10 @@ export default async function Home() {
                   <div className="detail-stat-value">
                     {appearance
                       ?.subbed_off_minute !==
-                    null
+                    null &&
+                    appearance
+                      ?.subbed_off_minute !==
+                      undefined
                       ? `${appearance.subbed_off_minute}'`
                       : "—"}
                   </div>
