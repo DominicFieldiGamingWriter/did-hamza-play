@@ -41,7 +41,11 @@ async function bsdGet<T>(
 
 function responseArray(data: any): any[] {
   if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results;
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
   return [];
 }
 
@@ -143,13 +147,41 @@ export async function getLineups(eventId: number) {
     `/events/${eventId}/lineups/`
   );
 
+  const raw = data?.lineups;
+
+  if (Array.isArray(raw)) {
+    return {
+      status:
+        data?.lineup_status ??
+        "unavailable",
+      lineups: raw
+    };
+  }
+
+  if (raw?.home || raw?.away) {
+    return {
+      status:
+        data?.lineup_status ??
+        "unavailable",
+
+      lineups: [
+        ...(Array.isArray(raw.home)
+          ? raw.home
+          : [raw.home].filter(Boolean)),
+
+        ...(Array.isArray(raw.away)
+          ? raw.away
+          : [raw.away].filter(Boolean))
+      ]
+    };
+  }
+
   return {
     status:
       data?.lineup_status ??
       "unavailable",
 
-    lineups:
-      asArray(data?.lineups)
+    lineups: []
   };
 }
 
