@@ -274,7 +274,8 @@ function surname(
   name: any
 ): string {
   if (
-    typeof name !== "string" ||
+    typeof name !==
+      "string" ||
     !name.trim()
   ) {
     return "Unknown";
@@ -286,7 +287,9 @@ function surname(
     );
 
   return (
-    parts[parts.length - 1]
+    parts[
+      parts.length - 1
+    ]
   );
 }
 
@@ -322,10 +325,28 @@ function getMatchEvents(
     );
 
   const goals =
-    incidents.filter(
-      (incident) =>
-        incident?.type ===
-        "goal"
+    incidents
+      .filter(
+        (incident) =>
+          incident?.type ===
+          "goal"
+      )
+      .sort(
+        (a, b) =>
+          Number(
+            a?.minute ??
+            9999
+          ) -
+          Number(
+            b?.minute ??
+            9999
+          )
+      );
+
+  const assists =
+    goals.filter(
+      (goal) =>
+        goal?.assist_name
     );
 
   const cards =
@@ -335,53 +356,41 @@ function getMatchEvents(
         "card"
     );
 
-  const yellowCards =
-    cards.filter(
-      (card) =>
-        String(
-          card?.card_type ??
-          ""
-        ).toLowerCase()
-          .includes(
-            "yellow"
-          )
-    );
-
   const redCards =
-    cards.filter(
-      (card) => {
-        const type =
-          String(
-            card?.card_type ??
-            ""
-          ).toLowerCase();
+    cards
+      .filter(
+        (card) => {
+          const type =
+            String(
+              card?.card_type ??
+              ""
+            ).toLowerCase();
 
-        return (
-          type.includes(
-            "red"
-          ) ||
-          type.includes(
-            "second"
+          return (
+            type.includes(
+              "red"
+            ) ||
+            type.includes(
+              "second"
+            )
+          );
+        }
+      )
+      .sort(
+        (a, b) =>
+          Number(
+            a?.minute ??
+            9999
+          ) -
+          Number(
+            b?.minute ??
+            9999
           )
-        );
-      }
-    );
-
-  /*
-   * Assists are taken directly from
-   * BSD's goal incident "assist" field,
-   * after refresh.ts has resolved it.
-   */
-  const assists =
-    goals.filter(
-      (goal) =>
-        goal?.assist_name
-    );
+      );
 
   return {
     goals,
     assists,
-    yellowCards,
     redCards
   };
 }
@@ -1069,28 +1078,6 @@ export default async function Home() {
                                 goal: any
                               ) =>
                                 `${surname(goal.assist_name)} ${formatMinute(goal.minute)}`
-                            )
-                            .join(
-                              " · "
-                            )}
-                    </div>
-                  </div>
-
-                  <div className="event-line">
-                    <div className="event-label">
-                      YELLOW CARDS
-                    </div>
-
-                    <div className="event-value">
-                      {events.yellowCards.length ===
-                      0
-                        ? "None"
-                        : events.yellowCards
-                            .map(
-                              (
-                                card: any
-                              ) =>
-                                `${surname(card.player_name)} ${formatMinute(card.minute)}`
                             )
                             .join(
                               " · "
