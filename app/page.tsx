@@ -571,6 +571,32 @@ export default async function Home() {
       "away"
     );
 
+  const nextDate =
+    dateValue(next);
+
+  const appearanceSummaryText =
+    appearanceSummary(
+      appearance,
+      latestStatus
+    );
+
+  const liveSelected =
+    liveFixture
+      ?.player_status
+      ?.selected;
+
+  const liveHasDecision =
+    liveSelected ===
+      true ||
+    liveSelected ===
+      false;
+
+  const liveAnswerClass =
+    liveSelected ===
+    true
+      ? "answer yes live-answer"
+      : "answer no live-answer";
+
   const liveDate =
     dateValue(
       liveFixture
@@ -586,15 +612,6 @@ export default async function Home() {
     scoreValue(
       liveFixture,
       "away"
-    );
-
-  const nextDate =
-    dateValue(next);
-
-  const appearanceSummaryText =
-    appearanceSummary(
-      appearance,
-      latestStatus
     );
 
   return (
@@ -675,8 +692,16 @@ export default async function Home() {
           margin-top: 30px;
         }
 
+        .live-heading-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 28px;
+          margin-bottom: 16px;
+        }
+
         .live-heading {
-          margin: 0 0 16px;
+          margin: 0;
           color: #ffffff;
           font-size: clamp(
             29px,
@@ -686,6 +711,14 @@ export default async function Home() {
           line-height: 1;
           font-weight: 900;
           letter-spacing: -1.4px;
+        }
+
+        .live-answer {
+          min-width: 148px;
+          height: 70px;
+          padding: 0 30px;
+          font-size: 42px;
+          letter-spacing: -2px;
         }
 
         .live-card {
@@ -1072,6 +1105,22 @@ export default async function Home() {
             font-size: 58px;
           }
 
+          .live-heading-row {
+            align-items: flex-start;
+          }
+
+          .live-heading {
+            font-size: 31px;
+          }
+
+          .live-answer {
+            margin-top: 0;
+            min-width: 120px;
+            height: 66px;
+            padding: 0 22px;
+            font-size: 34px;
+          }
+
           .live-card,
           .section-card,
           .next-card,
@@ -1141,6 +1190,22 @@ export default async function Home() {
             font-size: 54px;
           }
 
+          .live-heading-row {
+            align-items: center;
+            gap: 14px;
+          }
+
+          .live-heading {
+            font-size: 29px;
+          }
+
+          .live-answer {
+            min-width: 102px;
+            height: 58px;
+            padding: 0 18px;
+            font-size: 30px;
+          }
+
           .detail-stats {
             grid-template-columns: 1fr;
           }
@@ -1154,13 +1219,11 @@ export default async function Home() {
             text-align: left;
           }
 
-          .next-heading,
-          .live-heading {
+          .next-heading {
             font-size: 31px;
           }
 
-          .next-title,
-          .live-title {
+          .next-title {
             font-size: 33px;
           }
 
@@ -1197,9 +1260,23 @@ export default async function Home() {
 
         {liveFixture && (
           <section className="live-section">
-            <h2 className="live-heading">
-              CURRENTLY PLAYING
-            </h2>
+            <div className="live-heading-row">
+              <h2 className="live-heading">
+                CURRENTLY PLAYING
+              </h2>
+
+              {liveHasDecision && (
+                <div
+                  className={
+                    liveAnswerClass
+                  }
+                >
+                  {liveSelected
+                    ? "YES"
+                    : "NO"}
+                </div>
+              )}
+            </div>
 
             <div className="live-card">
               <div className="live-card-inner">
