@@ -125,120 +125,19 @@ export async function getTeamFixtures(
   teamId: number
 ) {
   /*
-   * Use the BSD team-fixtures endpoint rather
-   * than filtering /events/ by status.
+   * IMPORTANT:
+   * Return the raw fixture ARRAY because
+   * refresh.ts expects getTeamFixtures()
+   * to return an array.
    *
-   * This keeps cup games and league games
-   * together.
+   * This endpoint contains league AND cup
+   * fixtures.
    */
   const data = await bsdGet<any>(
     `/teams/${teamId}/fixtures/`
   );
 
-  const fixtures =
-    responseArray(data);
-
-  function eventDate(event: any) {
-    return (
-      event?.kickoff ??
-      event?.time?.kickoff_at ??
-      event?.event_date ??
-      event?.date ??
-      event?.start_time ??
-      null
-    );
-  }
-
-  function eventStatus(event: any) {
-    return String(
-      event?.status ??
-        event?.match_status ??
-        ""
-    ).toLowerCase();
-  }
-
-  const now = Date.now();
-
-  const finished =
-    fixtures
-      .filter((fixture) => {
-        const status =
-          eventStatus(fixture);
-
-        return (
-          status === "finished" ||
-          status === "ft" ||
-          status === "completed"
-        );
-      })
-      .sort(
-        (a, b) =>
-          new Date(
-            eventDate(b)
-          ).getTime() -
-          new Date(
-            eventDate(a)
-          ).getTime()
-      );
-
-  const upcoming =
-    fixtures
-      .filter((fixture) => {
-        const status =
-          eventStatus(fixture);
-
-        if (
-          status === "cancelled" ||
-          status === "postponed"
-        ) {
-          return false;
-        }
-
-        if (
-          status === "finished" ||
-          status === "ft" ||
-          status === "completed" ||
-          status === "live" ||
-          status === "inprogress"
-        ) {
-          return false;
-        }
-
-        const date =
-          eventDate(fixture);
-
-        if (!date) {
-          return false;
-        }
-
-        return (
-          new Date(date).getTime() >=
-          now
-        );
-      })
-      .sort(
-        (a, b) =>
-          new Date(
-            eventDate(a)
-          ).getTime() -
-          new Date(
-            eventDate(b)
-          ).getTime()
-      );
-
-  return {
-    last:
-      finished[0] ?? null,
-
-    /*
-     * Store enough upcoming fixtures so the
-     * homepage can use:
-     *
-     * #1 = Will Hamza Play Next?
-     * #2-#4 = Upcoming Fixtures
-     */
-    next: upcoming.slice(0, 6),
-  };
+  return responseArray(data);
 }
 
 export async function getLineups(
