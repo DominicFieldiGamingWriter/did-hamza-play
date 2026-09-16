@@ -75,6 +75,36 @@ function responseArray(data: any): any[] {
   return [];
 }
 
+function fixtureDate(fixture: any) {
+  return (
+    fixture?.time?.kickoff_at ??
+    fixture?.kickoff_at ??
+    fixture?.kickoff ??
+    fixture?.event_date ??
+    fixture?.date ??
+    fixture?.start_time ??
+    null
+  );
+}
+
+function fixtureTimestamp(
+  fixture: any
+) {
+  const value =
+    fixtureDate(fixture);
+
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp =
+    new Date(value).getTime();
+
+  return Number.isNaN(timestamp)
+    ? 0
+    : timestamp;
+}
+
 export async function getPlayer(
   playerId: number
 ) {
@@ -125,19 +155,115 @@ export async function getTeamFixtures(
   teamId: number
 ) {
   /*
-   * IMPORTANT:
-   * Return the raw fixture ARRAY because
-   * refresh.ts expects getTeamFixtures()
-   * to return an array.
+   * Keep the return shape expected by
+   * lib/refresh.ts:
    *
-   * This endpoint contains league AND cup
-   * fixtures.
+   * {
+   *   last: latest completed fixture,
+   *   next: upcoming fixtures
+   * }
+   *
+   * We query the football events endpoint
+   * by team rather than using a league-only
+   * fixture source. This includes cup matches.
    */
-  const data = await bsdGet<any>(
-    `/teams/${teamId}/fixtures/`
-  );
 
-  return responseArray(data);
+  const finishedData =
+    await bsdGet<any>(
+      "/events/",
+      {
+        team_id: teamId,
+        status: "finished",
+        limit: 100,
+      }
+    );
+
+  const upcomingData =
+    await bsdGet<any>(
+      "/events/",
+      {
+        team_id: teamId,
+        status: "notstarted",
+        limit: 100,
+      }
+    );
+
+  let finished =
+    responseArray(
+      finishedData
+    );
+
+  let upcoming =
+    responseArray(
+      upcomingData
+    );
+
+  /*
+   * Some BSD endpoints/documentation use
+   * "upcoming" rather than "notstarted".
+   * If notstarted returns nothing, try the
+   * current upcoming status as a fallback.
+   */
+  if (upcoming.length === 0) {
+    const fallbackData =
+      await bsdGet<any>(
+        "/events/",
+        {
+          team_id: teamId,
+          status: "upcoming",
+          limit: 100,
+        }
+      );
+
+    upcoming =
+      responseArray(
+        fallbackData
+      );
+  }
+
+  finished = finished
+    .filter(
+      (fixture) =>
+        fixtureTimestamp(
+          fixture
+        ) > 0
+    )
+    .sort(
+      (a, b) =>
+        fixtureTimestamp(b) -
+        fixtureTimestamp(a)
+    );
+
+  const now = Date.now();
+
+  upcoming = upcoming
+    .filter(
+      (fixture) =>
+        fixtureTimestamp(
+          fixture
+        ) >= now
+    )
+    .sort(
+      (a, b) =>
+        fixtureTimestamp(a) -
+        fixtureTimestamp(b)
+    );
+
+  return {
+    last:
+      finished[0] ?? null,
+
+    /*
+     * Keep several upcoming fixtures so the
+     * refresh layer can store enough data for:
+     *
+     * WILL HAMZA PLAY NEXT?
+     * +
+     * UPCOMING FIXTURES #1-#3
+     */
+    next:
+      upcoming.slice(0, 6),
+  };
 }
 
 export async function getLineups(
