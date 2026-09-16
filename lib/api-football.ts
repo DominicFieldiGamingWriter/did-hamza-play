@@ -567,11 +567,6 @@ export async function getPlayer(
       `/players/${playerId}/`
     );
 
-  /*
-   * Important:
-   * BSD may wrap the player in
-   * { data: {...} } or results[0].
-   */
   return responseObject(
     data
   );
@@ -629,6 +624,7 @@ export async function getTeamFixtures(
 ) {
   const [
     finishedData,
+    liveData,
     upcomingData
   ] = await Promise.all([
     bsdGet<any>(
@@ -638,6 +634,18 @@ export async function getTeamFixtures(
           teamId,
         status:
           "finished",
+        limit:
+          100
+      }
+    ),
+
+    bsdGet<any>(
+      "/events/",
+      {
+        team_id:
+          teamId,
+        status:
+          "live",
         limit:
           100
       }
@@ -659,6 +667,11 @@ export async function getTeamFixtures(
   let finished =
     responseArray(
       finishedData
+    );
+
+  let live =
+    responseArray(
+      liveData
     );
 
   let upcoming =
@@ -708,6 +721,14 @@ export async function getTeamFixtures(
           fixtureTimestamp(a)
       );
 
+  live =
+    live
+      .sort(
+        (a, b) =>
+          fixtureTimestamp(a) -
+          fixtureTimestamp(b)
+      );
+
   upcoming =
     upcoming
       .filter(
@@ -722,8 +743,15 @@ export async function getTeamFixtures(
           fixtureTimestamp(b)
       );
 
+  const currentFixtures =
+    live.length > 0
+      ? live
+      : [];
+
   const rawFixtures = [
-    ...(finished[0]
+    ...(currentFixtures.length > 0
+      ? [currentFixtures[0]]
+      : finished[0]
       ? [finished[0]]
       : []),
 
@@ -743,19 +771,17 @@ export async function getTeamFixtures(
       )
     );
 
-  const last =
-    finished[0]
-      ? resolved[0] ??
-        null
-      : null;
+  const currentOrLast =
+    resolved[0] ??
+    null;
 
   const next =
-    finished[0]
-      ? resolved.slice(1)
-      : resolved;
+    resolved.slice(1);
 
   return {
-    last,
+    last:
+      currentOrLast,
+
     next
   };
 }
