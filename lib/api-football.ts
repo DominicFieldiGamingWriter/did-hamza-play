@@ -16,11 +16,11 @@ async function bsdGet<T>(
 ): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`);
 
-  Object.entries(params).forEach(([key, value]) => {
+  for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== "") {
       url.searchParams.set(key, String(value));
     }
-  });
+  }
 
   const response = await fetch(url, {
     headers: {
@@ -39,101 +39,93 @@ async function bsdGet<T>(
   return response.json() as Promise<T>;
 }
 
-export type Player = {
-  id: number;
-  name: string;
-  first_name?: string;
-  last_name?: string;
-  photo?: string;
-  team?: {
-    id: number;
-    name: string;
-    logo?: string;
-  };
-};
-
-export type Fixture = {
-  id: number;
-  date: string;
-  status?: string;
-  home_team?: {
-    id: number;
-    name: string;
-    logo?: string;
-  };
-  away_team?: {
-    id: number;
-    name: string;
-    logo?: string;
-  };
-  home_score?: number | null;
-  away_score?: number | null;
-  competition?: {
-    id: number;
-    name: string;
-  };
-};
-
-export type PlayerAvailability = {
-  status?: string;
-  reason?: string;
-};
+function results<T>(data: any): T[] {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+}
 
 export async function findPlayer(name: string) {
-  return bsdGet<Player[]>("/players/", {
-    search: name
+  const data = await bsdGet<any>("/players/", {
+    name,
+    limit: 20
   });
+
+  return results<any>(data);
 }
 
 export async function getPlayer(playerId: number) {
-  return bsdGet<Player>(`/players/${playerId}/`);
+  return bsdGet<any>(`/players/${playerId}/`);
+}
+
+export async function findTeam(name: string) {
+  const data = await bsdGet<any>("/teams/", {
+    name,
+    limit: 20
+  });
+
+  return results<any>(data);
+}
+
+export async function getTeamSquad(teamId: number) {
+  const data = await bsdGet<any>(
+    `/teams/${teamId}/squad/`
+  );
+
+  return results<any>(data);
 }
 
 export async function getTeamFixtures(teamId: number) {
-  const fixtures = await bsdGet<Fixture[]>("/fixtures/", {
-    team: teamId
+  const finishedData = await bsdGet<any>("/events/", {
+    team_id: teamId,
+    status: "finished",
+    limit: 10
   });
 
-  const now = Date.now();
+  const upcomingData = await bsdGet<any>("/events/", {
+    team_id: teamId,
+    status: "upcoming",
+    limit: 10
+  });
 
-  const sorted = [...fixtures].sort(
+  const finished = results<any>(finishedData);
+  const upcoming = results<any>(upcomingData);
+
+  finished.sort(
+    (a, b) =>
+      new Date(b.date).getTime() -
+      new Date(a.date).getTime()
+  );
+
+  upcoming.sort(
     (a, b) =>
       new Date(a.date).getTime() -
       new Date(b.date).getTime()
   );
 
-  const completed = sorted.filter(
-    fixture =>
-      new Date(fixture.date).getTime() <= now
-  );
-
-  const upcoming = sorted.filter(
-    fixture =>
-      new Date(fixture.date).getTime() > now
-  );
-
   return {
-    last: completed[completed.length - 1] ?? null,
+    last: finished[0] ?? null,
     next: upcoming.slice(0, 3)
   };
 }
 
-export async function getLineups(fixtureId: number) {
-  return bsdGet<unknown[]>(`/fixtures/${fixtureId}/lineups/`);
+export async function getLineups(eventId: number) {
+  const data = await bsdGet<any>(
+    `/events/${eventId}/lineups/`
+  );
+
+  return {
+    status: data?.lineup_status ?? "unavailable",
+    lineups: data?.lineups ?? []
+  };
 }
 
 export async function getFixturePlayerStats(
-  fixtureId: number,
-  teamId: number
+  eventId: number
 ) {
-  return bsdGet<unknown[]>(
-    `/fixtures/${fixtureId}/player-stats/`,
-    { team: teamId }
+  const data = await bsdGet<any>(
+    `/events/${eventId}/player-stats/`
   );
-}
 
-export async function getSidelined(playerId: number) {
-  return bsdGet<PlayerAvailability[]>(
-    `/players/${playerId}/availability/`
-  );
+  return data?.players ?? results<any>(data);
 }
