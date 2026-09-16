@@ -923,16 +923,37 @@ function buildAppearanceDetails(
   playerStats: any[],
   incidents: any[],
   lastStatus: any,
-  inSquad: boolean
+  inSquad: boolean,
+  bench: boolean
 ) {
   if (
     !lastStatus?.played
   ) {
     if (
+      lastStatus?.type ===
+      "unused_substitute"
+    ) {
+      return {
+        minutes: null,
+        bench,
+        started: false,
+        subbed_on_minute: null,
+        subbed_off_minute: null,
+        came_on_for: null,
+        came_on_for_id: null,
+        went_off_for: null,
+        went_off_for_id: null,
+        summary:
+          "Didn't start. Didn't come on."
+      };
+    }
+
+    if (
       !inSquad
     ) {
       return {
         minutes: null,
+        bench,
         started: false,
         subbed_on_minute: null,
         subbed_off_minute: null,
@@ -961,6 +982,7 @@ function buildAppearanceDetails(
     ) {
       return {
         minutes: null,
+        bench,
         started: false,
         subbed_on_minute:
           subbedOn.minute,
@@ -983,6 +1005,7 @@ function buildAppearanceDetails(
 
     return {
       minutes: null,
+      bench,
       started: false,
       subbed_on_minute:
         null,
@@ -1152,6 +1175,7 @@ function buildAppearanceDetails(
 
   return {
     minutes,
+    bench,
     started,
     subbed_on_minute:
       subbedOn,
@@ -1736,6 +1760,21 @@ export async function refreshPlayerPage() {
       incidents
     );
 
+  const lineupRole =
+    lineupRoleFromValue(
+      lineupData.lineups,
+      playerId
+    );
+
+  const bench =
+    lineupRole === "substitute" ||
+    lastStatus?.type === "unused_substitute" ||
+    incidents.some(
+      (incident: any) =>
+        incident.type === "substitution" &&
+        incident.player_in_id === playerId
+    );
+
   const appearanceDetails =
     buildAppearanceDetails(
       playerId,
@@ -1744,7 +1783,8 @@ export async function refreshPlayerPage() {
       lastStatus,
       Boolean(
         squadPlayer
-      )
+      ),
+      bench
     );
 
   const nextStatus =
