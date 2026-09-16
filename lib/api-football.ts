@@ -61,17 +61,6 @@ async function bsdGet<T>(
   return response.json() as Promise<T>;
 }
 
-/*
- * BSD commonly wraps responses in:
- *
- * { results: [...] }
- * { data: [...] }
- * { data: {...} }
- *
- * These helpers make the rest of the
- * integration independent of that wrapper.
- */
-
 function responseArray(
   data: any
 ): any[] {
@@ -111,6 +100,14 @@ function responseArray(
     return data.events;
   }
 
+  if (
+    Array.isArray(
+      data?.incidents
+    )
+  ) {
+    return data.incidents;
+  }
+
   return [];
 }
 
@@ -125,10 +122,12 @@ function responseObject(
   }
 
   if (
-    !Array.isArray(data) &&
     data?.data &&
-    typeof data.data === "object" &&
-    !Array.isArray(data.data)
+    typeof data.data ===
+      "object" &&
+    !Array.isArray(
+      data.data
+    )
   ) {
     return data.data;
   }
@@ -137,7 +136,7 @@ function responseObject(
     Array.isArray(
       data?.results
     ) &&
-    data.results.length > 0
+    data.results.length
   ) {
     return data.results[0];
   }
@@ -146,7 +145,7 @@ function responseObject(
     Array.isArray(
       data?.data
     ) &&
-    data.data.length > 0
+    data.data.length
   ) {
     return data.data[0];
   }
@@ -273,7 +272,8 @@ function getTeamName(
 
   if (
     !value ||
-    typeof value !== "object"
+    typeof value !==
+      "object"
   ) {
     return "Unknown";
   }
@@ -285,11 +285,8 @@ function getTeamName(
     value.short_name,
     value.team?.name,
     value.team?.team_name,
-    value.team?.full_name,
     value.data?.name,
-    value.data?.team_name,
-    value.results?.[0]?.name,
-    value.results?.[0]?.team_name
+    value.data?.team_name
   ];
 
   for (
@@ -402,17 +399,9 @@ async function getEventById(
 async function resolveFixture(
   fixture: any
 ) {
-  /*
-   * Start with the raw fixture.
-   */
   let event =
     fixture;
 
-  /*
-   * Then use the event-detail endpoint,
-   * which BSD documents as the authoritative
-   * match record.
-   */
   const eventId =
     Number(
       fixture?.id ??
@@ -460,22 +449,15 @@ async function resolveFixture(
       "away"
     );
 
-  /*
-   * Direct team-ID lookup is now the
-   * authoritative fallback.
-   */
   if (
     homeName === "Unknown" &&
     homeId > 0
   ) {
-    const homeTeam =
-      await getTeamById(
-        homeId
-      );
-
     homeName =
       getTeamName(
-        homeTeam
+        await getTeamById(
+          homeId
+        )
       );
   }
 
@@ -483,20 +465,14 @@ async function resolveFixture(
     awayName === "Unknown" &&
     awayId > 0
   ) {
-    const awayTeam =
-      await getTeamById(
-        awayId
-      );
-
     awayName =
       getTeamName(
-        awayTeam
+        await getTeamById(
+          awayId
+        )
       );
   }
 
-  /*
-   * Final flat-field fallbacks.
-   */
   if (
     homeName === "Unknown"
   ) {
@@ -515,10 +491,6 @@ async function resolveFixture(
       "Unknown";
   }
 
-  /*
-   * Return a completely canonical
-   * fixture object for refresh.ts.
-   */
   return {
     ...event,
 
@@ -593,9 +565,7 @@ export async function findPlayer(
       }
     );
 
-  return responseArray(
-    data
-  );
+  return responseArray(data);
 }
 
 export async function findTeam(
@@ -610,9 +580,7 @@ export async function findTeam(
       }
     );
 
-  return responseArray(
-    data
-  );
+  return responseArray(data);
 }
 
 export async function getTeamSquad(
@@ -623,19 +591,12 @@ export async function getTeamSquad(
       `/teams/${teamId}/squad/`
     );
 
-  return responseArray(
-    data
-  );
+  return responseArray(data);
 }
 
 export async function getTeamFixtures(
   teamId: number
 ) {
-  /*
-   * Keep the endpoint that has already
-   * proven it can locate the correct
-   * current fixture, including cup games.
-   */
   const [
     finishedData,
     upcomingData
@@ -675,10 +636,6 @@ export async function getTeamFixtures(
       upcomingData
     );
 
-  /*
-   * Fallback for installations using
-   * "upcoming".
-   */
   if (
     upcoming.length === 0
   ) {
@@ -735,15 +692,10 @@ export async function getTeamFixtures(
           fixtureTimestamp(b)
       );
 
-  /*
-   * Resolve the latest match plus the
-   * six upcoming fixtures.
-   */
   const rawFixtures = [
     ...(finished[0]
       ? [finished[0]]
       : []),
-
     ...upcoming.slice(
       0,
       6
@@ -807,4 +759,17 @@ export async function getFixturePlayerStats(
   return [
     data
   ];
+}
+
+export async function getFixtureIncidents(
+  eventId: number
+) {
+  const data =
+    await bsdGet<any>(
+      `/events/${eventId}/incidents/`
+    );
+
+  return responseArray(
+    data
+  );
 }
