@@ -196,10 +196,6 @@ function playerPlayed(
   lineups: any[],
   playerStats: any[]
 ) {
-  /*
-   * First choice: an actual player-stat record
-   * containing minutes.
-   */
   if (
     findPlayerWithMinutes(
       playerStats,
@@ -214,10 +210,6 @@ function playerPlayed(
     };
   }
 
-  /*
-   * Second choice: player appears anywhere in
-   * the official lineup response.
-   */
   if (
     findPlayerAnywhere(
       lineups,
@@ -296,47 +288,157 @@ function getAvailabilityStatus(
   };
 }
 
+function getTeamInfo(
+  value: any
+): {
+  id: number;
+  name: string;
+} {
+  if (
+    typeof value === "string"
+  ) {
+    return {
+      id: 0,
+      name: value.trim() || "Unknown"
+    };
+  }
+
+  if (
+    typeof value !== "object" ||
+    value === null
+  ) {
+    return {
+      id: 0,
+      name: "Unknown"
+    };
+  }
+
+  const idCandidates = [
+    value.id,
+    value.team_id,
+    value.team?.id
+  ];
+
+  let id = 0;
+
+  for (
+    const candidate of idCandidates
+  ) {
+    const numberId =
+      Number(candidate);
+
+    if (
+      Number.isFinite(numberId) &&
+      numberId > 0
+    ) {
+      id = numberId;
+      break;
+    }
+  }
+
+  const nameCandidates = [
+    value.name,
+    value.team_name,
+    value.team?.name,
+    value.full_name,
+    value.short_name
+  ];
+
+  for (
+    const candidate of nameCandidates
+  ) {
+    if (
+      typeof candidate === "string" &&
+      candidate.trim()
+    ) {
+      return {
+        id,
+        name: candidate.trim()
+      };
+    }
+  }
+
+  return {
+    id,
+    name: "Unknown"
+  };
+}
+
 function normaliseFixture(
   fixture: any,
   teamId: number
 ) {
-  const home =
+  /*
+   * BSD can expose the two teams through
+   * slightly different fields depending on
+   * the fixture endpoint/version.
+   *
+   * Try all known shapes.
+   */
+  const rawHome =
     fixture?.home ??
     fixture?.home_team ??
     fixture?.homeTeam ??
+    fixture?.teams?.home ??
+    fixture?.teams?.home_team ??
+    fixture?.participants?.home ??
+    fixture?.participants?.home_team ??
+    fixture?.homeTeamData ??
     null;
 
-  const away =
+  const rawAway =
     fixture?.away ??
     fixture?.away_team ??
     fixture?.awayTeam ??
+    fixture?.teams?.away ??
+    fixture?.teams?.away_team ??
+    fixture?.participants?.away ??
+    fixture?.participants?.away_team ??
+    fixture?.awayTeamData ??
     null;
 
+  const homeInfo =
+    getTeamInfo(rawHome);
+
+  const awayInfo =
+    getTeamInfo(rawAway);
+
+  /*
+   * Also support flat BSD fields.
+   */
   const homeId =
+    homeInfo.id ||
     Number(
-      home?.id ??
       fixture?.home_team_id ??
       fixture?.home_id ??
       0
     );
 
   const awayId =
+    awayInfo.id ||
     Number(
-      away?.id ??
       fixture?.away_team_id ??
       fixture?.away_id ??
       0
     );
 
   const homeName =
-    home?.name ??
-    fixture?.home_team_name ??
-    "Unknown";
+    homeInfo.name !== "Unknown"
+      ? homeInfo.name
+      : (
+          fixture?.home_team_name ??
+          fixture?.home_name ??
+          "Unknown"
+        );
 
   const awayName =
-    away?.name ??
-    fixture?.away_team_name ??
-    "Unknown";
+    awayInfo.name !== "Unknown"
+      ? awayInfo.name
+      : (
+          fixture?.away_team_name ??
+          fixture?.away_name ??
+          "Unknown"
+        );
 
   const scoreHome =
     fixture?.score?.home ??
@@ -351,12 +453,32 @@ function normaliseFixture(
     null;
 
   const date =
-    fixture?.kickoff ??
     fixture?.time?.kickoff_at ??
+    fixture?.kickoff_at ??
+    fixture?.kickoff ??
     fixture?.event_date ??
     fixture?.date ??
     fixture?.start_time ??
     null;
+
+  const isHome =
+    homeId === teamId;
+
+  const isAway =
+    awayId === teamId;
+
+  let opponentName = "Unknown";
+  let opponentId: number | null = null;
+
+  if (isHome) {
+    opponentName = awayName;
+    opponentId =
+      awayId || null;
+  } else if (isAway) {
+    opponentName = homeName;
+    opponentId =
+      homeId || null;
+  }
 
   return {
     ...fixture,
@@ -373,22 +495,17 @@ function normaliseFixture(
       name: awayName
     },
 
-    home_score: scoreHome,
-    away_score: scoreAway,
+    home_score:
+      scoreHome,
+
+    away_score:
+      scoreAway,
 
     opponent_name:
-      homeId === teamId
-        ? awayName
-        : awayName === "Unknown"
-        ? homeName
-        : homeName,
+      opponentName,
 
     opponent_id:
-      homeId === teamId
-        ? awayId
-        : awayId === teamId
-        ? homeId
-        : null
+      opponentId
   };
 }
 
