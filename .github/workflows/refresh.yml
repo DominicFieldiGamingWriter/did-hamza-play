@@ -3,7 +3,7 @@ name: Refresh football data
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "*/30 * * * *"
 
 jobs:
   refresh:
@@ -11,5 +11,5 @@ jobs:
     steps:
       - name: Refresh site data
         run: |
-          curl -X GET "${{ secrets.SITE_URL }}/api/refresh" \
+          curl --fail -X GET "${{ secrets.SITE_URL }}/api/refresh" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
