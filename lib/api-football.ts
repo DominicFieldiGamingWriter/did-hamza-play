@@ -18,8 +18,11 @@ export async function footballGet<T>(
   params: Record<string, string | number | undefined> = {}
 ): Promise<T[]> {
   const url = new URL(BASE_URL + path);
+
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
+    if (v !== undefined && v !== "") {
+      url.searchParams.set(k, String(v));
+    }
   }
 
   const res = await fetch(url, {
@@ -32,9 +35,13 @@ export async function footballGet<T>(
   }
 
   const data = (await res.json()) as ApiResponse<T>;
+
   if (data.errors && Object.keys(data.errors as object).length) {
-    throw new Error(`API-Football error: ${JSON.stringify(data.errors)}`);
+    throw new Error(
+      `API-Football error: ${JSON.stringify(data.errors)}`
+    );
   }
+
   return data.response ?? [];
 }
 
@@ -45,13 +52,25 @@ export type PlayerSearch = {
     firstname?: string;
     lastname?: string;
     age?: number;
-    birth?: { date?: string; place?: string; country?: string };
+    birth?: {
+      date?: string;
+      place?: string;
+      country?: string;
+    };
     nationality?: string;
     photo?: string;
   };
   statistics?: Array<{
-    team?: { id: number; name: string; logo?: string };
-    league?: { id: number; name: string; season: number };
+    team?: {
+      id: number;
+      name: string;
+      logo?: string;
+    };
+    league?: {
+      id: number;
+      name: string;
+      season: number;
+    };
   }>;
 };
 
@@ -59,36 +78,95 @@ export type Fixture = {
   fixture: {
     id: number;
     date: string;
-    status: { short: string; long?: string };
-    venue?: { name?: string; city?: string };
+    status: {
+      short: string;
+      long?: string;
+    };
+    venue?: {
+      name?: string;
+      city?: string;
+    };
   };
-  league: { id: number; name: string; logo?: string; season: number };
+  league: {
+    id: number;
+    name: string;
+    logo?: string;
+    season: number;
+  };
   teams: {
-    home: { id: number; name: string; logo?: string; winner?: boolean };
-    away: { id: number; name: string; logo?: string; winner?: boolean };
+    home: {
+      id: number;
+      name: string;
+      logo?: string;
+      winner?: boolean;
+    };
+    away: {
+      id: number;
+      name: string;
+      logo?: string;
+      winner?: boolean;
+    };
   };
-  goals: { home: number | null; away: number | null };
+  goals: {
+    home: number | null;
+    away: number | null;
+  };
 };
 
 export type Lineup = {
-  team: { id: number; name: string };
-  startXI: Array<{ player: { id: number; name: string; number?: number; pos?: string } }>;
-  substitutes: Array<{ player: { id: number; name: string; number?: number; pos?: string } }>;
+  team: {
+    id: number;
+    name: string;
+  };
+  startXI: Array<{
+    player: {
+      id: number;
+      name: string;
+      number?: number;
+      pos?: string;
+    };
+  }>;
+  substitutes: Array<{
+    player: {
+      id: number;
+      name: string;
+      number?: number;
+      pos?: string;
+    };
+  }>;
 };
 
 export type PlayerFixtureStat = {
-  team?: { id: number; name: string };
+  team?: {
+    id: number;
+    name: string;
+  };
   players?: Array<{
-    player: { id: number; name: string };
+    player: {
+      id: number;
+      name: string;
+    };
     statistics?: Array<{
-      minutes?: { number?: number; position?: string; substitute?: boolean };
-      games?: { appearences?: number; lineups?: number; minutes?: number; substitute?: boolean };
+      minutes?: {
+        number?: number;
+        position?: string;
+        substitute?: boolean;
+      };
+      games?: {
+        appearences?: number;
+        lineups?: number;
+        minutes?: number;
+        substitute?: boolean;
+      };
     }>;
   }>;
 };
 
 export type Sidelined = {
-  player?: { id: number; name: string };
+  player?: {
+    id: number;
+    name: string;
+  };
   type?: string;
   start?: string;
   end?: string;
@@ -125,17 +203,32 @@ export async function getPlayer(playerId: number, season: number) {
 
 export async function getTeamFixtures(teamId: number) {
   const [last, next] = await Promise.all([
-    footballGet<Fixture>("/fixtures", { team: teamId, last: 1 }),
-    footballGet<Fixture>("/fixtures", { team: teamId, next: 3 })
+    footballGet<Fixture>("/fixtures", {
+      team: teamId,
+      last: 1
+    }),
+    footballGet<Fixture>("/fixtures", {
+      team: teamId,
+      next: 3
+    })
   ]);
-  return { last: last[0] ?? null, next };
+
+  return {
+    last: last[0] ?? null,
+    next
+  };
 }
 
 export async function getLineups(fixtureId: number) {
-  return footballGet<Lineup>("/fixtures/lineups", { fixture: fixtureId });
+  return footballGet<Lineup>("/fixtures/lineups", {
+    fixture: fixtureId
+  });
 }
 
-export async function getFixturePlayerStats(fixtureId: number, teamId: number) {
+export async function getFixturePlayerStats(
+  fixtureId: number,
+  teamId: number
+) {
   return footballGet<PlayerFixtureStat>("/fixtures/players", {
     fixture: fixtureId,
     team: teamId
@@ -143,5 +236,7 @@ export async function getFixturePlayerStats(fixtureId: number, teamId: number) {
 }
 
 export async function getSidelined(playerId: number) {
-  return footballGet<Sidelined>("/sidelined", { player: playerId });
+  return footballGet<Sidelined>("/sidelined", {
+    player: playerId
+  });
 }
