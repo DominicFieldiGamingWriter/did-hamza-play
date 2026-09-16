@@ -55,14 +55,6 @@ function responseArray(data: any): any[] {
   return [];
 }
 
-function asArray(value: any): any[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-
-  return [];
-}
-
 export async function getPlayer(playerId: number) {
   return bsdGet<any>(`/players/${playerId}/`);
 }
@@ -112,27 +104,27 @@ export async function getTeamFixtures(teamId: number) {
   const finished = responseArray(finishedData);
   const upcoming = responseArray(upcomingData);
 
-  function getDate(event: any) {
+  function eventDate(event: any) {
     return (
       event?.kickoff ??
+      event?.time?.kickoff_at ??
       event?.event_date ??
       event?.date ??
       event?.start_time ??
-      event?.datetime ??
       null
     );
   }
 
   finished.sort(
     (a, b) =>
-      new Date(getDate(b)).getTime() -
-      new Date(getDate(a)).getTime()
+      new Date(eventDate(b)).getTime() -
+      new Date(eventDate(a)).getTime()
   );
 
   upcoming.sort(
     (a, b) =>
-      new Date(getDate(a)).getTime() -
-      new Date(getDate(b)).getTime()
+      new Date(eventDate(a)).getTime() -
+      new Date(eventDate(b)).getTime()
   );
 
   return {
@@ -146,66 +138,16 @@ export async function getLineups(eventId: number) {
     `/events/${eventId}/lineups/`
   );
 
-  const raw = data?.lineups;
-
-  /*
-   * BSD can return lineups in several shapes.
-   * Keep the actual team lineup objects intact so
-   * refresh.ts can inspect starting XI and substitutes.
-   */
-
-  if (Array.isArray(raw)) {
-    return {
-      status:
-        data?.lineup_status ??
-        "unavailable",
-      lineups: raw
-    };
-  }
-
-  if (raw?.home || raw?.away) {
-    const lineups: any[] = [];
-
-    if (raw.home) {
-      lineups.push(raw.home);
-    }
-
-    if (raw.away) {
-      lineups.push(raw.away);
-    }
-
-    return {
-      status:
-        data?.lineup_status ??
-        "unavailable",
-      lineups
-    };
-  }
-
-  if (raw?.home_team || raw?.away_team) {
-    const lineups: any[] = [];
-
-    if (raw.home_team) {
-      lineups.push(raw.home_team);
-    }
-
-    if (raw.away_team) {
-      lineups.push(raw.away_team);
-    }
-
-    return {
-      status:
-        data?.lineup_status ??
-        "unavailable",
-      lineups
-    };
-  }
-
   return {
     status:
       data?.lineup_status ??
       "unavailable",
-    lineups: []
+
+    /*
+     * Keep the complete BSD response.
+     * The lineup can be nested under home/away.
+     */
+    lineups: [data]
   };
 }
 
@@ -216,21 +158,9 @@ export async function getFixturePlayerStats(
     `/events/${eventId}/player-stats/`
   );
 
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  if (Array.isArray(data?.players)) {
-    return data.players;
-  }
-
-  if (Array.isArray(data?.results)) {
-    return data.results;
-  }
-
-  if (Array.isArray(data?.data)) {
-    return data.data;
-  }
-
-  return [];
+  /*
+   * Keep the complete response because BSD can
+   * nest player records under home/away/results.
+   */
+  return [data];
 }
