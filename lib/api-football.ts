@@ -40,17 +40,27 @@ async function bsdGet<T>(
 }
 
 function responseArray(data: any): any[] {
-  if (Array.isArray(data)) return data;
+  if (Array.isArray(data)) {
+    return data;
+  }
 
   if (Array.isArray(data?.results)) {
     return data.results;
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
   }
 
   return [];
 }
 
 function asArray(value: any): any[] {
-  return Array.isArray(value) ? value : [];
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  return [];
 }
 
 export async function getPlayer(playerId: number) {
@@ -102,38 +112,27 @@ export async function getTeamFixtures(teamId: number) {
   const finished = responseArray(finishedData);
   const upcoming = responseArray(upcomingData);
 
+  function getDate(event: any) {
+    return (
+      event?.kickoff ??
+      event?.event_date ??
+      event?.date ??
+      event?.start_time ??
+      event?.datetime ??
+      null
+    );
+  }
+
   finished.sort(
     (a, b) =>
-      new Date(
-        a.kickoff ??
-        a.event_date ??
-        a.date ??
-        a.start_time
-      ).getTime() -
-      new Date(
-        b.kickoff ??
-        b.event_date ??
-        b.date ??
-        b.start_time
-      ).getTime()
+      new Date(getDate(b)).getTime() -
+      new Date(getDate(a)).getTime()
   );
-
-  finished.reverse();
 
   upcoming.sort(
     (a, b) =>
-      new Date(
-        a.kickoff ??
-        a.event_date ??
-        a.date ??
-        a.start_time
-      ).getTime() -
-      new Date(
-        b.kickoff ??
-        b.event_date ??
-        b.date ??
-        b.start_time
-      ).getTime()
+      new Date(getDate(a)).getTime() -
+      new Date(getDate(b)).getTime()
   );
 
   return {
@@ -149,6 +148,12 @@ export async function getLineups(eventId: number) {
 
   const raw = data?.lineups;
 
+  /*
+   * BSD can return lineups in several shapes.
+   * Keep the actual team lineup objects intact so
+   * refresh.ts can inspect starting XI and substitutes.
+   */
+
   if (Array.isArray(raw)) {
     return {
       status:
@@ -159,20 +164,40 @@ export async function getLineups(eventId: number) {
   }
 
   if (raw?.home || raw?.away) {
+    const lineups: any[] = [];
+
+    if (raw.home) {
+      lineups.push(raw.home);
+    }
+
+    if (raw.away) {
+      lineups.push(raw.away);
+    }
+
     return {
       status:
         data?.lineup_status ??
         "unavailable",
+      lineups
+    };
+  }
 
-      lineups: [
-        ...(Array.isArray(raw.home)
-          ? raw.home
-          : [raw.home].filter(Boolean)),
+  if (raw?.home_team || raw?.away_team) {
+    const lineups: any[] = [];
 
-        ...(Array.isArray(raw.away)
-          ? raw.away
-          : [raw.away].filter(Boolean))
-      ]
+    if (raw.home_team) {
+      lineups.push(raw.home_team);
+    }
+
+    if (raw.away_team) {
+      lineups.push(raw.away_team);
+    }
+
+    return {
+      status:
+        data?.lineup_status ??
+        "unavailable",
+      lineups
     };
   }
 
@@ -180,7 +205,6 @@ export async function getLineups(eventId: number) {
     status:
       data?.lineup_status ??
       "unavailable",
-
     lineups: []
   };
 }
@@ -192,5 +216,21 @@ export async function getFixturePlayerStats(
     `/events/${eventId}/player-stats/`
   );
 
-  return asArray(data?.players);
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.players)) {
+    return data.players;
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
+
+  return [];
 }
