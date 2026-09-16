@@ -96,7 +96,31 @@ export type Sidelined = {
 };
 
 export async function findPlayer(name: string) {
-  return footballGet<PlayerSearch>("/players", { search: name });
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const season = now.getUTCMonth() >= 6 ? year : year - 1;
+
+  const [championship, leagueOne] = await Promise.all([
+    footballGet<PlayerSearch>("/players", {
+      search: name,
+      league: 40,
+      season
+    }),
+    footballGet<PlayerSearch>("/players", {
+      search: name,
+      league: 41,
+      season
+    })
+  ]);
+
+  return [...championship, ...leagueOne];
+}
+
+export async function getPlayer(playerId: number, season: number) {
+  return footballGet<PlayerSearch>("/players", {
+    id: playerId,
+    season
+  });
 }
 
 export async function getTeamFixtures(teamId: number) {
