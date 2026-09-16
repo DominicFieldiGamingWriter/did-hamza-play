@@ -116,7 +116,8 @@ function responseObject(
 ): any {
   if (
     !data ||
-    typeof data !== "object"
+    typeof data !==
+      "object"
   ) {
     return null;
   }
@@ -139,15 +140,6 @@ function responseObject(
     data.results.length
   ) {
     return data.results[0];
-  }
-
-  if (
-    Array.isArray(
-      data?.data
-    ) &&
-    data.data.length
-  ) {
-    return data.data[0];
   }
 
   return data;
@@ -186,6 +178,42 @@ function fixtureTimestamp(
   )
     ? 0
     : timestamp;
+}
+
+function primitiveId(
+  value: any
+): number | null {
+  if (
+    typeof value ===
+      "number"
+  ) {
+    return Number.isFinite(
+      value
+    ) &&
+      value > 0
+      ? value
+      : null;
+  }
+
+  if (
+    typeof value ===
+      "string" &&
+    value.trim()
+  ) {
+    const id =
+      Number(
+        value
+      );
+
+    return Number.isFinite(
+      id
+    ) &&
+      id > 0
+      ? id
+      : null;
+  }
+
+  return null;
 }
 
 function getNestedTeam(
@@ -239,19 +267,19 @@ function getTeamId(
     ],
     nested?.id,
     nested?.team_id,
-    nested?.team?.id,
-    nested?.team?.team_id
+    nested?.team?.id
   ];
 
   for (
     const candidate of candidates
   ) {
     const id =
-      Number(candidate);
+      primitiveId(
+        candidate
+      );
 
     if (
-      Number.isFinite(id) &&
-      id > 0
+      id !== null
     ) {
       return id;
     }
@@ -264,7 +292,8 @@ function getTeamName(
   value: any
 ): string {
   if (
-    typeof value === "string" &&
+    typeof value ===
+      "string" &&
     value.trim()
   ) {
     return value.trim();
@@ -313,13 +342,16 @@ function getFixtureTeamName(
       side
     );
 
-  let name =
-    getTeamName(nested);
+  const nestedName =
+    getTeamName(
+      nested
+    );
 
   if (
-    name !== "Unknown"
+    nestedName !==
+    "Unknown"
   ) {
-    return name;
+    return nestedName;
   }
 
   const candidates = [
@@ -327,9 +359,6 @@ function getFixtureTeamName(
       `${side}_team_name`
     ],
     fixture?.[
-      `${side}_name`
-    ],
-    fixture?.teams?.[
       `${side}_name`
     ]
   ];
@@ -403,14 +432,13 @@ async function resolveFixture(
     fixture;
 
   const eventId =
-    Number(
+    primitiveId(
       fixture?.id ??
       fixture?.event_id
     );
 
   if (
-    Number.isFinite(eventId) &&
-    eventId > 0
+    eventId !== null
   ) {
     const detailed =
       await getEventById(
@@ -450,7 +478,8 @@ async function resolveFixture(
     );
 
   if (
-    homeName === "Unknown" &&
+    homeName ===
+      "Unknown" &&
     homeId > 0
   ) {
     homeName =
@@ -462,7 +491,8 @@ async function resolveFixture(
   }
 
   if (
-    awayName === "Unknown" &&
+    awayName ===
+      "Unknown" &&
     awayId > 0
   ) {
     awayName =
@@ -471,24 +501,6 @@ async function resolveFixture(
           awayId
         )
       );
-  }
-
-  if (
-    homeName === "Unknown"
-  ) {
-    homeName =
-      event?.home_team_name ??
-      event?.home_name ??
-      "Unknown";
-  }
-
-  if (
-    awayName === "Unknown"
-  ) {
-    awayName =
-      event?.away_team_name ??
-      event?.away_name ??
-      "Unknown";
   }
 
   return {
@@ -501,7 +513,9 @@ async function resolveFixture(
       null,
 
     date:
-      fixtureDate(event),
+      fixtureDate(
+        event
+      ),
 
     home_team: {
       id:
@@ -548,8 +562,18 @@ async function resolveFixture(
 export async function getPlayer(
   playerId: number
 ) {
-  return bsdGet<any>(
-    `/players/${playerId}/`
+  const data =
+    await bsdGet<any>(
+      `/players/${playerId}/`
+    );
+
+  /*
+   * Important:
+   * BSD may wrap the player in
+   * { data: {...} } or results[0].
+   */
+  return responseObject(
+    data
   );
 }
 
@@ -565,7 +589,9 @@ export async function findPlayer(
       }
     );
 
-  return responseArray(data);
+  return responseArray(
+    data
+  );
 }
 
 export async function findTeam(
@@ -580,7 +606,9 @@ export async function findTeam(
       }
     );
 
-  return responseArray(data);
+  return responseArray(
+    data
+  );
 }
 
 export async function getTeamSquad(
@@ -591,7 +619,9 @@ export async function getTeamSquad(
       `/teams/${teamId}/squad/`
     );
 
-  return responseArray(data);
+  return responseArray(
+    data
+  );
 }
 
 export async function getTeamFixtures(
@@ -696,6 +726,7 @@ export async function getTeamFixtures(
     ...(finished[0]
       ? [finished[0]]
       : []),
+
     ...upcoming.slice(
       0,
       6
