@@ -1041,7 +1041,7 @@ export default async function Home() {
           display: grid;
           grid-template-columns:
             repeat(
-              3,
+              4,
               minmax(0, 1fr)
             );
           gap: 10px;
@@ -1365,7 +1365,11 @@ export default async function Home() {
           }
 
           .detail-stats {
-            grid-template-columns: 1fr;
+            grid-template-columns:
+              repeat(
+                2,
+                minmax(0, 1fr)
+              );
           }
 
           .event-line {
@@ -1562,6 +1566,23 @@ export default async function Home() {
                     true
                       ? "Yes"
                       : "No"}
+                  </div>
+                </div>
+
+                <div className="detail-stat">
+                  <div className="detail-stat-label">
+                    Subbed on
+                  </div>
+
+                  <div className="detail-stat-value">
+                    {appearance
+                      ?.subbed_on_minute !==
+                      null &&
+                    appearance
+                      ?.subbed_on_minute !==
+                      undefined
+                      ? `${appearance.subbed_on_minute}'`
+                      : "—"}
                   </div>
                 </div>
 
