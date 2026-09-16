@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { getSupabaseAdmin } from "../lib/supabase";
 
 function dateValue(value: any): string | null {
