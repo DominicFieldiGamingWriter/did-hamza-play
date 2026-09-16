@@ -1591,7 +1591,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Subbed on
+                    Sub on
                   </div>
 
                   <div className="detail-stat-value">
@@ -1608,7 +1608,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Subbed off
+                    Sub off
                   </div>
 
                   <div className="detail-stat-value">
