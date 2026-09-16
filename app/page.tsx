@@ -14,6 +14,7 @@ function dateValue(value: any): string | null {
       value?.event_date ??
       value?.date ??
       value?.start_time ??
+      value?.time?.kickoff_at ??
       null
     );
   }
@@ -92,7 +93,9 @@ function formatDate(
   const date =
     dateValue(value);
 
-  if (!date) return "";
+  if (!date) {
+    return "";
+  }
 
   const parsed =
     new Date(date);
@@ -124,7 +127,9 @@ function formatUKTime(
   const date =
     dateValue(value);
 
-  if (!date) return "";
+  if (!date) {
+    return "";
+  }
 
   const parsed =
     new Date(date);
@@ -155,7 +160,9 @@ function formatBangladeshTime(
   const date =
     dateValue(value);
 
-  if (!date) return "";
+  if (!date) {
+    return "";
+  }
 
   const parsed =
     new Date(date);
@@ -181,12 +188,15 @@ function formatBangladeshTime(
 }
 
 function fixtureTimes(
-  fixture: any
+  fixture: any,
+  className = "times"
 ) {
   const date =
     dateValue(fixture);
 
-  if (!date) return null;
+  if (!date) {
+    return null;
+  }
 
   const uk =
     formatUKTime(fixture);
@@ -201,7 +211,7 @@ function fixtureTimes(
   }
 
   return (
-    <div className="times">
+    <div className={className}>
       <span>
         {uk} (UK)
       </span>
@@ -219,7 +229,9 @@ function fixtureTimestamp(
   const date =
     dateValue(fixture);
 
-  if (!date) return 0;
+  if (!date) {
+    return 0;
+  }
 
   const timestamp =
     new Date(date).getTime();
@@ -249,14 +261,420 @@ function sortUpcomingFixtures(
 }
 
 function getAppearance(
-  lastFixture: any,
-  latestStatus: any
+  fixture: any,
+  status: any
 ) {
   return (
-    lastFixture?.player_status
+    fixture?.player_status
       ?.appearance ??
-    latestStatus?.appearance ??
+    status?.appearance ??
     null
+  );
+}
+
+function collectEventObjects(
+  value: any,
+  results: any[] = [],
+  depth = 0
+): any[] {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    depth > 7
+  ) {
+    return results;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectEventObjects(
+        item,
+        results,
+        depth + 1
+      );
+    }
+
+    return results;
+  }
+
+  for (const [
+    key,
+    child
+  ] of Object.entries(value)) {
+    const keyLower =
+      key.toLowerCase();
+
+    if (
+      child &&
+      typeof child === "object" &&
+      (
+        keyLower.includes("event") ||
+        keyLower.includes("incident") ||
+        keyLower.includes("timeline") ||
+        keyLower.includes("goal") ||
+        keyLower.includes("card")
+      )
+    ) {
+      if (Array.isArray(child)) {
+        results.push(
+          ...child
+        );
+      } else {
+        results.push(
+          child
+        );
+      }
+    }
+
+    if (
+      child &&
+      typeof child === "object"
+    ) {
+      collectEventObjects(
+        child,
+        results,
+        depth + 1
+      );
+    }
+  }
+
+  return results;
+}
+
+function eventMinute(
+  event: any
+): number | null {
+  const candidates = [
+    event?.minute,
+    event?.min,
+    event?.event_minute,
+    event?.time?.minute,
+    event?.timestamp?.minute
+  ];
+
+  for (const value of candidates) {
+    const number =
+      Number(value);
+
+    if (
+      Number.isFinite(number) &&
+      number >= 0
+    ) {
+      return number;
+    }
+  }
+
+  return null;
+}
+
+function eventText(
+  event: any
+): string {
+  try {
+    return JSON.stringify(
+      event
+    ).toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function eventPlayerName(
+  event: any
+): string {
+  const candidates = [
+    event?.player?.name,
+    event?.player_name,
+    event?.name,
+    event?.scorer?.name,
+    event?.goal?.player?.name,
+    event?.card?.player?.name
+  ];
+
+  for (const value of candidates) {
+    if (
+      typeof value === "string" &&
+      value.trim()
+    ) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function eventAssistName(
+  event: any
+): string {
+  const candidates = [
+    event?.assist?.name,
+    event?.assist_player?.name,
+    event?.assistant?.name,
+    event?.goal?.assist?.name
+  ];
+
+  for (const value of candidates) {
+    if (
+      typeof value === "string" &&
+      value.trim()
+    ) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function eventTeamName(
+  event: any
+): string {
+  const candidates = [
+    event?.team?.name,
+    event?.team_name
+  ];
+
+  for (const value of candidates) {
+    if (
+      typeof value === "string" &&
+      value.trim()
+    ) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function extractMatchEvents(
+  fixture: any
+) {
+  const events =
+    collectEventObjects(
+      fixture
+    );
+
+  const goals: any[] = [];
+  const yellowCards: any[] = [];
+  const redCards: any[] = [];
+
+  const seen =
+    new Set<string>();
+
+  for (const event of events) {
+    const text =
+      eventText(event);
+
+    const minute =
+      eventMinute(event);
+
+    const player =
+      eventPlayerName(event);
+
+    const team =
+      eventTeamName(event);
+
+    const assist =
+      eventAssistName(event);
+
+    const isGoal =
+      (
+        text.includes("goal") ||
+        text.includes("scored")
+      ) &&
+      !text.includes(
+        "no goal"
+      ) &&
+      !text.includes(
+        "disallowed"
+      );
+
+    const isYellow =
+      text.includes(
+        "yellow card"
+      ) ||
+      text.includes(
+        "yellow_card"
+      );
+
+    const isRed =
+      text.includes(
+        "red card"
+      ) ||
+      text.includes(
+        "red_card"
+      ) ||
+      text.includes(
+        "sent off"
+      ) ||
+      text.includes(
+        "sending off"
+      );
+
+    if (isGoal) {
+      const key =
+        `G-${minute}-${player}-${team}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+
+        goals.push({
+          minute,
+          player,
+          team,
+          assist
+        });
+      }
+    }
+
+    if (
+      isYellow &&
+      !isRed
+    ) {
+      const key =
+        `Y-${minute}-${player}-${team}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+
+        yellowCards.push({
+          minute,
+          player,
+          team
+        });
+      }
+    }
+
+    if (isRed) {
+      const key =
+        `R-${minute}-${player}-${team}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+
+        redCards.push({
+          minute,
+          player,
+          team
+        });
+      }
+    }
+  }
+
+  goals.sort(
+    (a, b) =>
+      (a.minute ?? 999) -
+      (b.minute ?? 999)
+  );
+
+  yellowCards.sort(
+    (a, b) =>
+      (a.minute ?? 999) -
+      (b.minute ?? 999)
+  );
+
+  redCards.sort(
+    (a, b) =>
+      (a.minute ?? 999) -
+      (b.minute ?? 999)
+  );
+
+  return {
+    goals,
+    yellowCards,
+    redCards
+  };
+}
+
+function formatEventMinute(
+  minute: number | null
+) {
+  return minute === null
+    ? ""
+    : `${minute}'`;
+}
+
+function appearanceSummary(
+  appearance: any,
+  latestStatus: any
+) {
+  if (
+    latestStatus?.played !== true
+  ) {
+    return (
+      latestStatus?.label ??
+      "Did not play."
+    );
+  }
+
+  const minutes =
+    appearance?.minutes ??
+    latestStatus?.minutes ??
+    null;
+
+  const started =
+    appearance?.started === true;
+
+  const subbedOn =
+    appearance
+      ?.subbed_on_minute ??
+    null;
+
+  const subbedOff =
+    appearance
+      ?.subbed_off_minute ??
+    null;
+
+  const replacedPlayer =
+    appearance
+      ?.replaced_player ??
+    null;
+
+  const parts: string[] = [];
+
+  if (
+    minutes !== null &&
+    Number.isFinite(
+      Number(minutes)
+    )
+  ) {
+    parts.push(
+      `Played ${minutes} mins`
+    );
+  } else {
+    parts.push(
+      "Played"
+    );
+  }
+
+  if (started) {
+    parts.push(
+      "Started"
+    );
+  }
+
+  if (
+    subbedOn !== null
+  ) {
+    parts.push(
+      replacedPlayer
+        ? `Came on for ${replacedPlayer} in the ${subbedOn}th minute`
+        : `Came on in the ${subbedOn}th minute`
+    );
+  }
+
+  if (
+    subbedOff !== null
+  ) {
+    parts.push(
+      replacedPlayer
+        ? `Subbed off for ${replacedPlayer} in the ${subbedOff}th minute`
+        : `Subbed off in the ${subbedOff}th minute`
+    );
+  }
+
+  return (
+    parts.join(". ") +
+    "."
   );
 }
 
@@ -342,6 +760,11 @@ export default async function Home() {
       latestStatus
     );
 
+  const matchEvents =
+    extractMatchEvents(
+      lastFixture
+    );
+
   const latestDate =
     dateValue(
       lastFixture
@@ -387,256 +810,339 @@ export default async function Home() {
 
         .page {
           width: 100%;
-          max-width: 920px;
+          max-width: 1120px;
           margin: 0 auto;
-          padding: 54px 28px 80px;
+          padding: 48px 32px 72px;
         }
 
         .main-heading {
           margin: 0;
-          color: #ffffff;
           font-size: clamp(
-            52px,
-            10vw,
-            92px
+            42px,
+            6vw,
+            74px
           );
-          line-height: 0.9;
+          line-height: 0.92;
           font-weight: 900;
-          letter-spacing: -4px;
+          letter-spacing: -3px;
+          white-space: nowrap;
         }
 
-        .answer-wrap {
-          margin-top: 34px;
+        .top-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 32px;
         }
 
         .answer {
+          flex: 0 0 auto;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-width: 250px;
-          min-height: 125px;
-          padding: 26px 44px;
+          min-width: 230px;
+          height: 112px;
+          padding: 0 42px;
           border-radius: 999px;
-          font-size: clamp(
-            54px,
-            10vw,
-            84px
-          );
-          line-height: 0.9;
+          background: #ffffff;
+          font-size: 68px;
+          line-height: 1;
           font-weight: 900;
           letter-spacing: -3px;
-          box-shadow:
-            0 12px 28px
-            rgba(
-              0,
-              0,
-              0,
-              0.12
-            );
         }
 
         .answer.yes {
-          background: #18a36d;
+          color: #00824f;
         }
 
         .answer.no {
-          background: #e45757;
+          color: #d9303f;
         }
 
-        .card {
-          margin-top: 44px;
+        .section-card {
+          margin-top: 30px;
           background: #ffffff;
           color: #090d13;
-          border-radius: 32px;
-          padding: 38px 40px;
+          border-radius: 30px;
+          padding: 34px;
         }
 
         .section-label {
           color: #7084a1;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 900;
-          letter-spacing: 2.3px;
+          letter-spacing: 2.2px;
           text-transform: uppercase;
         }
 
-        .last-match-title {
-          margin: 12px 0 0;
-          max-width: 760px;
+        .recent-grid {
+          display: grid;
+          grid-template-columns:
+            minmax(0, 1.45fr)
+            minmax(320px, 0.85fr);
+          gap: 38px;
+          align-items: start;
+        }
+
+        .match-title {
+          margin: 10px 0 0;
           font-size: clamp(
-            29px,
-            5vw,
-            45px
+            28px,
+            4vw,
+            43px
           );
           line-height: 1;
-          letter-spacing: -1.8px;
           font-weight: 900;
+          letter-spacing: -1.7px;
         }
 
         .match-date {
-          margin-top: 14px;
+          margin-top: 13px;
           color: #7084a1;
-          font-size: 16px;
+          font-size: 15px;
         }
 
         .times {
           display: flex;
-          gap: 22px;
+          gap: 20px;
           flex-wrap: wrap;
-          margin-top: 7px;
+          margin-top: 6px;
           color: #7084a1;
           font-size: 15px;
-          font-weight: 700;
+          font-weight: 800;
+        }
+
+        .result-panel {
+          margin-top: 26px;
+          padding-top: 24px;
+          border-top:
+            1px solid
+            #dfe4ea;
         }
 
         .score {
-          margin-top: 20px;
-          font-size: 34px;
+          font-size: 54px;
+          line-height: 0.9;
           font-weight: 900;
-          letter-spacing: -1px;
+          letter-spacing: -2px;
         }
 
-        .details {
-          margin-top: 24px;
-          padding-top: 26px;
-          border-top:
+        .event-list {
+          margin-top: 20px;
+          display: grid;
+          gap: 10px;
+        }
+
+        .event-line {
+          display: flex;
+          justify-content: space-between;
+          gap: 15px;
+          align-items: baseline;
+          padding-bottom: 10px;
+          border-bottom:
+            1px solid
+            #edf0f3;
+          font-size: 14px;
+          line-height: 1.35;
+        }
+
+        .event-line:last-child {
+          border-bottom: 0;
+          padding-bottom: 0;
+        }
+
+        .event-label {
+          color: #7084a1;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+
+        .event-value {
+          text-align: right;
+          font-weight: 800;
+        }
+
+        .details-panel {
+          padding-left: 34px;
+          border-left:
             1px solid
             #dfe4ea;
         }
 
         .details-main {
           margin-top: 10px;
-          font-size: 28px;
+          font-size: 27px;
           line-height: 1.12;
           font-weight: 900;
-          letter-spacing: -0.7px;
+          letter-spacing: -0.8px;
         }
 
-        .details-text {
-          margin-top: 13px;
+        .details-supporting {
+          margin-top: 12px;
           color: #52647d;
-          font-size: 17px;
+          font-size: 15px;
           line-height: 1.5;
         }
 
-        .details-grid {
+        .detail-stats {
           display: grid;
           grid-template-columns:
             repeat(
               3,
               minmax(0, 1fr)
             );
-          gap: 14px;
-          margin-top: 22px;
+          gap: 10px;
+          margin-top: 20px;
         }
 
         .detail-stat {
-          background: #f2f5f8;
-          border-radius: 18px;
-          padding: 18px;
+          background: #f3f6f8;
+          border-radius: 16px;
+          padding: 15px;
         }
 
         .detail-stat-label {
           color: #7084a1;
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 900;
-          letter-spacing: 1.3px;
+          letter-spacing: 1px;
           text-transform: uppercase;
         }
 
         .detail-stat-value {
-          margin-top: 7px;
-          font-size: 21px;
+          margin-top: 6px;
+          font-size: 19px;
+          line-height: 1.1;
           font-weight: 900;
         }
 
-        .next-section {
-          margin-top: 24px;
-          background: #111a29;
-          border-radius: 32px;
-          padding: 38px 40px;
+        .next-heading {
+          margin: 42px 0 17px;
+          color: #ffffff;
+          font-size: clamp(
+            28px,
+            4vw,
+            43px
+          );
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: -1.4px;
         }
 
-        .next-section .section-label {
-          color: #8ea5c4;
+        .next-card {
+          background: #111a29;
+          border-radius: 30px;
+          padding: 34px;
         }
 
         .next-title {
-          margin: 11px 0 0;
-          max-width: 760px;
+          margin: 0;
           font-size: clamp(
-            31px,
-            5vw,
-            48px
+            30px,
+            4.5vw,
+            46px
           );
           line-height: 1;
-          letter-spacing: -1.6px;
           font-weight: 900;
+          letter-spacing: -1.5px;
         }
 
         .availability {
-          margin-top: 28px;
+          margin-top: 27px;
           background: #ffffff;
           color: #090d13;
-          border-radius: 25px;
-          padding: 28px;
+          border-radius: 23px;
+          padding: 25px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 25px;
         }
 
         .availability-status {
-          margin-top: 9px;
-          font-size: 32px;
+          margin-top: 8px;
+          font-size: 29px;
           line-height: 1;
           font-weight: 900;
           letter-spacing: -1px;
         }
 
         .availability-reason {
-          margin-top: 13px;
+          margin-top: 10px;
           color: #52647d;
-          font-size: 16px;
+          font-size: 15px;
           line-height: 1.45;
+        }
+
+        .status-pill {
+          flex: 0 0 auto;
+          padding: 11px 16px;
+          border-radius: 999px;
+          background: #dff7e9;
+          color: #00824f;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 0.8px;
+          text-transform: uppercase;
         }
 
         .fixtures-card {
           margin-top: 24px;
           background: #ffffff;
           color: #090d13;
-          border-radius: 32px;
-          padding: 38px 40px;
+          border-radius: 30px;
+          padding: 34px;
         }
 
         .fixture-row {
-          padding: 22px 0;
+          display: grid;
+          grid-template-columns:
+            minmax(0, 1.6fr)
+            190px
+            150px
+            190px;
+          align-items: center;
+          gap: 22px;
+          padding: 23px 0;
           border-top:
             1px solid
             #dfe4ea;
         }
 
-        .fixture-row:first-child {
+        .fixture-row:first-of-type {
           margin-top: 12px;
         }
 
         .fixture-title {
-          font-size: 24px;
+          font-size: 22px;
           line-height: 1.15;
           font-weight: 900;
-          letter-spacing: -0.5px;
+          letter-spacing: -0.4px;
         }
 
         .fixture-date {
-          margin-top: 8px;
           color: #7084a1;
-          font-size: 15px;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .fixture-time {
+          color: #52647d;
+          font-size: 14px;
+          font-weight: 800;
         }
 
         .updated {
-          margin-top: 25px;
+          margin-top: 24px;
           text-align: center;
           color:
             rgba(
               255,
               255,
               255,
-              0.72
+              0.78
             );
           font-size: 12px;
         }
@@ -649,49 +1155,127 @@ export default async function Home() {
           padding: 25px;
         }
 
-        @media (max-width: 700px) {
+        @media (max-width: 820px) {
           .page {
-            padding: 34px 18px 55px;
+            padding: 30px 18px 55px;
+          }
+
+          .top-row {
+            display: block;
           }
 
           .main-heading {
-            letter-spacing: -2.5px;
+            font-size: 42px;
+            letter-spacing: -2.3px;
           }
 
           .answer {
-            min-width: 205px;
-            min-height: 105px;
+            margin-top: 25px;
+            min-width: 210px;
+            height: 106px;
             font-size: 58px;
-            padding: 23px 34px;
           }
 
-          .card,
-          .next-section,
+          .section-card,
+          .next-card,
           .fixtures-card {
-            padding: 28px 23px;
+            padding: 27px 22px;
             border-radius: 25px;
           }
 
-          .details-grid {
+          .recent-grid {
+            grid-template-columns: 1fr;
+            gap: 30px;
+          }
+
+          .details-panel {
+            padding-left: 0;
+            padding-top: 27px;
+            border-left: 0;
+            border-top:
+              1px solid
+              #dfe4ea;
+          }
+
+          .detail-stats {
+            grid-template-columns:
+              repeat(
+                3,
+                minmax(0, 1fr)
+              );
+          }
+
+          .availability {
+            display: block;
+          }
+
+          .status-pill {
+            display: inline-block;
+            margin-top: 16px;
+          }
+
+          .fixture-row {
+            display: block;
+          }
+
+          .fixture-title {
+            font-size: 22px;
+          }
+
+          .fixture-date {
+            margin-top: 9px;
+          }
+
+          .fixture-time {
+            margin-top: 5px;
+          }
+        }
+
+        @media (max-width: 500px) {
+          .main-heading {
+            font-size: 38px;
+            letter-spacing: -2px;
+          }
+
+          .answer {
+            min-width: 195px;
+            height: 98px;
+            padding: 0 34px;
+            font-size: 54px;
+          }
+
+          .match-title {
+            font-size: 31px;
+          }
+
+          .detail-stats {
             grid-template-columns: 1fr;
           }
 
-          .last-match-title {
+          .next-heading {
             font-size: 31px;
           }
 
           .next-title {
-            font-size: 34px;
+            font-size: 33px;
+          }
+
+          .score {
+            font-size: 48px;
+          }
+
+          .times {
+            gap: 14px;
           }
         }
       `}</style>
 
       <main className="page">
-        <h1 className="main-heading">
-          DID HAMZA PLAY?
-        </h1>
+        <div className="top-row">
+          <h1 className="main-heading">
+            DID HAMZA PLAY?
+          </h1>
 
-        <div className="answer-wrap">
           <div
             className={
               latestPlayed
@@ -705,61 +1289,140 @@ export default async function Home() {
           </div>
         </div>
 
-        <section className="card">
-          <div className="section-label">
-            MOST RECENT MATCH
-          </div>
+        <section className="section-card">
+          <div className="recent-grid">
+            <div>
+              <div className="section-label">
+                MOST RECENT MATCH
+              </div>
 
-          <h2 className="last-match-title">
-            {fixtureName(
-              lastFixture
-            )}
-          </h2>
+              <h2 className="match-title">
+                {fixtureName(
+                  lastFixture
+                )}
+              </h2>
 
-          {latestDate && (
-            <>
-              <div className="match-date">
-                {formatDate(
-                  latestDate
+              {latestDate && (
+                <>
+                  <div className="match-date">
+                    {formatDate(
+                      latestDate
+                    )}
+                  </div>
+
+                  {fixtureTimes(
+                    lastFixture
+                  )}
+                </>
+              )}
+
+              <div className="result-panel">
+                <div className="score">
+                  {latestHomeScore ??
+                    "—"}
+                  –
+                  {latestAwayScore ??
+                    "—"}
+                </div>
+
+                <div className="event-list">
+                  <div className="event-line">
+                    <div className="event-label">
+                      GOALSCORERS
+                    </div>
+
+                    <div className="event-value">
+                      {matchEvents.goals.length ===
+                      0
+                        ? "None"
+                        : matchEvents.goals
+                            .map(
+                              (
+                                goal: any
+                              ) =>
+                                `${goal.player || "Unknown"} ${formatEventMinute(goal.minute)}`
+                            )
+                            .join(
+                              " · "
+                            )}
+                    </div>
+                  </div>
+
+                  <div className="event-line">
+                    <div className="event-label">
+                      YELLOW CARDS
+                    </div>
+
+                    <div className="event-value">
+                      {matchEvents.yellowCards.length ===
+                      0
+                        ? "None"
+                        : matchEvents.yellowCards
+                            .map(
+                              (
+                                card: any
+                              ) =>
+                                `${card.player || "Unknown"} ${formatEventMinute(card.minute)}`
+                            )
+                            .join(
+                              " · "
+                            )}
+                    </div>
+                  </div>
+
+                  <div className="event-line">
+                    <div className="event-label">
+                      SENDINGS OFF
+                    </div>
+
+                    <div className="event-value">
+                      {matchEvents.redCards.length ===
+                      0
+                        ? "None"
+                        : matchEvents.redCards
+                            .map(
+                              (
+                                card: any
+                              ) =>
+                                `${card.player || "Unknown"} ${formatEventMinute(card.minute)}`
+                            )
+                            .join(
+                              " · "
+                            )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="details-panel">
+              <div className="section-label">
+                DETAILS
+              </div>
+
+              <div className="details-main">
+                {appearanceSummary(
+                  appearance,
+                  latestStatus
                 )}
               </div>
 
-              {fixtureTimes(
-                lastFixture
-              )}
-            </>
-          )}
-
-          {latestHomeScore !== null &&
-            latestAwayScore !== null && (
-              <div className="score">
-                {latestHomeScore}
-                –
-                {latestAwayScore}
+              <div className="details-supporting">
+                Match appearance details,
+                including starting status
+                and substitutions where
+                available.
               </div>
-            )}
 
-          <div className="details">
-            <div className="section-label">
-              DETAILS
-            </div>
-
-            <div className="details-main">
-              {appearance?.summary ??
-                (latestPlayed
-                  ? "Played"
-                  : "Did not feature.")}
-            </div>
-
-            {appearance && (
-              <div className="details-grid">
+              <div className="detail-stats">
                 <div className="detail-stat">
                   <div className="detail-stat-label">
                     Minutes
                   </div>
 
                   <div className="detail-stat-value">
-                    {appearance.minutes ??
+                    {appearance?.minutes ??
+                      latestStatus?.minutes ??
                       "—"}
                   </div>
                 </div>
@@ -770,9 +1433,14 @@ export default async function Home() {
                   </div>
 
                   <div className="detail-stat-value">
-                    {appearance.started
+                    {appearance?.started ===
+                    true
                       ? "Yes"
-                      : "No"}
+                      : appearance
+                          ?.subbed_on_minute !==
+                        null
+                      ? "No"
+                      : "—"}
                   </div>
                 </div>
 
@@ -782,27 +1450,28 @@ export default async function Home() {
                   </div>
 
                   <div className="detail-stat-value">
-                    {appearance.subbed_off_minute !==
+                    {appearance
+                      ?.subbed_off_minute !==
                     null
                       ? `${appearance.subbed_off_minute}'`
                       : "—"}
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </section>
 
-        <section className="next-section">
-          <div className="section-label">
-            WILL HAMZA PLAY NEXT?
-          </div>
+        <h2 className="next-heading">
+          WILL HAMZA PLAY NEXT?
+        </h2>
 
-          <h2 className="next-title">
+        <section className="next-card">
+          <h3 className="next-title">
             {next
               ? fixtureName(next)
               : "No upcoming fixture"}
-          </h2>
+          </h3>
 
           {nextDate && (
             <>
@@ -817,18 +1486,25 @@ export default async function Home() {
           )}
 
           <div className="availability">
-            <div className="section-label">
-              AVAILABILITY
+            <div>
+              <div className="section-label">
+                AVAILABILITY
+              </div>
+
+              <div className="availability-status">
+                {nextStatus?.label ??
+                  "Likely available"}
+              </div>
+
+              <div className="availability-reason">
+                {nextStatus?.reason ??
+                  "No current injury, doubt or suspension is listed."}
+              </div>
             </div>
 
-            <div className="availability-status">
+            <div className="status-pill">
               {nextStatus?.label ??
-                "Likely available"}
-            </div>
-
-            <div className="availability-reason">
-              {nextStatus?.reason ??
-                "No current injury, doubt or suspension is listed."}
+                "LIKELY AVAILABLE"}
             </div>
           </div>
         </section>
@@ -838,7 +1514,8 @@ export default async function Home() {
             UPCOMING FIXTURES
           </div>
 
-          {upcomingFixtures.length === 0 ? (
+          {upcomingFixtures.length ===
+          0 ? (
             <div className="fixture-row">
               No upcoming fixtures found.
             </div>
@@ -858,9 +1535,7 @@ export default async function Home() {
                     className="fixture-row"
                     key={
                       fixture?.id ??
-                      `${fixtureTimestamp(
-                        fixture
-                      )}-${index}`
+                      `${fixtureTimestamp(fixture)}-${index}`
                     }
                   >
                     <div className="fixture-title">
@@ -869,31 +1544,25 @@ export default async function Home() {
                       )}
                     </div>
 
-                    {date && (
-                      <>
-                        <div className="fixture-date">
-                          {formatDate(
+                    <div className="fixture-date">
+                      {date
+                        ? formatDate(
                             date
-                          )}
-                        </div>
+                          )
+                        : ""}
+                    </div>
 
-                        <div className="times">
-                          <span>
-                            {formatUKTime(
-                              fixture
-                            )}{" "}
-                            (UK)
-                          </span>
+                    <div className="fixture-time">
+                      {date
+                        ? `${formatUKTime(fixture)} (UK)`
+                        : ""}
+                    </div>
 
-                          <span>
-                            {formatBangladeshTime(
-                              fixture
-                            )}{" "}
-                            (Bangladesh)
-                          </span>
-                        </div>
-                      </>
-                    )}
+                    <div className="fixture-time">
+                      {date
+                        ? `${formatBangladeshTime(fixture)} (Bangladesh)`
+                        : ""}
+                    </div>
                   </div>
                 );
               }
