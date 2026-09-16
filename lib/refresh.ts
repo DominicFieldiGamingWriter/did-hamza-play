@@ -10,14 +10,14 @@ import {
 import { getSupabaseAdmin } from "./supabase";
 
 function getPlayerId(value: any): number | null {
-  const possibleIds = [
+  const ids = [
     value?.id,
     value?.player_id,
     value?.player?.id,
     value?.player?.player_id
   ];
 
-  for (const id of possibleIds) {
+  for (const id of ids) {
     const numberId = Number(id);
 
     if (Number.isFinite(numberId)) {
@@ -28,15 +28,35 @@ function getPlayerId(value: any): number | null {
   return null;
 }
 
+function getPlayerName(value: any): string {
+  const names = [
+    value?.name,
+    value?.player_name,
+    value?.full_name,
+    value?.player?.name,
+    value?.player?.full_name
+  ];
+
+  for (const name of names) {
+    if (typeof name === "string" && name.trim()) {
+      return name.trim().toLowerCase();
+    }
+  }
+
+  return "";
+}
+
 function hasMinutes(value: any): boolean {
   if (!value || typeof value !== "object") {
     return false;
   }
 
-  const minuteValues = [
+  const values = [
     value.minutes,
     value.minutes_played,
     value.played_minutes,
+    value.min,
+    value.played,
     value.games?.minutes,
     value.stats?.minutes,
     value.statistics?.minutes,
@@ -44,13 +64,10 @@ function hasMinutes(value: any): boolean {
     value.statistics?.[0]?.games?.minutes
   ];
 
-  for (const minutes of minuteValues) {
-    const numberMinutes = Number(minutes);
+  for (const value of values) {
+    const minutes = Number(value);
 
-    if (
-      Number.isFinite(numberMinutes) &&
-      numberMinutes > 0
-    ) {
+    if (Number.isFinite(minutes) && minutes > 0) {
       return true;
     }
   }
@@ -58,9 +75,10 @@ function hasMinutes(value: any): boolean {
   return false;
 }
 
-function findPlayerInObject(
+function findPlayerRecord(
   value: any,
-  playerId: number
+  playerId: number,
+  playerName: string
 ): boolean {
   if (!value || typeof value !== "object") {
     return false;
@@ -68,14 +86,28 @@ function findPlayerInObject(
 
   if (Array.isArray(value)) {
     return value.some((entry) =>
-      findPlayerInObject(entry, playerId)
+      findPlayerRecord(
+        entry,
+        playerId,
+        playerName
+      )
     );
   }
 
   const id = getPlayerId(value);
+  const name = getPlayerName(value);
+
+  const idMatches =
+    id !== null &&
+    id === playerId;
+
+  const nameMatches =
+    name === playerName ||
+    name.includes(playerName) ||
+    playerName.includes(name);
 
   if (
-    id === playerId &&
+    (idMatches || nameMatches) &&
     hasMinutes(value)
   ) {
     return true;
@@ -85,7 +117,11 @@ function findPlayerInObject(
     if (
       child &&
       typeof child === "object" &&
-      findPlayerInObject(child, playerId)
+      findPlayerRecord(
+        child,
+        playerId,
+        playerName
+      )
     ) {
       return true;
     }
@@ -96,13 +132,18 @@ function findPlayerInObject(
 
 function playerPlayed(
   playerId: number,
+  playerName: string,
   lineups: any[],
   playerStats: any[]
 ) {
+  const normalizedName =
+    playerName.trim().toLowerCase();
+
   if (
-    findPlayerInObject(
+    findPlayerRecord(
       playerStats,
-      playerId
+      playerId,
+      normalizedName
     )
   ) {
     return {
@@ -113,9 +154,10 @@ function playerPlayed(
   }
 
   if (
-    findPlayerInObject(
+    findPlayerRecord(
       lineups,
-      playerId
+      playerId,
+      normalizedName
     )
   ) {
     return {
@@ -141,16 +183,14 @@ function getAvailabilityStatus(
     ).toLowerCase();
 
   const reason =
-    squadPlayer?.injury_type ??
-    "";
+    squadPlayer?.injury_type ?? "";
 
   if (availability === "injured") {
     return {
       status: "unavailable",
       type: "injured",
       label: "Unavailable",
-      reason:
-        reason || "Injured"
+      reason: reason || "Injured"
     };
   }
 
@@ -202,9 +242,7 @@ export async function refreshPlayerPage() {
   }
 
   const teams =
-    await findTeam(
-      "Sheffield United"
-    );
+    await findTeam("Sheffield United");
 
   const team =
     teams.find(
@@ -236,9 +274,7 @@ export async function refreshPlayerPage() {
     last,
     next
   } =
-    await getTeamFixtures(
-      team.id
-    );
+    await getTeamFixtures(team.id);
 
   if (!last) {
     throw new Error(
@@ -254,9 +290,15 @@ export async function refreshPlayerPage() {
     getFixturePlayerStats(last.id)
   ]);
 
+  const actualPlayerName =
+    player?.name ??
+    squadPlayer?.name ??
+    playerName;
+
   const lastStatus =
     playerPlayed(
       playerId,
+      actualPlayerName,
       lineupData.lineups,
       playerStats
     );
@@ -269,23 +311,18 @@ export async function refreshPlayerPage() {
   const payload = {
     id: 1,
 
-    player_id:
-      playerId,
+    player_id: playerId,
 
     player_name:
-      player?.name ??
-      squadPlayer?.name ??
-      playerName,
+      actualPlayerName,
 
-    team_id:
-      team.id,
+    team_id: team.id,
 
     team_name:
       team.name,
 
     team_logo:
-      team.logo ??
-      null,
+      team.logo ?? null,
 
     player_photo:
       player?.photo ??
@@ -294,7 +331,6 @@ export async function refreshPlayerPage() {
 
     last_fixture: {
       ...last,
-
       player_status:
         lastStatus
     },
