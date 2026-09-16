@@ -1,69 +1,139 @@
-import type { Fixture, Lineup, PlayerFixtureStat, Sidelined } from "./api-football";
+import type {
+  Fixture,
+  Lineup,
+  PlayerFixtureStat,
+  Sidelined
+} from "./api-football";
 
 export type PlayerStatus = {
   played: boolean;
+  type: string;
   label: string;
-  detail: string;
   reason?: string;
-  minutes?: number;
-  started?: boolean;
 };
 
 export function classifyPlayer(
   playerId: number,
   fixture: Fixture,
   lineups: Lineup[],
-  stats: PlayerFixtureStat[],
+  playerStats: PlayerFixtureStat[],
   sidelined: Sidelined[]
 ): PlayerStatus {
-  const team = fixture.teams.home.id === (lineups.find(l => l.team.id === fixture.teams.home.id)?.team.id)
-    ? fixture.teams.home
-    : fixture.teams.away;
+  // Check lineups first.
+  for (const lineup of lineups) {
+    const starters = lineup.starting_xi ?? [];
+    const substitutes = lineup.substitutes ?? [];
 
-  const lineup = lineups.find(l => l.team.id === team.id);
-  const inStart = lineup?.startXI.some(x => x.player.id === playerId) ?? false;
-  const inSubs = lineup?.substitutes.some(x => x.player.id === playerId) ?? false;
+    if (
+      starters.some(
+        (entry: any) => entry.player?.id === playerId
+      )
+    ) {
+      return {
+        played: true,
+        type: "started",
+        label: "Started"
+      };
+    }
 
-  const statRecord = stats.flatMap(s => s.players ?? []).find(p => p.player.id === playerId);
-  const stat = statRecord?.statistics?.[0];
-  const minutes = stat?.games?.minutes ?? stat?.minutes?.number ?? 0;
-
-  if (minutes > 0) {
-    return {
-      played: true,
-      label: inStart ? "Started" : "Substitute",
-      detail: `${minutes} min`,
-      minutes,
-      started: inStart
-    };
+    if (
+      substitutes.some(
+        (entry: any) => entry.player?.id === playerId
+      )
+    ) {
+      return {
+        played: true,
+        type: "substitute",
+        label: "Came on as substitute"
+      };
+    }
   }
 
-  if (inStart || inSubs) {
-    return {
-      played: false,
-      label: "No",
-      detail: "Unused substitute",
-      minutes: 0,
-      started: inStart
-    };
+  // Check player statistics.
+  for (const group of playerStats) {
+    const players = group.players ?? [];
+
+    for (const entry of players) {
+      if (entry.player?.id !== playerId) continue;
+
+      const stats = entry.statistics?.[0];
+
+      if (
+        stats?.minutes?.number &&
+        stats.minutes.number > 0
+      ) {
+        return {
+          played: true,
+          type: "played",
+          label: "Played"
+        };
+      }
+
+      if (
+        stats?.games?.minutes &&
+        stats.games.minutes > 0
+      ) {
+        return {
+          played: true,
+          type: "played",
+          label: "Played"
+        };
+      }
+
+      if (
+        stats?.games?.appearences &&
+        stats.games.appearences > 0
+      ) {
+        return {
+          played: true,
+          type: "played",
+          label: "Played"
+        };
+      }
+    }
   }
 
-  const now = new Date(fixture.fixture.date);
-  const active = sidelined.find(s => {
-    const start = s.start ? new Date(s.start) : null;
-    const end = s.end ? new Date(s.end) : null;
-    return start && start <= now && (!end || end >= now);
-  });
+  // No appearance found. Check for an absence reason.
+  const absence = sidelined?.[0];
 
-  if (active) {
-    const raw = `${active.type ?? ""} ${active.reason ?? ""}`.toLowerCase();
-    const reason = raw.includes("susp") ? "Suspended" : "Injured";
-    return { played: false, label: "No", detail: reason, reason: active.reason };
+  if (absence) {
+    const status = String(
+      absence.status ?? absence.type ?? ""
+    ).toLowerCase();
+
+    const reason = absence.reason ?? "";
+
+    if (status.includes("suspend")) {
+      return {
+        played: false,
+        type: "suspended",
+        label: "Suspended",
+        reason
+      };
+    }
+
+    if (status.includes("injur")) {
+      return {
+        played: false,
+        type: "injured",
+        label: "Injured",
+        reason
+      };
+    }
+
+    if (status.includes("doubt")) {
+      return {
+        played: false,
+        type: "doubtful",
+        label: "Doubtful",
+        reason
+      };
+    }
   }
 
   return {
     played: false,
-    label: "No",
-    detail: "Not selected"
+    type: "not_selected",
+    label: "Not selected"
   };
 }
