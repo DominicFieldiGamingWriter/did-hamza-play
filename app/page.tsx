@@ -17,7 +17,6 @@ export const metadata = {
   },
 };
 import { getSupabaseAdmin } from "../lib/supabase";
-import { findPlayer, findTeam, getTeamFixtures } from "../lib/api-football";
 
 function dateValue(value: any): string | null {
   if (!value) return null;
@@ -1378,36 +1377,43 @@ function hasComplete1X2(
   );
 }
 
-async function getNextChileFixture() {
-  try {
-    const teams = await findTeam("Chile");
+function isChileFixture(fixture: any): boolean {
+  const type = String(
+    fixture?.tracked_team_type ??
+      fixture?.team_type ??
+      fixture?.fixture_type ??
+      ""
+  ).toLowerCase();
 
-    const team =
-      teams.find(
-        (candidate: any) =>
-          String(candidate?.name ?? "")
-            .trim()
-            .toLowerCase() === "chile"
-      ) ?? teams[0] ?? null;
-
-    if (!team?.id) {
-      return null;
-    }
-
-    const fixtures = await getTeamFixtures(
-      Number(team.id)
-    );
-
-    return Array.isArray(fixtures?.next)
-      ? fixtures.next[0] ?? null
-      : null;
-  } catch (error) {
-    console.error(
-      "Chile fixture lookup failed:",
-      error
-    );
-    return null;
+  if (type === "national") {
+    return true;
   }
+
+  const trackedName = String(
+    fixture?.tracked_team_name ??
+      fixture?.team_name ??
+      ""
+  ).toLowerCase();
+
+  if (trackedName.includes("chile")) {
+    return true;
+  }
+
+  const homeName = String(
+    fixture?.home_name ??
+      fixture?.home_team_name ??
+      fixture?.home?.name ??
+      ""
+  ).toLowerCase();
+
+  const awayName = String(
+    fixture?.away_name ??
+      fixture?.away_team_name ??
+      fixture?.away?.name ??
+      ""
+  ).toLowerCase();
+
+  return homeName === "chile" || awayName === "chile";
 }
 
 function betwayCandidateEventIds(fixture: any): number[] {
@@ -1758,72 +1764,80 @@ async function fetchBetwayFirstGoalScorer(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
   };
 
-  for (const host of hosts) {
-    for (const fixtureId of candidateIds) {
-      for (const marketCName of marketNames) {
-        for (const useExternalIds of [
-          false,
-          true
-        ]) {
-          for (const jurisdictionId of [
-            1,
-            2
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    for (const host of hosts) {
+      for (const fixtureId of candidateIds) {
+        for (const marketCName of marketNames) {
+          for (const useExternalIds of [
+            false,
+            true
           ]) {
-            try {
-              const response =
-                await fetch(
-                  `${host}/api/Events/V2/GetEvents`,
-                  {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify(
-                      betwayRequestPayload(
-                        fixtureId,
-                        marketCName,
-                        useExternalIds,
-                        jurisdictionId
-                      )
-                    ),
-                    cache: "no-store"
-                  }
-                );
+            for (const jurisdictionId of [
+              1,
+              2
+            ]) {
+              try {
+                const response =
+                  await fetch(
+                    `${host}/api/Events/V2/GetEvents`,
+                    {
+                      method: "POST",
+                      headers,
+                      body: JSON.stringify(
+                        betwayRequestPayload(
+                          fixtureId,
+                          marketCName,
+                          useExternalIds,
+                          jurisdictionId
+                        )
+                      ),
+                      cache: "no-store",
+                      signal: controller.signal
+                    }
+                  );
 
-              if (!response.ok) {
+                if (!response.ok) {
+                  console.warn(
+                    `Betway first-scorer request failed (${response.status}) host=${host} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
+                  );
+                  continue;
+                }
+
+                const payload =
+                  await response.json();
+
+                const price =
+                  extractFirstGoalScorerPriceFromBetway(
+                    payload,
+                    playerId,
+                    playerName
+                  );
+
+                if (price !== null) {
+                  console.info(
+                    `Betway first-scorer price found: ${price} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
+                  );
+                  return price;
+                }
+              } catch (error) {
                 console.warn(
-                  `Betway first-scorer request failed (${response.status}) host=${host} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
+                  "Betway first-scorer request error:",
+                  error
                 );
-                continue;
               }
-
-              const payload =
-                await response.json();
-
-              const price =
-                extractFirstGoalScorerPriceFromBetway(
-                  payload,
-                  playerId,
-                  playerName
-                );
-
-              if (price !== null) {
-                console.info(
-                  `Betway first-scorer price found: ${price} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
-                );
-                return price;
-              }
-            } catch (error) {
-              console.warn(
-                "Betway first-scorer request error:",
-                error
-              );
             }
           }
         }
       }
     }
-  }
 
-  return null;
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function getConsensusMatchOdds(
@@ -1850,35 +1864,36 @@ async function getConsensusMatchOdds(
       Authorization: `Token ${apiKey}`
     };
 
-    const summaryResponse =
-      await fetch(
-        `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
-        {
-          headers,
-          next: {
-            revalidate: 60
+    const [summaryPayload, betwayFirstGoalScorer] =
+      await Promise.all([
+        (async () => {
+          const summaryResponse =
+            await fetch(
+              `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
+              {
+                headers,
+                next: {
+                  revalidate: 60
+                }
+              }
+            );
+
+          if (!summaryResponse.ok) {
+            console.error(
+              "Consensus odds summary request failed:",
+              summaryResponse.status
+            );
+            return null;
           }
-        }
-      );
 
-    const summaryPayload =
-      summaryResponse.ok
-        ? await summaryResponse.json()
-        : null;
-
-    if (!summaryResponse.ok) {
-      console.error(
-        "Consensus odds summary request failed:",
-        summaryResponse.status
-      );
-    }
-
-    const betwayFirstGoalScorer =
-      await fetchBetwayFirstGoalScorer(
-        fixture,
-        playerId,
-        playerName
-      );
+          return await summaryResponse.json();
+        })(),
+        fetchBetwayFirstGoalScorer(
+          fixture,
+          playerId,
+          playerName
+        )
+      ]);
 
     const firstGoalScorerPrice =
       betwayFirstGoalScorer;
@@ -1984,29 +1999,6 @@ function appearanceSummary(
 }
 
 export default async function Home() {
-  const debugPlayers =
-    await findPlayer("Ben Brereton");
-
-  const debugChile =
-    await findTeam("Chile");
-
-  console.log(
-    "BEN BSD DEBUG:",
-    JSON.stringify(
-      debugPlayers,
-      null,
-      2
-    )
-  );
-
-  console.log(
-    "CHILE BSD DEBUG:",
-    JSON.stringify(
-      debugChile,
-      null,
-      2
-    )
-  );
   const supabase =
     getSupabaseAdmin();
 
@@ -2152,40 +2144,56 @@ export default async function Home() {
     dateValue(next);
 
   const nextChileFixture =
-    await getNextChileFixture();
-
-  const nextOdds = next
-    ? await getConsensusMatchOdds(
-        next,
-        benPlayerId,
-        data.player_name ??
-          "Ben Brereton Díaz"
-      )
-    : null;
+    nextFixtures.find(
+      (fixture: any) =>
+        isChileFixture(fixture)
+    ) ?? null;
 
   const firstUpcomingFixture =
     upcomingFixtures[0] ??
     null;
 
-  const firstUpcomingOdds =
-    firstUpcomingFixture
-      ? await getConsensusMatchOdds(
-          firstUpcomingFixture,
-          benPlayerId,
-          data.player_name ??
-            "Ben Brereton Díaz"
-        )
-      : null;
+  const playerName =
+    data.player_name ??
+    "Ben Brereton Díaz";
 
-  const chileOdds =
-    nextChileFixture
-      ? await getConsensusMatchOdds(
-          nextChileFixture,
-          benPlayerId,
-          data.player_name ??
-            "Ben Brereton Díaz"
-        )
-      : null;
+  const oddsCache =
+    new Map<number, Promise<any>>();
+
+  const getOdds = (fixture: any) => {
+    if (!fixture) {
+      return Promise.resolve(null);
+    }
+
+    const fixtureId = Number(fixture?.id);
+
+    if (!Number.isFinite(fixtureId)) {
+      return Promise.resolve(null);
+    }
+
+    const cached = oddsCache.get(fixtureId);
+
+    if (cached) {
+      return cached;
+    }
+
+    const request = getConsensusMatchOdds(
+      fixture,
+      benPlayerId,
+      playerName
+    );
+
+    oddsCache.set(fixtureId, request);
+
+    return request;
+  };
+
+  const [nextOdds, firstUpcomingOdds, chileOdds] =
+    await Promise.all([
+      getOdds(next),
+      getOdds(firstUpcomingFixture),
+      getOdds(nextChileFixture)
+    ]);
 
   const appearanceSummaryText =
     appearanceSummary(
