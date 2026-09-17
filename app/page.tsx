@@ -1809,38 +1809,6 @@ async function fetchBetwayFirstGoalScorer(
   return null;
 }
 
-async function getNextBangladeshFixture() {
-  try {
-    const teams = await findTeam("Bangladesh");
-
-    const team =
-      teams.find(
-        (candidate: any) =>
-          String(candidate?.name ?? "")
-            .trim()
-            .toLowerCase() === "bangladesh"
-      ) ?? teams[0] ?? null;
-
-    if (!team?.id) {
-      return null;
-    }
-
-    const fixtures = await getTeamFixtures(
-      Number(team.id)
-    );
-
-    return Array.isArray(fixtures?.next)
-      ? fixtures.next[0] ?? null
-      : null;
-  } catch (error) {
-    console.error(
-      "Bangladesh fixture lookup failed:",
-      error
-    );
-    return null;
-  }
-}
-
 async function getConsensusMatchOdds(
   fixture: any,
   playerId: number,
