@@ -1909,7 +1909,7 @@ export default async function Home() {
 Hamza Dewan Choudhury is a professional footballer. Born in England to a Bangladeshi mother and a father from Grenada, he was raised in a traditional Bangladeshi Muslim household. His ancestral home is in Bahubal, Habiganj District, Sylhet.</p>
 
             <p>
-Hamza was born on 1 October 1997. He began playing football at a very young age, joining the Leicester City Academy at just seven years old. By 2015, he had broken into the first-team squad, attracting attention from several major European clubs.</p>
+Born on 1 October 1997, Hamza began playing football at a very young age. He joined the Leicester City Academy at just seven years old, and by 2015, he had broken into the first-team squad. There, he attracted attention from several major European clubs.</p>
 
             <p>
 He made 123 league appearances for the Foxes and enjoyed successful loan spells at Burton Albion, Watford and Sheffield United. In 2026, he made his move to the Blades permanent, signing a one-year contract.</p>
