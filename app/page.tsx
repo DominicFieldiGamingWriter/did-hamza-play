@@ -2867,13 +2867,13 @@ export default async function Home() {
                   hour: "2-digit",
                   minute: "2-digit",
                   timeZone:
-                    "Europe/London"
+                    "Asia/Dhaka"
                 }
               ).format(
                 new Date(
                   data.updated_at
                 )
-              )
+              )} (Bangladesh)
             : ""}
         </div>
       </main>
