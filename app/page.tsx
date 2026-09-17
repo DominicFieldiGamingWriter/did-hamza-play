@@ -1665,28 +1665,26 @@ function collectOneXBetEventCandidates(
 
 async function fetch1xBetJson(
   path: string,
-  params: Record<string, string | number>,
+  params: Record<string, string | number | undefined>,
   signal: AbortSignal
 ): Promise<any | null> {
   const bases = [
-    "https://1xbet.com/service-api/LineFeed/",
     "https://1xbet.com/LineFeed/",
-    "https://1xbet.mobi/service-api/LineFeed/",
-    "https://1xbet.mobi/LineFeed/"
+    "https://1xbet.com/service-api/LineFeed/"
   ];
 
   const query = new URLSearchParams();
 
   for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) {
+      continue;
+    }
+
     query.set(key, String(value));
   }
 
-  const requests = bases.map(async (base) => {
+  for (const base of bases) {
     try {
-      const origin = base.startsWith("https://1xbet.mobi")
-        ? "https://1xbet.mobi"
-        : "https://1xbet.com";
-
       const response = await fetch(
         `${base}${path}?${query.toString()}`,
         {
@@ -1695,10 +1693,6 @@ async function fetch1xBetJson(
               "application/json, text/plain, */*",
             "Accept-Language":
               "en-GB,en;q=0.9",
-            Origin: origin,
-            Referer: `${origin}/`,
-            "X-Requested-With":
-              "XMLHttpRequest",
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
           },
@@ -1711,50 +1705,64 @@ async function fetch1xBetJson(
         console.warn(
           `1XBET ${path} failed (${response.status}) via ${base}`
         );
-        return null;
+        continue;
       }
 
-      const payload = await response.json();
-      return payload ?? null;
+      return await response.json();
     } catch (error) {
       console.warn(
         `1XBET ${path} request error via ${base}:`,
         error
       );
-      return null;
     }
-  });
+  }
 
-  const results = await Promise.all(requests);
-
-  const usable = results.find(
-    (payload) =>
-      payload &&
-      (
-        payload?.Value !== undefined ||
-        payload?.value !== undefined ||
-        payload?.Success === true ||
-        payload?.success === true
-      )
-  );
-
-  return usable ??
-    results.find((payload) => payload !== null) ??
-    null;
+  return null;
 }
 
-function rank1xBetEventCandidates(
-  payload: any,
-  fixture: any
-): any[] {
+async function find1xBetEventId(
+  fixture: any,
+  signal: AbortSignal
+): Promise<number | null> {
+  const directIds =
+    oneXBetCandidateEventIds(fixture);
+
+  if (directIds.length) {
+    return directIds[0];
+  }
+
+  const home = teamName(fixture, "home");
+  const away = teamName(fixture, "away");
+  const searchText = `${home} ${away}`.trim();
+
+  if (!searchText) {
+    return null;
+  }
+
+  const payload = await fetch1xBetJson(
+    "Web_SearchZip",
+    {
+      text: searchText,
+      limit: 50,
+      lng: "en"
+    },
+    signal
+  );
+
+  if (!payload) {
+    return null;
+  }
+
   const candidates =
-    collectOneXBetEventCandidates(payload);
+    collectOneXBetEventCandidates(
+      payload
+    );
 
   const fixtureTime = fixtureTimestamp(
     fixture
   );
 
-  return candidates
+  const ranked = candidates
     .map((candidate) => {
       const baseScore = oneXBetEventMatchScore(
         candidate.node,
@@ -1795,145 +1803,21 @@ function rank1xBetEventCandidates(
 
       return a.distance - b.distance;
     });
-}
 
-async function find1xBetEventId(
-  fixture: any,
-  signal: AbortSignal
-): Promise<number | null> {
-  const directIds =
-    oneXBetCandidateEventIds(fixture);
+  const best = ranked[0];
 
-  const home = teamName(fixture, "home");
-  const away = teamName(fixture, "away");
-  const searchTexts = [
-    `${home} ${away}`.trim(),
-    `${away} ${home}`.trim()
-  ].filter(Boolean);
-
-  for (const searchText of searchTexts) {
-    const payload = await fetch1xBetJson(
-      "Web_SearchZip",
-      {
-        text: searchText,
-        limit: 100,
-        lng: "en"
-      },
-      signal
-    );
-
-    if (!payload) {
-      continue;
-    }
-
-    const ranked =
-      rank1xBetEventCandidates(
-        payload,
-        fixture
-      );
-
-    const best = ranked[0];
-
-    if (
-      best &&
-      oneXBetEventMatchScore(
-        best.node,
-        fixture
-      ) >= 700
-    ) {
-      console.info(
-        `1XBET event matched via Web_SearchZip: ${best.eventId} for ${home} vs ${away}`
-      );
-      return best.eventId;
-    }
-  }
-
-  /*
-   * Web_SearchZip is convenient but not always available on every 1XBET
-   * skin. The football line feed is a second way to discover the same
-   * event. GetGameZip remains the source used for the actual first-
-   * goalscorer market and price.
-   */
-  const feedVariants = [
-    {
-      sports: 1,
-      count: 500,
-      lng: "en",
-      tf: 3000000,
-      tz: 0,
-      mode: 4,
-      country: 1,
-      getEmpty: "true"
-    },
-    {
-      sports: 1,
-      count: 500,
-      lng: "en",
-      tf: 3000000,
-      tz: 0,
-      mode: 4,
-      country: 75,
-      partner: 51,
-      getEmpty: "true"
-    },
-    {
-      sports: 1,
-      count: 500,
-      lng: "en",
-      tf: 3000000,
-      tz: 0,
-      mode: 4,
-      country: 153,
-      partner: 51,
-      getEmpty: "true"
-    }
-  ];
-
-  for (const params of feedVariants) {
-    const payload = await fetch1xBetJson(
-      "Get1x2_VZip",
-      params,
-      signal
-    );
-
-    if (!payload) {
-      continue;
-    }
-
-    const ranked =
-      rank1xBetEventCandidates(
-        payload,
-        fixture
-      );
-
-    const best = ranked[0];
-
-    if (
-      best &&
-      oneXBetEventMatchScore(
-        best.node,
-        fixture
-      ) >= 700
-    ) {
-      console.info(
-        `1XBET event matched via Get1x2_VZip: ${best.eventId} for ${home} vs ${away}`
-      );
-      return best.eventId;
-    }
-  }
-
-  if (directIds.length) {
+  if (!best || oneXBetEventMatchScore(best.node, fixture) < 700) {
     console.warn(
-      `1XBET event search did not find ${home} vs ${away}; trying the supplied event id ${directIds[0]}`
+      `1XBET event not found for ${home} vs ${away}`
     );
-    return directIds[0];
+    return null;
   }
 
-  console.warn(
-    `1XBET event not found for ${home} vs ${away}`
+  console.info(
+    `1XBET event matched: ${best.eventId} for ${home} vs ${away}`
   );
 
-  return null;
+  return best.eventId;
 }
 
 function extractOneXBetNodeText(
@@ -1995,9 +1879,6 @@ function extractOneXBetPlayerText(
     node?.playerName,
     node?.PlayerName,
     node?.PN,
-    node?.player?.name,
-    node?.player?.full_name,
-    node?.player?.short_name,
     node?.name,
     node?.Name,
     node?.N,
@@ -2025,62 +1906,11 @@ function extractOneXBetPlayerText(
     .join(" ");
 }
 
-function oneXBetPlayerAliases(
-  playerName: string
-): string[] {
-  const parts = String(playerName ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const aliases = new Set<string>();
-
-  if (playerName) {
-    aliases.add(normaliseToken(playerName));
-  }
-
-  if (parts.length >= 1) {
-    aliases.add(
-      normaliseToken(parts[parts.length - 1])
-    );
-  }
-
-  if (parts.length >= 2) {
-    const firstName = normaliseToken(parts[0]);
-    const lastName = normaliseToken(
-      parts[parts.length - 1]
-    );
-    const previousName = normaliseToken(
-      parts[parts.length - 2]
-    );
-
-    if (firstName && previousName) {
-      aliases.add(`${firstName}${previousName}`);
-    }
-
-    if (previousName) {
-      aliases.add(previousName);
-    }
-
-    if (previousName && lastName) {
-      aliases.add(`${previousName}${lastName}`);
-    }
-  }
-
-  return Array.from(aliases).filter(
-    (alias) => alias.length >= 5
-  );
-}
-
 function oneXBetPlayerMatches(
   node: any,
   playerId: number,
   playerName: string
 ): boolean {
-  if (!node || typeof node !== "object") {
-    return false;
-  }
-
   const directIds = [
     node?.player_id,
     node?.playerId,
@@ -2090,9 +1920,7 @@ function oneXBetPlayerMatches(
     node?.selection?.playerId,
     node?.selection?.PlayerId,
     node?.selection?.player?.id,
-    node?.selection?.player?.player_id,
-    node?.player?.id,
-    node?.player?.player_id
+    node?.selection?.player?.player_id
   ];
 
   if (
@@ -2111,42 +1939,51 @@ function oneXBetPlayerMatches(
     return false;
   }
 
-  const aliases = oneXBetPlayerAliases(
-    playerName
-  );
+  const parts = String(playerName ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
 
-  return aliases.some(
-    (alias) =>
-      nodeText === alias ||
-      nodeText.includes(alias)
-  );
-}
+  const aliases = new Set<string>();
 
-function oneXBetKeyMatchesPlayer(
-  key: any,
-  playerId: number,
-  playerName: string
-): boolean {
-  const raw = String(key ?? "").trim();
-
-  if (!raw) {
-    return false;
+  if (playerName) {
+    aliases.add(normaliseToken(playerName));
   }
 
-  if (Number(raw) === playerId) {
-    return true;
+  if (parts.length >= 1) {
+    aliases.add(
+      normaliseToken(parts[parts.length - 1])
+    );
   }
 
-  const token = normaliseToken(raw);
-  const aliases = oneXBetPlayerAliases(
-    playerName
-  );
+  // Ben Brereton Díaz is frequently listed as
+  // "Ben Brereton" or "Brereton" by bookmakers.
+  if (parts.length >= 2) {
+    const firstName = normaliseToken(parts[0]);
+    const mainSurname = normaliseToken(
+      parts[parts.length - 2]
+    );
 
-  return aliases.some(
-    (alias) =>
-      token === alias ||
-      token.includes(alias)
-  );
+    if (firstName && mainSurname) {
+      aliases.add(`${firstName}${mainSurname}`);
+    }
+
+    if (mainSurname.length >= 5) {
+      aliases.add(mainSurname);
+    }
+  }
+
+  for (const alias of aliases) {
+    if (
+      alias &&
+      alias.length >= 5 &&
+      (nodeText === alias || nodeText.includes(alias))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function oneXBetPriceFromNode(
@@ -2168,9 +2005,7 @@ function oneXBetPriceFromNode(
     "decimal_odds",
     "decimalOdds",
     "value",
-    "Value",
-    "V",
-    "v"
+    "Value"
   ];
 
   for (const key of directKeys) {
@@ -2180,25 +2015,6 @@ function oneXBetPriceFromNode(
     if (price !== null) {
       return price;
     }
-  }
-
-  return null;
-}
-
-function numericPriceFromAny(
-  value: any
-): number | null {
-  const direct = numericPrice(value);
-
-  if (direct !== null) {
-    return direct;
-  }
-
-  if (
-    value &&
-    typeof value === "object"
-  ) {
-    return oneXBetPriceFromNode(value);
   }
 
   return null;
@@ -2214,21 +2030,16 @@ function extractFirstGoalScorerPriceFrom1xBet(
   }
 
   const visited = new WeakSet<object>();
+  const ancestry: any[] = [];
 
-  function walk(
-    node: any,
-    inheritedFirstGoalContext: boolean
-  ): number | null {
+  function walk(node: any): number | null {
     if (node === null || node === undefined) {
       return null;
     }
 
     if (Array.isArray(node)) {
       for (const item of node) {
-        const price = walk(
-          item,
-          inheritedFirstGoalContext
-        );
+        const price = walk(item);
 
         if (price !== null) {
           return price;
@@ -2247,28 +2058,16 @@ function extractFirstGoalScorerPriceFrom1xBet(
     }
 
     visited.add(node);
-
-    const nodeText = extractOneXBetNodeText(
-      node
-    );
-
-    const directFirstGoalContext =
-      looksLikeFirstGoalScorerText(
-        nodeText
-      );
-
-    const serializedText =
-      JSON.stringify(node).toLowerCase();
-
-    const serializedFirstGoalContext =
-      looksLikeFirstGoalScorerText(
-        serializedText
-      );
+    ancestry.push(node);
 
     const firstGoalContext =
-      inheritedFirstGoalContext ||
-      directFirstGoalContext ||
-      serializedFirstGoalContext;
+      ancestry.some((ancestor) =>
+        looksLikeFirstGoalScorerText(
+          extractOneXBetNodeText(
+            ancestor
+          )
+        )
+      );
 
     if (
       firstGoalContext &&
@@ -2282,65 +2081,72 @@ function extractFirstGoalScorerPriceFrom1xBet(
         oneXBetPriceFromNode(node);
 
       if (directPrice !== null) {
+        ancestry.pop();
         return directPrice;
       }
 
-      for (const [key, child] of Object.entries(node)) {
-        if (!oneXBetKeyMatchesPlayer(
-          key,
-          playerId,
-          playerName
-        )) {
-          continue;
-        }
+      const nestedKeys = [
+        "price",
+        "Price",
+        "odds",
+        "Odds",
+        "C",
+        "c"
+      ];
 
-        const childPrice =
-          numericPriceFromAny(child);
+      for (const key of nestedKeys) {
+        const value = node?.[key];
+        const price = numericPrice(value);
 
-        if (childPrice !== null) {
-          return childPrice;
+        if (price !== null) {
+          ancestry.pop();
+          return price;
         }
       }
     }
 
-    for (const [key, child] of Object.entries(node)) {
-      const keyFirstGoalContext =
-        looksLikeFirstGoalScorerText(key);
+    /*
+     * 1XBET uses terse market objects in GetGameZip. Some player rows
+     * expose the market context in an ancestor while the player's price
+     * lives one or two levels below it. Inspect the object's immediate
+     * children explicitly as well as the recursive walk.
+     */
+    if (firstGoalContext) {
+      for (const child of Object.values(node)) {
+        if (
+          child &&
+          typeof child === "object" &&
+          oneXBetPlayerMatches(
+            child,
+            playerId,
+            playerName
+          )
+        ) {
+          const childPrice =
+            oneXBetPriceFromNode(child);
 
-      const childFirstGoalContext =
-        firstGoalContext ||
-        keyFirstGoalContext;
-
-      if (
-        childFirstGoalContext &&
-        oneXBetKeyMatchesPlayer(
-          key,
-          playerId,
-          playerName
-        )
-      ) {
-        const keyedPrice =
-          numericPriceFromAny(child);
-
-        if (keyedPrice !== null) {
-          return keyedPrice;
+          if (childPrice !== null) {
+            ancestry.pop();
+            return childPrice;
+          }
         }
       }
+    }
 
-      const price = walk(
-        child,
-        childFirstGoalContext
-      );
+    for (const child of Object.values(node)) {
+      const price = walk(child);
 
       if (price !== null) {
+        ancestry.pop();
         return price;
       }
     }
 
+    ancestry.pop();
     return null;
   }
 
-  return walk(payload, false);
+  return walk(payload);
 }
 
 async function fetch1xBetFirstGoalScorer(
@@ -2351,7 +2157,7 @@ async function fetch1xBetFirstGoalScorer(
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
-    20000
+    10000
   );
 
   try {
@@ -2364,7 +2170,8 @@ async function fetch1xBetFirstGoalScorer(
       return null;
     }
 
-    const gameZipVariants = [
+    const payload = await fetch1xBetJson(
+      "GetGameZip",
       {
         id: eventId,
         lng: "en",
@@ -2376,65 +2183,27 @@ async function fetch1xBetFirstGoalScorer(
         partner: 51,
         grMode: 2
       },
-      {
-        id: eventId,
-        lng: "en",
-        cfview: 0,
-        isSubGames: "true",
-        GroupEvents: "true",
-        allEventsGroupSubGames: "true",
-        countevents: 250,
-        partner: 36,
-        grMode: 2
-      },
-      {
-        id: eventId,
-        lng: "en",
-        cfview: 0,
-        isSubGames: "true",
-        GroupEvents: "true",
-        allEventsGroupSubGames: "true",
-        countevents: 250
-      }
-    ];
+      controller.signal
+    );
 
-    for (const params of gameZipVariants) {
-      const payload = await fetch1xBetJson(
-        "GetGameZip",
-        params,
-        controller.signal
+    const price =
+      extractFirstGoalScorerPriceFrom1xBet(
+        payload,
+        playerId,
+        playerName
       );
 
-      if (!payload) {
-        continue;
-      }
-
-      const price =
-        extractFirstGoalScorerPriceFrom1xBet(
-          payload,
-          playerId,
-          playerName
-        );
-
-      if (price !== null) {
-        console.info(
-          `1XBET first-scorer price found: ${price} fixture=${eventId}`
-        );
-        return price;
-      }
+    if (price !== null) {
+      console.info(
+        `1XBET first-scorer price found: ${price} fixture=${eventId}`
+      );
+    } else {
+      console.info(
+        `1XBET first-scorer price not found for fixture=${eventId}`
+      );
     }
 
-    console.info(
-      `1XBET first-scorer price not found for fixture=${eventId}`
-    );
-
-    return null;
-  } catch (error) {
-    console.warn(
-      "1XBET first-scorer lookup failed:",
-      error
-    );
-    return null;
+    return price;
   } finally {
     clearTimeout(timeout);
   }
@@ -2600,13 +2369,13 @@ function appearanceSummary(
 
 export default async function Home() {
   const debugPlayers =
-    await findPlayer("Hamza Choudhury");
+    await findPlayer("Ben Brereton");
 
-  const debugBangladesh =
-    await findTeam("Bangladesh");
+  const debugChile =
+    await findTeam("Chile");
 
   console.log(
-    "HAMZA BSD DEBUG:",
+    "BEN BSD DEBUG:",
     JSON.stringify(
       debugPlayers,
       null,
@@ -2615,9 +2384,9 @@ export default async function Home() {
   );
 
   console.log(
-    "BANGLADESH BSD DEBUG:",
+    "CHILE BSD DEBUG:",
     JSON.stringify(
-      debugBangladesh,
+      debugChile,
       null,
       2
     )
