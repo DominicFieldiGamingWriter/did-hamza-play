@@ -2802,15 +2802,15 @@ export default async function Home() {
                         ) && (
                           <div className="fixture-odds">
                             {formatOddsPrice(
-                              firstUpcomingOdds.oneXTwo.home
+                              firstUpcomingOdds?.oneXTwo?.home
                             )}{" "}
                             -{" "}
                             {formatOddsPrice(
-                              firstUpcomingOdds.oneXTwo.draw
+                              firstUpcomingOdds?.oneXTwo?.draw
                             )}{" "}
                             -{" "}
                             {formatOddsPrice(
-                              firstUpcomingOdds.oneXTwo.away
+                              firstUpcomingOdds?.oneXTwo?.away
                             )}
                           </div>
                         )}
@@ -2873,19 +2873,19 @@ export default async function Home() {
                     <span>
                       1:{" "}
                       {formatOddsPrice(
-                        nextOdds.oneXTwo.home
+                        nextOdds?.oneXTwo?.home
                       )}
                     </span>
                     <span>
                       X:{" "}
                       {formatOddsPrice(
-                        nextOdds.oneXTwo.draw
+                        nextOdds?.oneXTwo?.draw
                       )}
                     </span>
                     <span>
                       2:{" "}
                       {formatOddsPrice(
-                        nextOdds.oneXTwo.away
+                        nextOdds?.oneXTwo?.away
                       )}
                     </span>
                   </div>
@@ -2919,7 +2919,7 @@ export default async function Home() {
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
-                        nextOdds.hamzaAnytimeScorer
+                        nextOdds?.hamzaAnytimeScorer
                       )}
                     </span>
                   </div>
@@ -2956,19 +2956,19 @@ export default async function Home() {
                     <span>
                       1:{" "}
                       {formatOddsPrice(
-                        bangladeshOdds.oneXTwo.home
+                        bangladeshOdds?.oneXTwo?.home
                       )}
                     </span>
                     <span>
                       X:{" "}
                       {formatOddsPrice(
-                        bangladeshOdds.oneXTwo.draw
+                        bangladeshOdds?.oneXTwo?.draw
                       )}
                     </span>
                     <span>
                       2:{" "}
                       {formatOddsPrice(
-                        bangladeshOdds.oneXTwo.away
+                        bangladeshOdds?.oneXTwo?.away
                       )}
                     </span>
                   </div>
@@ -3004,7 +3004,7 @@ export default async function Home() {
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
-                        bangladeshOdds.hamzaAnytimeScorer
+                        bangladeshOdds?.hamzaAnytimeScorer
                       )}
                     </span>
                   </div>
