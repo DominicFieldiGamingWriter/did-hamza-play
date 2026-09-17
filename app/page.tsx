@@ -479,6 +479,12 @@ function numericPrice(value: any): number | null {
     : null;
 }
 
+function bookmakerBrandClass(name: string): string {
+  return normaliseToken(name) === "1xbet"
+    ? "odds-brand odds-brand-1xbet"
+    : "odds-brand odds-brand-betway";
+}
+
 function priceFromNode(node: any): number | null {
   if (!node || typeof node !== "object") {
     return null;
@@ -1927,8 +1933,38 @@ export default async function Home() {
         }
 
         .odds-book {
-          font-size: 13px;
+          display: flex;
+          align-items: center;
+          min-width: 108px;
+          flex: 0 0 108px;
+        }
+
+        .odds-brand {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 92px;
+          height: 34px;
+          padding: 0 10px;
+          border: 1px solid #dfe4ea;
+          border-radius: 8px;
+          background: #ffffff;
+          font-size: 16px;
+          line-height: 1;
           font-weight: 900;
+          letter-spacing: -0.8px;
+          white-space: nowrap;
+        }
+
+        .odds-brand-1xbet {
+          color: #1675d1;
+          font-style: italic;
+        }
+
+        .odds-brand-betway {
+          color: #111111;
+          font-size: 17px;
+          letter-spacing: -0.6px;
         }
 
         .odds-prices {
@@ -2660,7 +2696,9 @@ export default async function Home() {
                       key={`next-1x2-${bookmaker.name}`}
                     >
                       <div className="odds-book">
-                        {bookmaker.name}
+                        <span className={bookmakerBrandClass(bookmaker.name)}>
+                          {bookmaker.name === "1xBet" ? "1XBET" : "betway"}
+                        </span>
                       </div>
                       <div className="odds-prices">
                         <span>1: {bookmaker.oneXTwo.home ?? "—"}</span>
@@ -2679,7 +2717,7 @@ export default async function Home() {
 
             <div className="odds-mini-card">
               <h3 className="odds-mini-title">Next match odds</h3>
-              <div className="odds-mini-subtitle">Anytime scorer</div>
+              <div className="odds-mini-subtitle">Hamza to score anytime</div>
               <div className="odds-mini-match">
                 {next
                   ? fixtureName(next)
@@ -2694,7 +2732,9 @@ export default async function Home() {
                       key={`next-scorer-${bookmaker.name}`}
                     >
                       <div className="odds-book">
-                        {bookmaker.name}
+                        <span className={bookmakerBrandClass(bookmaker.name)}>
+                          {bookmaker.name === "1xBet" ? "1XBET" : "betway"}
+                        </span>
                       </div>
                       <div className="odds-prices">
                         <span>{bookmaker.hamzaAnytimeScorer ?? "—"}</span>
@@ -2726,7 +2766,9 @@ export default async function Home() {
                       key={`bd-1x2-${bookmaker.name}`}
                     >
                       <div className="odds-book">
-                        {bookmaker.name}
+                        <span className={bookmakerBrandClass(bookmaker.name)}>
+                          {bookmaker.name === "1xBet" ? "1XBET" : "betway"}
+                        </span>
                       </div>
                       <div className="odds-prices">
                         <span>1: {bookmaker.oneXTwo.home ?? "—"}</span>
@@ -2745,7 +2787,7 @@ export default async function Home() {
 
             <div className="odds-mini-card">
               <h3 className="odds-mini-title">Next Bangladesh match odds</h3>
-              <div className="odds-mini-subtitle">Hamza anytime scorer</div>
+              <div className="odds-mini-subtitle">Hamza to score anytime</div>
               <div className="odds-mini-match">
                 {nextBangladeshFixture
                   ? fixtureName(nextBangladeshFixture)
@@ -2760,7 +2802,9 @@ export default async function Home() {
                       key={`bd-scorer-${bookmaker.name}`}
                     >
                       <div className="odds-book">
-                        {bookmaker.name}
+                        <span className={bookmakerBrandClass(bookmaker.name)}>
+                          {bookmaker.name === "1xBet" ? "1XBET" : "betway"}
+                        </span>
                       </div>
                       <div className="odds-prices">
                         <span>{bookmaker.hamzaAnytimeScorer ?? "—"}</span>
