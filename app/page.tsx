@@ -779,10 +779,11 @@ export default async function Home() {
           display: grid;
           grid-template-columns:
             minmax(0, 1fr)
-            96px
+            86px
             215px;
           align-items: center;
-          gap: 18px;
+          column-gap: 8px;
+          row-gap: 0;
         }
 
         .top-image-wrap {
@@ -792,8 +793,8 @@ export default async function Home() {
         }
 
         .top-image {
-          width: 110px;
-          height: 110px;
+          width: 92px;
+          height: 92px;
           display: block;
           object-fit: contain;
           object-position: center;
@@ -1327,8 +1328,25 @@ export default async function Home() {
 
           .top-row {
             display: grid;
-            grid-template-columns: 1fr;
-            gap: 18px;
+            grid-template-columns: 76px minmax(0, 1fr);
+            column-gap: 10px;
+            row-gap: 8px;
+          }
+
+          .top-row .main-heading {
+            grid-column: 1 / -1;
+          }
+
+          .top-row .top-image-wrap {
+            grid-column: 1;
+            grid-row: 2;
+            align-self: center;
+          }
+
+          .top-row > .answer {
+            grid-column: 2;
+            grid-row: 2;
+            align-self: center;
           }
 
           .main-heading {
@@ -1341,15 +1359,17 @@ export default async function Home() {
           }
 
           .top-image {
-            width: 92px;
-            height: 92px;
+            width: 76px;
+            height: 76px;
           }
 
           .answer {
-            margin-top: 2px;
-            min-width: 205px;
-            height: 104px;
-            font-size: 58px;
+            margin-top: 0;
+            min-width: 0;
+            width: 100%;
+            height: 88px;
+            padding: 0 20px;
+            font-size: 52px;
           }
 
           .live-heading-row {
@@ -1448,9 +1468,10 @@ export default async function Home() {
           }
 
           .answer {
-            min-width: 195px;
-            height: 98px;
-            font-size: 54px;
+            min-width: 0;
+            width: 100%;
+            height: 82px;
+            font-size: 48px;
           }
 
           .live-heading-row {
