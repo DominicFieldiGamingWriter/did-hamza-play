@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 import { getSupabaseAdmin } from "../lib/supabase";
+import { findTeam, getTeamFixtures } from "../lib/api-football";
 
 function dateValue(value: any): string | null {
   if (!value) return null;
@@ -542,7 +543,7 @@ function marketIs1X2(
   );
 }
 
-function marketIsFirstScorer(
+function marketIsAnytimeScorer(
   market: any
 ): boolean {
   const values = [
@@ -552,27 +553,33 @@ function marketIsFirstScorer(
     market?.name,
     market?.kind,
     market?.type
-  ].map(
-    (value) =>
-      String(value ?? "")
-        .trim()
-        .toLowerCase()
+  ].map((value) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
   );
 
-  const serialised =
-    JSON.stringify(market ?? {})
-      .toLowerCase();
+  const serialised = JSON.stringify(
+    market ?? {}
+  ).toLowerCase();
+
+  const hasAnytime = (text: string) =>
+    text.includes("anytime") ||
+    text.includes("to score") ||
+    text.includes("to_score");
+
+  const hasScorer = (text: string) =>
+    text.includes("scor") ||
+    text.includes("goal");
 
   return (
     values.some(
       (value) =>
-        value.includes("first") &&
-        (value.includes("scor") ||
-          value.includes("goal"))
+        hasAnytime(value) &&
+        hasScorer(value)
     ) ||
-    (serialised.includes("first") &&
-      (serialised.includes("scor") ||
-        serialised.includes("goal")))
+    (hasAnytime(serialised) &&
+      hasScorer(serialised))
   );
 }
 
@@ -845,6 +852,38 @@ function get1X2Prices(
   return result;
 }
 
+async function getNextBangladeshFixture() {
+  try {
+    const teams = await findTeam("Bangladesh");
+
+    const team =
+      teams.find(
+        (candidate: any) =>
+          String(candidate?.name ?? "")
+            .trim()
+            .toLowerCase() === "bangladesh"
+      ) ?? teams[0] ?? null;
+
+    if (!team?.id) {
+      return null;
+    }
+
+    const fixtures = await getTeamFixtures(
+      Number(team.id)
+    );
+
+    return Array.isArray(fixtures?.next)
+      ? fixtures.next[0] ?? null
+      : null;
+  } catch (error) {
+    console.error(
+      "Bangladesh fixture lookup failed:",
+      error
+    );
+    return null;
+  }
+}
+
 async function getNextMatchOdds(
   fixture: any,
   playerId: number,
@@ -907,17 +946,17 @@ async function getNextMatchOdds(
             slug
           );
 
-        const firstScorerBooks =
+        const anytimeScorerBooks =
           marketPricesForBookmaker(
             payload,
             slug,
-            marketIsFirstScorer
+            marketIsAnytimeScorer
           );
 
-        let hamzaFirstScorer: number | null = null;
+        let hamzaAnytimeScorer: number | null = null;
 
-        for (const bookmaker of firstScorerBooks) {
-          hamzaFirstScorer =
+        for (const bookmaker of anytimeScorerBooks) {
+          hamzaAnytimeScorer =
             selectionPriceForPlayer(
               bookmaker,
               playerId,
@@ -925,7 +964,7 @@ async function getNextMatchOdds(
             );
 
           if (
-            hamzaFirstScorer !== null
+            hamzaAnytimeScorer !== null
           ) {
             break;
           }
@@ -934,7 +973,7 @@ async function getNextMatchOdds(
         return {
           name,
           oneXTwo,
-          hamzaFirstScorer
+          hamzaAnytimeScorer
         };
       }
     );
@@ -1174,6 +1213,9 @@ export default async function Home() {
   const nextDate =
     dateValue(next);
 
+  const nextBangladeshFixture =
+    await getNextBangladeshFixture();
+
   const nextOdds = next
     ? await getNextMatchOdds(
         next,
@@ -1182,6 +1224,16 @@ export default async function Home() {
           "Hamza Choudhury"
       )
     : null;
+
+  const bangladeshOdds =
+    nextBangladeshFixture
+      ? await getNextMatchOdds(
+          nextBangladeshFixture,
+          hamzaPlayerId,
+          data.player_name ??
+            "Hamza Choudhury"
+        )
+      : null;
 
   const appearanceSummaryText =
     appearanceSummary(
@@ -1807,71 +1859,104 @@ export default async function Home() {
 
         .odds-card {
           margin-top: 24px;
-          background: #ffffff;
-          color: #090d13;
+          background: #111a29;
+          color: #ffffff;
           border-radius: 30px;
           padding: 34px;
         }
 
-        .odds-match {
-          margin-top: 9px;
-          color: #52647d;
-          font-size: 15px;
-          font-weight: 800;
-        }
-
-        .odds-table {
-          margin-top: 22px;
-          overflow-x: auto;
-        }
-
-        .odds-row {
-          display: grid;
-          grid-template-columns: minmax(120px, 1.35fr) repeat(4, minmax(78px, 0.65fr));
-          align-items: center;
-          gap: 10px;
-          padding: 15px 0;
-          border-top: 1px solid #dfe4ea;
-          min-width: 540px;
-        }
-
-        .odds-row:first-child {
-          border-top: 0;
-          padding-top: 0;
-        }
-
-        .odds-cell {
-          text-align: right;
-          font-size: 14px;
-          font-weight: 900;
-        }
-
-        .odds-bookmaker {
-          text-align: left;
-          font-size: 15px;
-          font-weight: 900;
-        }
-
         .odds-heading {
-          color: #7084a1;
-          font-size: 10px;
+          color: #aab8cb;
+          font-size: 13px;
           font-weight: 900;
-          letter-spacing: 1px;
+          letter-spacing: 2.2px;
           text-transform: uppercase;
         }
 
-        .odds-note {
-          margin-top: 14px;
+        .odds-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+          margin-top: 20px;
+        }
+
+        .odds-mini-card {
+          background: #ffffff;
+          color: #090d13;
+          border-radius: 20px;
+          padding: 22px;
+          min-width: 0;
+        }
+
+        .odds-mini-title {
+          margin: 0;
+          font-size: 19px;
+          line-height: 1.15;
+          font-weight: 900;
+          letter-spacing: -.5px;
+        }
+
+        .odds-mini-subtitle {
+          margin-top: 7px;
           color: #7084a1;
-          font-size: 12px;
-          line-height: 1.45;
+          font-size: 13px;
+          line-height: 1.4;
+          font-weight: 700;
+        }
+
+        .odds-mini-match {
+          margin-top: 15px;
+          color: #52647d;
+          font-size: 13px;
+          line-height: 1.4;
+          font-weight: 800;
+        }
+
+        .odds-mini-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 0;
+          border-top: 1px solid #dfe4ea;
+        }
+
+        .odds-mini-row:first-of-type {
+          margin-top: 14px;
+          border-top: 0;
+        }
+
+        .odds-book {
+          font-size: 13px;
+          font-weight: 900;
+        }
+
+        .odds-prices {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          font-size: 13px;
+          font-weight: 900;
+        }
+
+        .odds-prices span {
+          white-space: nowrap;
         }
 
         .odds-unavailable {
-          margin-top: 18px;
+          margin-top: 16px;
           color: #52647d;
-          font-size: 15px;
+          font-size: 14px;
           line-height: 1.5;
+        }
+
+        .odds-note {
+          margin-top: 16px;
+          color: #aab8cb;
+          font-size: 12px;
+          line-height: 1.45;
         }
 
         .updated {
@@ -2093,6 +2178,18 @@ export default async function Home() {
           .score,
           .live-score {
             font-size: 48px;
+          }
+
+          .odds-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .odds-mini-card {
+            padding: 20px;
+          }
+
+          .odds-prices {
+            gap: 8px;
           }
 
           .bio-heading {
@@ -2543,74 +2640,141 @@ export default async function Home() {
         </section>
 
         <section className="odds-card">
-          <div className="section-label">
-            MATCH ODDS
-          </div>
+          <div className="odds-heading">MATCH ODDS</div>
 
-          <div className="odds-match">
-            {next
-              ? fixtureName(next)
-              : "No upcoming fixture"}
-          </div>
-
-          {nextOdds ? (
-            <div className="odds-table">
-              <div className="odds-row">
-                <div className="odds-bookmaker odds-heading">
-                  Bookmaker
-                </div>
-                <div className="odds-cell odds-heading">
-                  1
-                </div>
-                <div className="odds-cell odds-heading">
-                  X
-                </div>
-                <div className="odds-cell odds-heading">
-                  2
-                </div>
-                <div className="odds-cell odds-heading">
-                  Hamza first to score
-                </div>
+          <div className="odds-grid">
+            <div className="odds-mini-card">
+              <h3 className="odds-mini-title">Next match odds</h3>
+              <div className="odds-mini-subtitle">1X2</div>
+              <div className="odds-mini-match">
+                {next
+                  ? fixtureName(next)
+                  : "No upcoming fixture"}
               </div>
 
-              {nextOdds.bookmakers.map(
-                (bookmaker: any) => (
-                  <div
-                    className="odds-row"
-                    key={bookmaker.name}
-                  >
-                    <div className="odds-bookmaker">
-                      {bookmaker.name}
+              {nextOdds ? (
+                nextOdds.bookmakers.map(
+                  (bookmaker: any) => (
+                    <div
+                      className="odds-mini-row"
+                      key={`next-1x2-${bookmaker.name}`}
+                    >
+                      <div className="odds-book">
+                        {bookmaker.name}
+                      </div>
+                      <div className="odds-prices">
+                        <span>1: {bookmaker.oneXTwo.home ?? "—"}</span>
+                        <span>X: {bookmaker.oneXTwo.draw ?? "—"}</span>
+                        <span>2: {bookmaker.oneXTwo.away ?? "—"}</span>
+                      </div>
                     </div>
-
-                    <div className="odds-cell">
-                      {bookmaker.oneXTwo.home ??
-                        "—"}
-                    </div>
-
-                    <div className="odds-cell">
-                      {bookmaker.oneXTwo.draw ??
-                        "—"}
-                    </div>
-
-                    <div className="odds-cell">
-                      {bookmaker.oneXTwo.away ??
-                        "—"}
-                    </div>
-
-                    <div className="odds-cell">
-                      {bookmaker.hamzaFirstScorer ??
-                        "—"}
-                    </div>
-                  </div>
+                  )
                 )
+              ) : (
+                <div className="odds-unavailable">
+                  Odds are currently unavailable.
+                </div>
               )}
             </div>
-          ) : (
-            <div className="odds-unavailable">
-              Odds are currently unavailable.
+
+            <div className="odds-mini-card">
+              <h3 className="odds-mini-title">Next match Hamza scorer</h3>
+              <div className="odds-mini-subtitle">Anytime scorer</div>
+              <div className="odds-mini-match">
+                {next
+                  ? fixtureName(next)
+                  : "No upcoming fixture"}
+              </div>
+
+              {nextOdds ? (
+                nextOdds.bookmakers.map(
+                  (bookmaker: any) => (
+                    <div
+                      className="odds-mini-row"
+                      key={`next-scorer-${bookmaker.name}`}
+                    >
+                      <div className="odds-book">
+                        {bookmaker.name}
+                      </div>
+                      <div className="odds-prices">
+                        <span>{bookmaker.hamzaAnytimeScorer ?? "—"}</span>
+                      </div>
+                    </div>
+                  )
+                )
+              ) : (
+                <div className="odds-unavailable">
+                  Odds are currently unavailable.
+                </div>
+              )}
             </div>
-          )}
+
+            <div className="odds-mini-card">
+              <h3 className="odds-mini-title">Next Bangladesh match odds</h3>
+              <div className="odds-mini-subtitle">1X2</div>
+              <div className="odds-mini-match">
+                {nextBangladeshFixture
+                  ? fixtureName(nextBangladeshFixture)
+                  : "No upcoming Bangladesh fixture"}
+              </div>
+
+              {bangladeshOdds ? (
+                bangladeshOdds.bookmakers.map(
+                  (bookmaker: any) => (
+                    <div
+                      className="odds-mini-row"
+                      key={`bd-1x2-${bookmaker.name}`}
+                    >
+                      <div className="odds-book">
+                        {bookmaker.name}
+                      </div>
+                      <div className="odds-prices">
+                        <span>1: {bookmaker.oneXTwo.home ?? "—"}</span>
+                        <span>X: {bookmaker.oneXTwo.draw ?? "—"}</span>
+                        <span>2: {bookmaker.oneXTwo.away ?? "—"}</span>
+                      </div>
+                    </div>
+                  )
+                )
+              ) : (
+                <div className="odds-unavailable">
+                  Odds are currently unavailable.
+                </div>
+              )}
+            </div>
+
+            <div className="odds-mini-card">
+              <h3 className="odds-mini-title">Next Bangladesh scorer</h3>
+              <div className="odds-mini-subtitle">Hamza anytime scorer</div>
+              <div className="odds-mini-match">
+                {nextBangladeshFixture
+                  ? fixtureName(nextBangladeshFixture)
+                  : "No upcoming Bangladesh fixture"}
+              </div>
+
+              {bangladeshOdds ? (
+                bangladeshOdds.bookmakers.map(
+                  (bookmaker: any) => (
+                    <div
+                      className="odds-mini-row"
+                      key={`bd-scorer-${bookmaker.name}`}
+                    >
+                      <div className="odds-book">
+                        {bookmaker.name}
+                      </div>
+                      <div className="odds-prices">
+                        <span>{bookmaker.hamzaAnytimeScorer ?? "—"}</span>
+                      </div>
+                    </div>
+                  )
+                )
+              ) : (
+                <div className="odds-unavailable">
+                  Odds are currently unavailable.
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="odds-note">
             Decimal odds. Prices can change.
