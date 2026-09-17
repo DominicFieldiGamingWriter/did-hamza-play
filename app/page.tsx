@@ -1242,6 +1242,175 @@ function getConsensusFirstGoalScorer(
 
   return null;
 }
+function escapeRegex(value: string): string {
+  return value.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function getEveryGameFirstGoalScorerPrice(
+  fixture: any,
+  playerName: string
+): Promise<number | null> {
+  const home = teamName(fixture, "home");
+  const away = teamName(fixture, "away");
+
+  if (
+    !home ||
+    !away ||
+    home === "Unknown" ||
+    away === "Unknown"
+  ) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      "https://sports.everygame.eu/en/Bets/Soccer/English-Championship/924",
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
+        },
+        next: {
+          revalidate: 300
+        }
+      }
+    );
+
+    if (!response.ok) {
+      console.error(
+        "Everygame first-goalscorer request failed:",
+        response.status
+      );
+      return null;
+    }
+
+    const html = await response.text();
+    const text = stripHtml(html);
+
+    const firstGoalStart = text.indexOf(
+      "First Goalscorer"
+    );
+
+    const anytimeStart = text.indexOf(
+      "Anytime Goalscorer",
+      firstGoalStart + 1
+    );
+
+    if (
+      firstGoalStart === -1
+    ) {
+      return null;
+    }
+
+    const firstGoalSection = text.slice(
+      firstGoalStart,
+      anytimeStart > firstGoalStart
+        ? anytimeStart
+        : undefined
+    );
+
+    const matchNeedle = `${home} v ${away}`;
+
+    let matchIndex =
+      firstGoalSection
+        .toLowerCase()
+        .indexOf(
+          matchNeedle.toLowerCase()
+        );
+
+    if (matchIndex === -1) {
+      const normaliseMatchText = (value: string) =>
+        value
+          .toLowerCase()
+          .replace(/\bfc\b/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const fallbackNeedle =
+        `${normaliseMatchText(home)} v ${normaliseMatchText(away)}`;
+
+      matchIndex =
+        normaliseMatchText(
+          firstGoalSection
+        ).indexOf(
+          fallbackNeedle
+        );
+    }
+
+    if (matchIndex === -1) {
+      return null;
+    }
+
+    const matchSection =
+      firstGoalSection.slice(
+        matchIndex,
+        matchIndex + 12000
+      );
+
+    const escapedName = escapeRegex(
+      playerName.trim()
+    );
+
+    const playerMatch = matchSection.match(
+      new RegExp(
+        `${escapedName}\\s*\\|\\s*(\\d+(?:\\.\\d+)?)`,
+        "i"
+      )
+    );
+
+    if (!playerMatch) {
+      const surnameNeedle = surname(
+        playerName
+      );
+
+      if (surnameNeedle) {
+        const surnameMatch = matchSection.match(
+          new RegExp(
+            `${escapeRegex(surnameNeedle)}[^|]{0,80}\\|\\s*(\\d+(?:\\.\\d+)?)`,
+            "i"
+          )
+        );
+
+        if (surnameMatch) {
+          return numericPrice(
+            surnameMatch[1]
+          );
+        }
+      }
+
+      return null;
+    }
+
+    return numericPrice(
+      playerMatch[1]
+    );
+  } catch (error) {
+    console.error(
+      "Everygame first-goalscorer lookup failed:",
+      error
+    );
+
+    return null;
+  }
+}
+
 function hasComplete1X2(
   odds: any
 ): boolean {
@@ -1329,6 +1498,20 @@ async function getConsensusMatchOdds(
     const payload =
       await response.json();
 
+    const bsdFirstGoalScorer =
+      getConsensusFirstGoalScorer(
+        payload,
+        playerId,
+        playerName
+      );
+
+    const firstGoalScorer =
+      bsdFirstGoalScorer ??
+      await getEveryGameFirstGoalScorerPrice(
+        fixture,
+        playerName
+      );
+
     return {
       fixtureId,
       oneXTwo:
@@ -1336,11 +1519,7 @@ async function getConsensusMatchOdds(
           payload
         ),
       hamzaFirstGoalScorer:
-        getConsensusFirstGoalScorer(
-          payload,
-          playerId,
-          playerName
-        ),
+        firstGoalScorer,
       updatedAt:
         payload?.updated_at ??
         payload?.last_update_at ??
