@@ -1213,6 +1213,38 @@ export default async function Home() {
   const nextDate =
     dateValue(next);
 
+  const firstUpcomingFixture =
+    upcomingFixtures[0] ??
+    null;
+
+  const firstUpcomingOdds =
+    firstUpcomingFixture
+      ? await getNextMatchOdds(
+          firstUpcomingFixture,
+          hamzaPlayerId,
+          data.player_name ??
+            "Hamza Choudhury"
+        )
+      : null;
+
+  const firstUpcomingBetway =
+    firstUpcomingOdds?.bookmakers?.find(
+      (bookmaker: any) =>
+        bookmaker?.name === "Betway"
+    ) ?? null;
+
+  const firstUpcomingBetwayOneXTwo =
+    firstUpcomingBetway?.oneXTwo ??
+    null;
+
+  const hasFirstUpcomingBetwayOdds =
+    firstUpcomingBetwayOneXTwo?.home !== null &&
+    firstUpcomingBetwayOneXTwo?.home !== undefined &&
+    firstUpcomingBetwayOneXTwo?.draw !== null &&
+    firstUpcomingBetwayOneXTwo?.draw !== undefined &&
+    firstUpcomingBetwayOneXTwo?.away !== null &&
+    firstUpcomingBetwayOneXTwo?.away !== undefined;
+
   const nextBangladeshFixture =
     await getNextBangladeshFixture();
 
@@ -1795,6 +1827,15 @@ export default async function Home() {
           line-height: 1.15;
           font-weight: 900;
           letter-spacing: -.4px;
+        }
+
+        .fixture-odds {
+          margin-top: 8px;
+          color: #7084a1;
+          font-size: 13px;
+          line-height: 1.2;
+          font-weight: 900;
+          letter-spacing: .1px;
         }
 
         .fixture-date {
@@ -2611,6 +2652,15 @@ export default async function Home() {
                       {fixtureName(
                         fixture
                       )}
+
+                      {index === 0 &&
+                        firstUpcomingFixture?.id ===
+                          fixture?.id &&
+                        hasFirstUpcomingBetwayOdds && (
+                          <div className="fixture-odds">
+                            {firstUpcomingBetwayOneXTwo.home} - {firstUpcomingBetwayOneXTwo.draw} - {firstUpcomingBetwayOneXTwo.away}
+                          </div>
+                        )}
                     </div>
 
                     <div className="fixture-date">
