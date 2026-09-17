@@ -234,6 +234,68 @@ function fixtureTimestamp(
     : timestamp;
 }
 
+function isFreshLiveFixture(
+  fixture: any
+): boolean {
+  const timestamp =
+    fixtureTimestamp(
+      fixture
+    );
+
+  if (!timestamp) {
+    return false;
+  }
+
+  const now =
+    Date.now();
+
+  const status =
+    String(
+      fixture?.status ??
+        fixture?.time?.status ??
+        ""
+    )
+      .trim()
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9]+/g,
+        ""
+      );
+
+  const liveStatuses = new Set([
+    "live",
+    "inprogress",
+    "inplay",
+    "1sthalf",
+    "halftime",
+    "2ndhalf",
+    "extratime",
+    "penaltyshootout",
+    "overtime"
+  ]);
+
+  if (
+    !liveStatuses.has(
+      status
+    )
+  ) {
+    return false;
+  }
+
+  const maxAgeMs =
+    6 * 60 * 60 * 1000;
+
+  const maxFutureMs =
+    2 * 60 * 60 * 1000;
+
+  return (
+    timestamp >=
+      now - maxAgeMs &&
+    timestamp <=
+      now + maxFutureMs
+  );
+}
+
 function sortUpcomingFixtures(
   fixtures: any[]
 ) {
@@ -1406,9 +1468,16 @@ export default async function Home() {
     );
   }
 
-  const liveFixture =
+  const storedLiveFixture =
     data.live_fixture ??
     null;
+
+  const liveFixture =
+    isFreshLiveFixture(
+      storedLiveFixture
+    )
+      ? storedLiveFixture
+      : null;
 
   const lastFixture =
     data.last_fixture ??
