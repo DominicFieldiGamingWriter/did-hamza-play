@@ -693,7 +693,10 @@ function nodeContainsPlayer(
     node.selection_name,
     node.selection,
     node.participant_name,
-    node.outcome_name
+    node.outcome_name,
+    typeof node.outcome === "string"
+      ? node.outcome
+      : null
   ];
 
   if (names.some((value) => {
@@ -719,7 +722,7 @@ function nodeContainsPlayer(
       (targetSurname &&
         keyToken === targetSurname) ||
       (targetName &&
-        keyToken.includes(targetName))
+        keyToken === targetName)
     ) {
       return true;
     }
@@ -795,9 +798,14 @@ function selectionPriceForPlayer(
     node.name,
     node.label,
     node.selection_name,
-    node.selection,
+    typeof node.selection === "string"
+      ? node.selection
+      : null,
     node.participant_name,
-    node.outcome_name
+    node.outcome_name,
+    typeof node.outcome === "string"
+      ? node.outcome
+      : null
   ];
 
   const hasPlayerName = names.some(
@@ -847,7 +855,7 @@ function selectionPriceForPlayer(
       (targetSurname &&
         keyToken === targetSurname) ||
       (targetName &&
-        keyToken.includes(targetName))
+        keyToken === targetName)
     ) {
       const price =
         priceFromNode(child);
@@ -1136,103 +1144,175 @@ function getConsensus1X2(
   };
 }
 
+function isFirstGoalScorerMarketText(value: any): boolean {
+  const text = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ");
+
+  if (!text) {
+    return false;
+  }
+
+  if (text.includes("anytime")) {
+    return false;
+  }
+
+  const hasFirst =
+    text.includes("first goal") ||
+    text.includes("first scorer") ||
+    text.includes("firstgoalscorer") ||
+    text.includes("firstscorer") ||
+    text === "fgs" ||
+    text.includes(" fgs ");
+
+  const hasGoalOrScorer =
+    text.includes("goal") ||
+    text.includes("scor");
+
+  return (
+    hasFirst &&
+    hasGoalOrScorer
+  );
+}
+
 function getConsensusFirstGoalScorer(
   payload: any,
   playerId: number,
   playerName: string
 ): number | null {
-  const results = Array.isArray(payload?.results)
-    ? payload.results
-    : [];
+  if (!payload) {
+    return null;
+  }
 
-  const findInRows = (rows: any[]): number | null => {
-    for (const row of rows) {
-      const serialised = JSON.stringify(row ?? {}).toLowerCase();
+  const results =
+    Array.isArray(payload?.results)
+      ? payload.results
+      : [];
 
-      if (
-        serialised.includes("first") &&
-        (
-          serialised.includes("goal") ||
-          serialised.includes("scor")
-        )
-      ) {
-        const price = selectionPriceForPlayer(
-          row,
+  // The documented free-key odds feed returns one consensus row
+  // per event × market × outcome. Never fall back to an individual
+  // bookmaker here because the UI is specifically supposed to show
+  // the consensus price.
+  const consensusRows =
+    results.filter((row: any) => {
+      const bookmaker =
+        normaliseToken(
+          row?.bookmaker_slug ??
+          row?.bookmaker ??
+          row?.bookmaker_name
+        );
+
+      if (bookmaker !== "consensus") {
+        return false;
+      }
+
+      const marketFields = [
+        row?.market,
+        row?.market_kind,
+        row?.market_family,
+        row?.market_name,
+        row?.name,
+        row?.kind,
+        row?.type,
+        row?.code,
+        row?.market_code
+      ];
+
+      return marketFields.some(
+        isFirstGoalScorerMarketText
+      );
+    });
+
+  for (const row of consensusRows) {
+    const price =
+      selectionPriceForPlayer(
+        row,
+        playerId,
+        playerName
+      );
+
+    if (price !== null) {
+      return price;
+    }
+  }
+
+  // Some responses expose a nested markets array instead of flat
+  // result rows. Again, only accept a bookmaker explicitly labelled
+  // consensus.
+  const markets =
+    Array.isArray(payload?.markets)
+      ? payload.markets
+      : [];
+
+  for (const market of markets) {
+    const marketFields = [
+      market?.market,
+      market?.market_kind,
+      market?.market_family,
+      market?.market_name,
+      market?.name,
+      market?.kind,
+      market?.type,
+      market?.code,
+      market?.market_code
+    ];
+
+    if (
+      !marketFields.some(
+        isFirstGoalScorerMarketText
+      )
+    ) {
+      continue;
+    }
+
+    const bookmakers =
+      Array.isArray(market?.bookmakers)
+        ? market.bookmakers
+        : [];
+
+    for (const book of bookmakers) {
+      const bookmaker =
+        normaliseToken(
+          book?.bookmaker_slug ??
+          book?.slug ??
+          book?.bookmaker ??
+          book?.name
+        );
+
+      if (bookmaker !== "consensus") {
+        continue;
+      }
+
+      const price =
+        selectionPriceForPlayer(
+          book,
           playerId,
           playerName
         );
 
-        if (price !== null) {
-          return price;
-        }
+      if (price !== null) {
+        return price;
       }
     }
-
-    return null;
-  };
-
-  const consensusRows = results.filter(
-    (row: any) =>
-      normaliseToken(
-        row?.bookmaker_slug ??
-        row?.bookmaker
-      ) === "consensus"
-  );
-
-  const consensusPrice = findInRows(consensusRows);
-
-  if (consensusPrice !== null) {
-    return consensusPrice;
   }
 
-  // Fall back to individual bookmaker rows when BSD does not expose
-  // the player's first-goalscorer price in the consensus result.
-  const anyResultPrice = findInRows(results);
+  // Finally, support a first-goalscorer market represented directly
+  // inside the odds summary object, should BSD ever add one there.
+  if (payload?.odds) {
+    const oddsText =
+      JSON.stringify(
+        payload.odds
+      ).toLowerCase();
 
-  if (anyResultPrice !== null) {
-    return anyResultPrice;
-  }
-
-  const markets = Array.isArray(payload?.markets)
-    ? payload.markets
-    : [];
-
-  for (const market of markets) {
-    if (!marketIsFirstGoalScorer(market)) {
-      continue;
-    }
-
-    const bookmakers = Array.isArray(market?.bookmakers)
-      ? market.bookmakers
-      : [];
-
-    const orderedBookmakers = [
-      ...bookmakers.filter(
-        (book: any) =>
-          normaliseToken(
-            book?.bookmaker_slug ??
-            book?.slug ??
-            book?.bookmaker ??
-            book?.name
-          ) === "consensus"
-      ),
-      ...bookmakers.filter(
-        (book: any) =>
-          normaliseToken(
-            book?.bookmaker_slug ??
-            book?.slug ??
-            book?.bookmaker ??
-            book?.name
-          ) !== "consensus"
-      )
-    ];
-
-    for (const book of orderedBookmakers) {
-      const price = selectionPriceForPlayer(
-        book,
-        playerId,
-        playerName
-      );
+    if (isFirstGoalScorerMarketText(oddsText)) {
+      const price =
+        selectionPriceForPlayer(
+          payload.odds,
+          playerId,
+          playerName
+        );
 
       if (price !== null) {
         return price;
@@ -1241,174 +1321,6 @@ function getConsensusFirstGoalScorer(
   }
 
   return null;
-}
-function escapeRegex(value: string): string {
-  return value.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&"
-  );
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&#x27;/gi, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function getEveryGameFirstGoalScorerPrice(
-  fixture: any,
-  playerName: string
-): Promise<number | null> {
-  const home = teamName(fixture, "home");
-  const away = teamName(fixture, "away");
-
-  if (
-    !home ||
-    !away ||
-    home === "Unknown" ||
-    away === "Unknown"
-  ) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(
-      "https://sports.everygame.eu/en/Bets/Soccer/English-Championship/924",
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36"
-        },
-        next: {
-          revalidate: 300
-        }
-      }
-    );
-
-    if (!response.ok) {
-      console.error(
-        "Everygame first-goalscorer request failed:",
-        response.status
-      );
-      return null;
-    }
-
-    const html = await response.text();
-    const text = stripHtml(html);
-
-    const firstGoalStart = text.indexOf(
-      "First Goalscorer"
-    );
-
-    const anytimeStart = text.indexOf(
-      "Anytime Goalscorer",
-      firstGoalStart + 1
-    );
-
-    if (
-      firstGoalStart === -1
-    ) {
-      return null;
-    }
-
-    const firstGoalSection = text.slice(
-      firstGoalStart,
-      anytimeStart > firstGoalStart
-        ? anytimeStart
-        : undefined
-    );
-
-    const matchNeedle = `${home} v ${away}`;
-
-    let matchIndex =
-      firstGoalSection
-        .toLowerCase()
-        .indexOf(
-          matchNeedle.toLowerCase()
-        );
-
-    if (matchIndex === -1) {
-      const normaliseMatchText = (value: string) =>
-        value
-          .toLowerCase()
-          .replace(/\bfc\b/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
-
-      const fallbackNeedle =
-        `${normaliseMatchText(home)} v ${normaliseMatchText(away)}`;
-
-      matchIndex =
-        normaliseMatchText(
-          firstGoalSection
-        ).indexOf(
-          fallbackNeedle
-        );
-    }
-
-    if (matchIndex === -1) {
-      return null;
-    }
-
-    const matchSection =
-      firstGoalSection.slice(
-        matchIndex,
-        matchIndex + 12000
-      );
-
-    const escapedName = escapeRegex(
-      playerName.trim()
-    );
-
-    const playerMatch = matchSection.match(
-      new RegExp(
-        `${escapedName}\\s*\\|\\s*(\\d+(?:\\.\\d+)?)`,
-        "i"
-      )
-    );
-
-    if (!playerMatch) {
-      const surnameNeedle = surname(
-        playerName
-      );
-
-      if (surnameNeedle) {
-        const surnameMatch = matchSection.match(
-          new RegExp(
-            `${escapeRegex(surnameNeedle)}[^|]{0,80}\\|\\s*(\\d+(?:\\.\\d+)?)`,
-            "i"
-          )
-        );
-
-        if (surnameMatch) {
-          return numericPrice(
-            surnameMatch[1]
-          );
-        }
-      }
-
-      return null;
-    }
-
-    return numericPrice(
-      playerMatch[1]
-    );
-  } catch (error) {
-    console.error(
-      "Everygame first-goalscorer lookup failed:",
-      error
-    );
-
-    return null;
-  }
 }
 
 function hasComplete1X2(
@@ -1473,42 +1385,76 @@ async function getConsensusMatchOdds(
   }
 
   try {
-    const response =
+    const headers = {
+      Authorization: `Token ${apiKey}`
+    };
+
+    // Standard per-match shortcut: consensus summary odds.
+    const summaryResponse =
       await fetch(
         `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
         {
-          headers: {
-            Authorization: `Token ${apiKey}`
-          },
+          headers,
           next: {
             revalidate: 60
           }
         }
       );
 
-    if (!response.ok) {
-      console.error(
-        "Consensus odds request failed:",
-        response.status
-      );
+    const summaryPayload =
+      summaryResponse.ok
+        ? await summaryResponse.json()
+        : null;
 
-      return null;
+    if (!summaryResponse.ok) {
+      console.error(
+        "Consensus odds summary request failed:",
+        summaryResponse.status
+      );
     }
 
-    const payload =
-      await response.json();
+    // The documented odds feed is the place to retrieve markets beyond
+    // the compact eleven-market summary. Scoped to this event, a free
+    // key returns the consensus row for each quoted market/outcome.
+    let feedPayload: any = null;
 
-    const bsdFirstGoalScorer =
-      getConsensusFirstGoalScorer(
-        payload,
-        playerId,
-        playerName
+    try {
+      const feedResponse =
+        await fetch(
+          `https://sports.bzzoiro.com/api/v2/odds/?event_id=${fixtureId}&limit=200`,
+          {
+            headers,
+            next: {
+              revalidate: 60
+            }
+          }
+        );
+
+      if (feedResponse.ok) {
+        feedPayload =
+          await feedResponse.json();
+      } else {
+        console.error(
+          "Consensus odds feed request failed:",
+          feedResponse.status
+        );
+      }
+    } catch (feedError) {
+      console.error(
+        "Consensus odds feed request failed:",
+        feedError
       );
+    }
 
     const firstGoalScorer =
-      bsdFirstGoalScorer ??
-      await getEveryGameFirstGoalScorerPrice(
-        fixture,
+      getConsensusFirstGoalScorer(
+        feedPayload,
+        playerId,
+        playerName
+      ) ??
+      getConsensusFirstGoalScorer(
+        summaryPayload,
+        playerId,
         playerName
       );
 
@@ -1516,13 +1462,15 @@ async function getConsensusMatchOdds(
       fixtureId,
       oneXTwo:
         getConsensus1X2(
-          payload
+          summaryPayload
         ),
       hamzaFirstGoalScorer:
         firstGoalScorer,
       updatedAt:
-        payload?.updated_at ??
-        payload?.last_update_at ??
+        summaryPayload?.last_update_at ??
+        summaryPayload?.updated_at ??
+        feedPayload?.last_update_at ??
+        feedPayload?.updated_at ??
         null
     };
   } catch (error) {
