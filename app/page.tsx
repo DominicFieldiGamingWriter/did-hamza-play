@@ -1,22 +1,6 @@
 export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "Did Ben Brereton Díaz Play?",
-  description:
-    "Did Ben Brereton Díaz play in his club's last game? What about Chile? Check his latest appearance, next match, fixtures and odds.",
-  openGraph: {
-    title: "Did Ben Brereton Díaz Play?",
-    description:
-      "Did Ben Brereton Díaz play for Sheffield United or Chile? Check his latest appearance, next match, fixtures and odds.",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Did Ben Brereton Díaz Play?",
-    description:
-      "Did Ben Brereton Díaz play for Sheffield United or Chile? Check his latest appearance, next match, fixtures and odds.",
-  },
-};
 import { getSupabaseAdmin } from "../lib/supabase";
+import { findTeam, getTeamFixtures } from "../lib/api-football";
 
 function dateValue(value: any): string | null {
   if (!value) return null;
@@ -173,7 +157,7 @@ function formatUKTime(
   ).format(parsed);
 }
 
-function formatChileTime(
+function formatBangladeshTime(
   value: any
 ): string {
   const date =
@@ -199,7 +183,7 @@ function formatChileTime(
       minute: "2-digit",
       hour12: false,
       timeZone:
-        "America/Santiago"
+        "Asia/Dhaka"
     }
   ).format(parsed);
 }
@@ -223,10 +207,10 @@ function fixtureTimes(
       </span>
 
       <span>
-        {formatChileTime(
+        {formatBangladeshTime(
           fixture
         )}{" "}
-        (Chile)
+        (Bangladesh)
       </span>
     </div>
   );
@@ -1377,43 +1361,36 @@ function hasComplete1X2(
   );
 }
 
-function isChileFixture(fixture: any): boolean {
-  const type = String(
-    fixture?.tracked_team_type ??
-      fixture?.team_type ??
-      fixture?.fixture_type ??
-      ""
-  ).toLowerCase();
+async function getNextBangladeshFixture() {
+  try {
+    const teams = await findTeam("Bangladesh");
 
-  if (type === "national") {
-    return true;
+    const team =
+      teams.find(
+        (candidate: any) =>
+          String(candidate?.name ?? "")
+            .trim()
+            .toLowerCase() === "bangladesh"
+      ) ?? teams[0] ?? null;
+
+    if (!team?.id) {
+      return null;
+    }
+
+    const fixtures = await getTeamFixtures(
+      Number(team.id)
+    );
+
+    return Array.isArray(fixtures?.next)
+      ? fixtures.next[0] ?? null
+      : null;
+  } catch (error) {
+    console.error(
+      "Bangladesh fixture lookup failed:",
+      error
+    );
+    return null;
   }
-
-  const trackedName = String(
-    fixture?.tracked_team_name ??
-      fixture?.team_name ??
-      ""
-  ).toLowerCase();
-
-  if (trackedName.includes("chile")) {
-    return true;
-  }
-
-  const homeName = String(
-    fixture?.home_name ??
-      fixture?.home_team_name ??
-      fixture?.home?.name ??
-      ""
-  ).toLowerCase();
-
-  const awayName = String(
-    fixture?.away_name ??
-      fixture?.away_team_name ??
-      fixture?.away?.name ??
-      ""
-  ).toLowerCase();
-
-  return homeName === "chile" || awayName === "chile";
 }
 
 function betwayCandidateEventIds(fixture: any): number[] {
@@ -1764,80 +1741,72 @@ async function fetchBetwayFirstGoalScorer(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
   };
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-
-  try {
-    for (const host of hosts) {
-      for (const fixtureId of candidateIds) {
-        for (const marketCName of marketNames) {
-          for (const useExternalIds of [
-            false,
-            true
+  for (const host of hosts) {
+    for (const fixtureId of candidateIds) {
+      for (const marketCName of marketNames) {
+        for (const useExternalIds of [
+          false,
+          true
+        ]) {
+          for (const jurisdictionId of [
+            1,
+            2
           ]) {
-            for (const jurisdictionId of [
-              1,
-              2
-            ]) {
-              try {
-                const response =
-                  await fetch(
-                    `${host}/api/Events/V2/GetEvents`,
-                    {
-                      method: "POST",
-                      headers,
-                      body: JSON.stringify(
-                        betwayRequestPayload(
-                          fixtureId,
-                          marketCName,
-                          useExternalIds,
-                          jurisdictionId
-                        )
-                      ),
-                      cache: "no-store",
-                      signal: controller.signal
-                    }
-                  );
-
-                if (!response.ok) {
-                  console.warn(
-                    `Betway first-scorer request failed (${response.status}) host=${host} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
-                  );
-                  continue;
-                }
-
-                const payload =
-                  await response.json();
-
-                const price =
-                  extractFirstGoalScorerPriceFromBetway(
-                    payload,
-                    playerId,
-                    playerName
-                  );
-
-                if (price !== null) {
-                  console.info(
-                    `Betway first-scorer price found: ${price} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
-                  );
-                  return price;
-                }
-              } catch (error) {
-                console.warn(
-                  "Betway first-scorer request error:",
-                  error
+            try {
+              const response =
+                await fetch(
+                  `${host}/api/Events/V2/GetEvents`,
+                  {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify(
+                      betwayRequestPayload(
+                        fixtureId,
+                        marketCName,
+                        useExternalIds,
+                        jurisdictionId
+                      )
+                    ),
+                    cache: "no-store"
+                  }
                 );
+
+              if (!response.ok) {
+                console.warn(
+                  `Betway first-scorer request failed (${response.status}) host=${host} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
+                );
+                continue;
               }
+
+              const payload =
+                await response.json();
+
+              const price =
+                extractFirstGoalScorerPriceFromBetway(
+                  payload,
+                  playerId,
+                  playerName
+                );
+
+              if (price !== null) {
+                console.info(
+                  `Betway first-scorer price found: ${price} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
+                );
+                return price;
+              }
+            } catch (error) {
+              console.warn(
+                "Betway first-scorer request error:",
+                error
+              );
             }
           }
         }
       }
     }
-
-    return null;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  return null;
 }
 
 async function getConsensusMatchOdds(
@@ -1864,39 +1833,45 @@ async function getConsensusMatchOdds(
       Authorization: `Token ${apiKey}`
     };
 
-    const [summaryPayload, betwayFirstGoalScorer] =
-      await Promise.all([
-        (async () => {
-          const summaryResponse =
-            await fetch(
-              `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
-              {
-                headers,
-                next: {
-                  revalidate: 60
-                }
-              }
-            );
-
-          if (!summaryResponse.ok) {
-            console.error(
-              "Consensus odds summary request failed:",
-              summaryResponse.status
-            );
-            return null;
+    const summaryResponse =
+      await fetch(
+        `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
+        {
+          headers,
+          next: {
+            revalidate: 60
           }
+        }
+      );
 
-          return await summaryResponse.json();
-        })(),
-        fetchBetwayFirstGoalScorer(
-          fixture,
-          playerId,
-          playerName
-        )
-      ]);
+    const summaryPayload =
+      summaryResponse.ok
+        ? await summaryResponse.json()
+        : null;
 
+    if (!summaryResponse.ok) {
+      console.error(
+        "Consensus odds summary request failed:",
+        summaryResponse.status
+      );
+    }
+
+    const betwayFirstGoalScorer =
+      await fetchBetwayFirstGoalScorer(
+        fixture,
+        playerId,
+        playerName
+      );
+
+    /*
+     * Display fallback: the requested first-goalscorer price is
+     * currently fixed at 29.00 when Betway does not return a price.
+     * This is intentionally a UI fallback, not a live BSD consensus
+     * value. Remove it once a reliable bookmaker feed is connected.
+     */
     const firstGoalScorerPrice =
-      betwayFirstGoalScorer;
+      betwayFirstGoalScorer ??
+      29.00;
 
     return {
       fixtureId,
@@ -1904,7 +1879,7 @@ async function getConsensusMatchOdds(
         getConsensus1X2(
           summaryPayload
         ),
-      benFirstGoalScorer:
+      hamzaFirstGoalScorer:
         firstGoalScorerPrice,
       updatedAt:
         summaryPayload?.last_update_at ??
@@ -2020,8 +1995,8 @@ export default async function Home() {
       <main className="page">
         <h1 className="main-heading">
           DID{" "}
-          <span className="ben-name">
-            BEN
+          <span className="hamza-name">
+            HAMZA
           </span>{" "}
           PLAY?
         </h1>
@@ -2101,26 +2076,26 @@ export default async function Home() {
       lastFixture
     );
 
-  const benPlayerId =
+  const hamzaPlayerId =
     Number(
       data.player_id
     );
 
-  const benScored =
+  const hamzaScored =
     events.goals.some(
       (goal: any) =>
         Number(
           goal?.player_id
-        ) === benPlayerId &&
+        ) === hamzaPlayerId &&
         !isOwnGoal(goal)
     );
 
-  const benAssisted =
+  const hamzaAssisted =
     events.assists.some(
       (goal: any) =>
         Number(
           goal?.assist_id
-        ) === benPlayerId
+        ) === hamzaPlayerId
     );
 
   const latestDate =
@@ -2143,57 +2118,41 @@ export default async function Home() {
   const nextDate =
     dateValue(next);
 
-  const nextChileFixture =
-    nextFixtures.find(
-      (fixture: any) =>
-        isChileFixture(fixture)
-    ) ?? null;
+  const nextBangladeshFixture =
+    await getNextBangladeshFixture();
+
+  const nextOdds = next
+    ? await getConsensusMatchOdds(
+        next,
+        hamzaPlayerId,
+        data.player_name ??
+          "Hamza Choudhury"
+      )
+    : null;
 
   const firstUpcomingFixture =
     upcomingFixtures[0] ??
     null;
 
-  const playerName =
-    data.player_name ??
-    "Ben Brereton Díaz";
+  const firstUpcomingOdds =
+    firstUpcomingFixture
+      ? await getConsensusMatchOdds(
+          firstUpcomingFixture,
+          hamzaPlayerId,
+          data.player_name ??
+            "Hamza Choudhury"
+        )
+      : null;
 
-  const oddsCache =
-    new Map<number, Promise<any>>();
-
-  const getOdds = (fixture: any) => {
-    if (!fixture) {
-      return Promise.resolve(null);
-    }
-
-    const fixtureId = Number(fixture?.id);
-
-    if (!Number.isFinite(fixtureId)) {
-      return Promise.resolve(null);
-    }
-
-    const cached = oddsCache.get(fixtureId);
-
-    if (cached) {
-      return cached;
-    }
-
-    const request = getConsensusMatchOdds(
-      fixture,
-      benPlayerId,
-      playerName
-    );
-
-    oddsCache.set(fixtureId, request);
-
-    return request;
-  };
-
-  const [nextOdds, firstUpcomingOdds, chileOdds] =
-    await Promise.all([
-      getOdds(next),
-      getOdds(firstUpcomingFixture),
-      getOdds(nextChileFixture)
-    ]);
+  const bangladeshOdds =
+    nextBangladeshFixture
+      ? await getConsensusMatchOdds(
+          nextBangladeshFixture,
+          hamzaPlayerId,
+          data.player_name ??
+            "Hamza Choudhury"
+        )
+      : null;
 
   const appearanceSummaryText =
     appearanceSummary(
@@ -2256,8 +2215,8 @@ export default async function Home() {
         body {
           margin: 0;
           padding: 0;
-          background: #eef2f7;
-          color: #111a29;
+          background: #006a4e;
+          color: #ffffff;
           font-family:
             Arial,
             Helvetica,
@@ -2288,8 +2247,8 @@ export default async function Home() {
           white-space: nowrap;
         }
 
-        .ben-name {
-          color: #d52b1e;
+        .hamza-name {
+          color: #f42a41;
         }
 
         .top-row {
@@ -2306,8 +2265,8 @@ export default async function Home() {
         }
 
         .top-image {
-          width: 108px;
-          height: 108px;
+          width: 92px;
+          height: 92px;
           display: block;
           object-fit: contain;
           object-position: center;
@@ -2326,7 +2285,7 @@ export default async function Home() {
           height: 108px;
           padding: 0 42px;
           border-radius: 999px;
-          background: #e8eef6;
+          background: #ffffff;
           font-size: 65px;
           line-height: 1;
           font-weight: 900;
@@ -2334,7 +2293,7 @@ export default async function Home() {
         }
 
         .answer.yes {
-          color: #0039A6;
+          color: #00824f;
         }
 
         .answer.no {
@@ -2359,7 +2318,7 @@ export default async function Home() {
 
         .live-heading {
           margin: 0;
-          color: #111a29;
+          color: #ffffff;
           font-size: clamp(
             29px,
             4vw,
@@ -2380,7 +2339,6 @@ export default async function Home() {
 
         .live-card {
           background: #111a29;
-          border-top: 5px solid #d52b1e;
           border-radius: 30px;
           padding: 34px;
         }
@@ -2448,8 +2406,6 @@ export default async function Home() {
         .section-card {
           margin-top: 30px;
           background: #ffffff;
-          border: 1px solid #e3e8ee;
-          box-shadow: 0 10px 30px rgba(17, 26, 41, .06);
           color: #090d13;
           border-radius: 30px;
           padding: 34px;
@@ -2617,21 +2573,21 @@ export default async function Home() {
         }
 
         .detail-stat-value.yes {
-          color: #0039A6;
+          color: #006a4e;
         }
 
         .detail-stat-value.no {
-          color: #d52b1e;
+          color: #f42a41;
         }
 
-        .ben-outcomes {
+        .hamza-outcomes {
           margin-top: 14px;
           border-top:
             1px solid
             #dfe4ea;
         }
 
-        .ben-outcome {
+        .hamza-outcome {
           display: flex;
           align-items: baseline;
           justify-content: space-between;
@@ -2644,11 +2600,11 @@ export default async function Home() {
           font-weight: 800;
         }
 
-        .ben-outcome:last-child {
+        .hamza-outcome:last-child {
           border-bottom: 0;
         }
 
-        .ben-outcome-label {
+        .hamza-outcome-label {
           color: #7084a1;
           font-size: 11px;
           font-weight: 900;
@@ -2656,13 +2612,13 @@ export default async function Home() {
           text-transform: uppercase;
         }
 
-        .ben-outcome-value {
+        .hamza-outcome-value {
           font-weight: 900;
         }
 
         .next-heading {
           margin: 42px 0 16px;
-          color: #111a29;
+          color: #ffffff;
           font-size: clamp(
             29px,
             4vw,
@@ -2675,7 +2631,6 @@ export default async function Home() {
 
         .next-card {
           background: #111a29;
-          border-top: 5px solid #0039A6;
           border-radius: 30px;
           padding: 34px;
         }
@@ -2734,8 +2689,6 @@ export default async function Home() {
         .fixtures-card {
           margin-top: 24px;
           background: #ffffff;
-          border: 1px solid #e3e8ee;
-          box-shadow: 0 10px 30px rgba(17, 26, 41, .06);
           color: #090d13;
           border-radius: 30px;
           padding: 34px;
@@ -2791,8 +2744,6 @@ export default async function Home() {
         .bio-card {
           margin-top: 24px;
           background: #ffffff;
-          border: 1px solid #e3e8ee;
-          box-shadow: 0 10px 30px rgba(17, 26, 41, .06);
           color: #090d13;
           border-radius: 30px;
           padding: 34px;
@@ -2841,7 +2792,6 @@ export default async function Home() {
         .odds-card {
           margin-top: 24px;
           background: #111a29;
-          border-top: 5px solid #d52b1e;
           color: #ffffff;
           border-radius: 30px;
           padding: 34px;
@@ -2980,7 +2930,13 @@ export default async function Home() {
         .updated {
           margin-top: 23px;
           text-align: center;
-          color: #7084a1;
+          color:
+            rgba(
+              255,
+              255,
+              255,
+              .76
+            );
           font-size: 12px;
         }
 
@@ -3228,8 +3184,8 @@ export default async function Home() {
         <div className="top-row">
           <h1 className="main-heading">
             DID{" "}
-            <span className="ben-name">
-              BEN
+            <span className="hamza-name">
+              HAMZA
             </span>{" "}
             PLAY?
           </h1>
@@ -3239,19 +3195,14 @@ export default async function Home() {
               className="top-image"
               src={
                 latestPlayed
-                  ? "/ben-happy.png"
-                  : "/ben-serious.png"
+                  ? "/hamza-happy.png"
+                  : "/hamza-serious.png"
               }
               alt={
                 latestPlayed
-                  ? "Happy Ben Brereton Díaz"
-                  : "Serious Ben Brereton Díaz"
+                  ? "Happy Hamza Choudhury"
+                  : "Serious Hamza Choudhury"
               }
-              width={108}
-              height={108}
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
             />
           </div>
 
@@ -3473,24 +3424,24 @@ export default async function Home() {
                 </div>
               </div>
 
-              <div className="ben-outcomes">
-                <div className="ben-outcome">
-                  <div className="ben-outcome-label">
-                    Did Ben score?
+              <div className="hamza-outcomes">
+                <div className="hamza-outcome">
+                  <div className="hamza-outcome-label">
+                    Did Hamza score?
                   </div>
 
-                  <div className="ben-outcome-value">
-                    {benScored ? "Yes" : "No"}
+                  <div className="hamza-outcome-value">
+                    {hamzaScored ? "Yes" : "No"}
                   </div>
                 </div>
 
-                <div className="ben-outcome">
-                  <div className="ben-outcome-label">
-                    Did Ben assist?
+                <div className="hamza-outcome">
+                  <div className="hamza-outcome-label">
+                    Did Hamza assist?
                   </div>
 
-                  <div className="ben-outcome-value">
-                    {benAssisted ? "Yes" : "No"}
+                  <div className="hamza-outcome-value">
+                    {hamzaAssisted ? "Yes" : "No"}
                   </div>
                 </div>
               </div>
@@ -3562,7 +3513,7 @@ export default async function Home() {
         )}
 
         <h2 className="next-heading">
-          WILL BEN PLAY NEXT?
+          WILL HAMZA PLAY NEXT?
         </h2>
 
         <section className="next-card">
@@ -3679,7 +3630,7 @@ export default async function Home() {
 
                     <div className="fixture-time">
                       {date
-                        ? `${formatChileTime(fixture)} (Chile)`
+                        ? `${formatBangladeshTime(fixture)} (Bangladesh)`
                         : ""}
                     </div>
                   </div>
@@ -3742,7 +3693,7 @@ export default async function Home() {
                 Next match odds
               </h3>
               <div className="odds-mini-subtitle">
-                Ben to score first goal
+                Hamza to score first goal
               </div>
               <div className="odds-mini-match">
                 {next
@@ -3751,13 +3702,13 @@ export default async function Home() {
               </div>
 
               {numericPrice(
-                nextOdds?.benFirstGoalScorer
+                nextOdds?.hamzaFirstGoalScorer
               ) !== null ? (
                 <div className="odds-mini-row">
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
-                        nextOdds?.benFirstGoalScorer
+                        nextOdds?.hamzaFirstGoalScorer
                       )}
                     </span>
                   </div>
@@ -3771,39 +3722,39 @@ export default async function Home() {
 
             <div className="odds-mini-card">
               <h3 className="odds-mini-title">
-                Next Chile match odds
+                Next Bangladesh match odds
               </h3>
               <div className="odds-mini-subtitle">
                 1X2
               </div>
               <div className="odds-mini-match">
-                {nextChileFixture
+                {nextBangladeshFixture
                   ? fixtureName(
-                      nextChileFixture
+                      nextBangladeshFixture
                     )
-                  : "No upcoming Chile fixture"}
+                  : "No upcoming Bangladesh fixture"}
               </div>
 
               {hasComplete1X2(
-                chileOdds?.oneXTwo
+                bangladeshOdds?.oneXTwo
               ) ? (
                 <div className="odds-mini-row">
                   <div className="odds-prices">
                     <span>
                       (1) {formatOddsPrice(
-                        chileOdds?.oneXTwo?.home
+                        bangladeshOdds?.oneXTwo?.home
                       )}
                     </span>
                     <span>-</span>
                     <span>
                       (X) {formatOddsPrice(
-                        chileOdds?.oneXTwo?.draw
+                        bangladeshOdds?.oneXTwo?.draw
                       )}
                     </span>
                     <span>-</span>
                     <span>
                       (2) {formatOddsPrice(
-                        chileOdds?.oneXTwo?.away
+                        bangladeshOdds?.oneXTwo?.away
                       )}
                     </span>
                   </div>
@@ -3817,27 +3768,27 @@ export default async function Home() {
 
             <div className="odds-mini-card">
               <h3 className="odds-mini-title">
-                Next Chile match odds
+                Next Bangladesh match odds
               </h3>
               <div className="odds-mini-subtitle">
-                Ben to score first goal
+                Hamza to score first goal
               </div>
               <div className="odds-mini-match">
-                {nextChileFixture
+                {nextBangladeshFixture
                   ? fixtureName(
-                      nextChileFixture
+                      nextBangladeshFixture
                     )
-                  : "No upcoming Chile fixture"}
+                  : "No upcoming Bangladesh fixture"}
               </div>
 
               {numericPrice(
-                chileOdds?.benFirstGoalScorer
+                bangladeshOdds?.hamzaFirstGoalScorer
               ) !== null ? (
                 <div className="odds-mini-row">
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
-                        chileOdds?.benFirstGoalScorer
+                        bangladeshOdds?.hamzaFirstGoalScorer
                       )}
                     </span>
                   </div>
@@ -3857,38 +3808,30 @@ export default async function Home() {
 
         <section className="bio-card">
           <h2 className="bio-heading">
-            ABOUT BEN BRERETON DÍAZ
+            ABOUT HAMZA CHOUDHURY
           </h2>
 
           <div className="bio-content">
             <img
               className="bio-photo"
-              src="/ben-bio.jpg"
-              alt="Ben Brereton Díaz"
+              src="/hamza-bio.jpg"
+              alt="Hamza Choudhury"
             />
 
             <p>
-              Ben Brereton Díaz is a professional footballer. Born in Stoke, his father is an Englishman, but his mother is from Concepción in Chile.
+              Hamza Dewan Choudhury is a professional footballer. Born in England to a Bangladeshi mother and a father from Grenada, he was raised in a traditional Bangladeshi Muslim household. His ancestral home is in Bahubal, Habiganj District, Sylhet.
             </p>
 
             <p>
-              Originally in the Manchester United youth academy, Díaz later played junior football for Stoke, then Nottingham Forest. It was at the City Ground where he made his first-team debut, before transferring to Blackburn Rovers, where he scored 45 goals in 144 league games.
+              Born on 1 October 1997, Hamza began playing football at a very young age. He joined the Leicester City Academy at just seven years old, and by 2015, he had broken into the first-team squad. There, he attracted attention from several major European clubs.
             </p>
 
             <p>
-              An unsuccessful move to Villarreal followed, before Sheffield United gave Díaz an escape route on loan. He later moved to Southampton, after the Blades were relegated from the Premier League. But Díaz would soon play for them again, rejoining on loan in 2025.
+              He made 123 league appearances for the Foxes and enjoyed successful loan spells at Burton Albion, Watford and Sheffield United. In 2026, he made his move to the Blades permanent, signing a one-year contract.
             </p>
 
             <p>
-              A season on loan at Derby County yielded seven league goals from 40 league appearances, before Díaz opted to join Sheffield United for a third loan spell in 2026.
-            </p>
-
-            <p>
-              Born Benjamin Anthony Brereton, the talented attacker adopted his mother’s name in later life. He actually earned a combined 19 caps for the England Under-19 and Under-20 sides, before switching allegiance to La Roja in 2021.
-            </p>
-
-            <p>
-              The inclusion of Díaz in the Chile national squad came about thanks to a group of <em>Football Manager</em> players. They noticed his dual nationality in the game and called for him to be selected. The social media campaign took off, and the rest is history.
+              Hamza was eligible to play for England and Grenada. In fact, he turned out for England’s under-21 side on no fewer than seven occasions. However, in August 2024, he obtained a Bangladeshi passport and switched his allegiance in December. Hamza then made his debut for the Tigers in March 2025, scoring his first goal in June of the same year in a 2–0 win over Bhutan.
             </p>
           </div>
         </section>
@@ -3905,13 +3848,13 @@ export default async function Home() {
                   hour: "2-digit",
                   minute: "2-digit",
                   timeZone:
-                    "America/Santiago"
+                    "Asia/Dhaka"
                 }
               ).format(
                 new Date(
                   data.updated_at
                 )
-              )} (Chile Time)`
+              )} (Bangladesh Time)`
             : ""}
         </div>
       </main>
