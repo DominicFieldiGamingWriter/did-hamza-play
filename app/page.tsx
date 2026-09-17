@@ -762,8 +762,8 @@ export default async function Home() {
           margin: 0;
           font-size: clamp(
             42px,
-            6vw,
-            70px
+            5.3vw,
+            64px
           );
           line-height: 0.94;
           font-weight: 900;
@@ -776,10 +776,30 @@ export default async function Home() {
         }
 
         .top-row {
+          display: grid;
+          grid-template-columns:
+            minmax(0, 1fr)
+            96px
+            215px;
+          align-items: center;
+          gap: 18px;
+        }
+
+        .top-image-wrap {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 28px;
+          justify-content: center;
+        }
+
+        .top-image {
+          width: 96px;
+          height: 96px;
+          display: block;
+          object-fit: cover;
+          object-position: center 28%;
+          border-radius: 50%;
+          border: 4px solid rgba(255, 255, 255, .95);
+          box-shadow: 0 8px 22px rgba(0, 0, 0, .16);
         }
 
         .answer {
@@ -1305,7 +1325,9 @@ export default async function Home() {
           }
 
           .top-row {
-            display: block;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 18px;
           }
 
           .main-heading {
@@ -1313,8 +1335,17 @@ export default async function Home() {
             letter-spacing: -2.3px;
           }
 
+          .top-image-wrap {
+            justify-content: flex-start;
+          }
+
+          .top-image {
+            width: 88px;
+            height: 88px;
+          }
+
           .answer {
-            margin-top: 24px;
+            margin-top: 2px;
             min-width: 205px;
             height: 104px;
             font-size: 58px;
@@ -1410,6 +1441,11 @@ export default async function Home() {
             letter-spacing: -2px;
           }
 
+          .top-image {
+            width: 82px;
+            height: 82px;
+          }
+
           .answer {
             min-width: 195px;
             height: 98px;
@@ -1490,6 +1526,22 @@ export default async function Home() {
             </span>{" "}
             PLAY?
           </h1>
+
+          <div className="top-image-wrap">
+            <img
+              className="top-image"
+              src={
+                latestPlayed
+                  ? "/hamza-happy.png"
+                  : "/hamza-serious.png"
+              }
+              alt={
+                latestPlayed
+                  ? "Happy Hamza Choudhury"
+                  : "Serious Hamza Choudhury"
+              }
+            />
+          </div>
 
           <div
             className={
@@ -1906,20 +1958,20 @@ export default async function Home() {
             />
 
             <p>
-Hamza Dewan Choudhury is a professional footballer. Born in England to a Bangladeshi mother and a father from Grenada, he was raised in a traditional Bangladeshi Muslim household. His ancestral home is in Bahubal, Habiganj District, Sylhet.</p>
+              Hamza Dewan Choudhury is a professional footballer. Born in England to a Bangladeshi mother and a father from Grenada, he was raised in a traditional Bangladeshi Muslim household. His ancestral home is in Bahubal, Habiganj District, Sylhet.
+            </p>
 
             <p>
-Born on 1 October 1997, Hamza began playing football at a very young age. He joined the Leicester City Academy at just seven years old, eventually breaking into the first-team squad by 2015. There, he attracted attention from several major European clubs.</p>
+              Born on 1 October 1997, Hamza began playing football at a very young age. He joined the Leicester City Academy at just seven years old, and by 2015, he had broken into the first-team squad. There, he attracted attention from several major European clubs.
+            </p>
 
             <p>
-He made 123 league appearances for the Foxes and enjoyed successful loan spells at Burton Albion, Watford and Sheffield United. In 2026, he made his move to the Blades permanent, signing a one-year contract.</p>
+              He made 123 league appearances for the Foxes and enjoyed successful loan spells at Burton Albion, Watford and Sheffield United. In 2026, he made his move to the Blades permanent, signing a one-year contract.
+            </p>
 
-             <p>
-Hamza was eligible to play for England and Grenada. In fact, he turned out for England’s under-21 side on no fewer than seven occasions. However, in August 2024, he obtained a Bangladeshi passport and switched his allegiance in December. Hamza then made his debut for the Tigers in March 2025,  scoring his first goal in June of the same year in a 2–0 win over Bhutan.</p>
-            
-            <div className="bio-caption">
-              Biography section — placeholder text and image.
-            </div>
+            <p>
+              Hamza was eligible to play for England and Grenada. In fact, he turned out for England’s under-21 side on no fewer than seven occasions. However, in August 2024, he obtained a Bangladeshi passport and switched his allegiance in December. Hamza then made his debut for the Tigers in March 2025, scoring his first goal in June of the same year in a 2–0 win over Bhutan.
+            </p>
           </div>
         </section>
 
