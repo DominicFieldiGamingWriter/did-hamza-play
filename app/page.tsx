@@ -1497,12 +1497,13 @@ export default async function Home() {
         .top-row {
           display: grid;
           grid-template-columns:
-            minmax(0, 1fr)
+            auto
             86px
             215px;
           align-items: center;
           column-gap: 8px;
           row-gap: 0;
+          justify-content: start;
         }
 
         .top-image-wrap {
