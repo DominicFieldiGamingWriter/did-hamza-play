@@ -1863,6 +1863,16 @@ async function getConsensusMatchOdds(
         playerName
       );
 
+    /*
+     * Display fallback: the requested first-goalscorer price is
+     * currently fixed at 29.00 when Betway does not return a price.
+     * This is intentionally a UI fallback, not a live BSD consensus
+     * value. Remove it once a reliable bookmaker feed is connected.
+     */
+    const firstGoalScorerPrice =
+      betwayFirstGoalScorer ??
+      29.00;
+
     return {
       fixtureId,
       oneXTwo:
@@ -1870,7 +1880,7 @@ async function getConsensusMatchOdds(
           summaryPayload
         ),
       hamzaFirstGoalScorer:
-        betwayFirstGoalScorer,
+        firstGoalScorerPrice,
       updatedAt:
         summaryPayload?.last_update_at ??
         summaryPayload?.updated_at ??
