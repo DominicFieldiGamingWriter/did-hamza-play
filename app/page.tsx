@@ -967,35 +967,98 @@ function getConsensusFirstGoalScorer(
   playerId: number,
   playerName: string
 ): number | null {
-  const results =
-    Array.isArray(payload?.results)
-      ? payload.results.filter(
-          (row: any) =>
-            normaliseToken(
-              row?.bookmaker_slug ??
-              row?.bookmaker
-            ) === "consensus"
+  const results = Array.isArray(payload?.results)
+    ? payload.results
+    : [];
+
+  const findInRows = (rows: any[]): number | null => {
+    for (const row of rows) {
+      const serialised = JSON.stringify(row ?? {}).toLowerCase();
+
+      if (
+        serialised.includes("first") &&
+        (
+          serialised.includes("goal") ||
+          serialised.includes("scor")
         )
-      : [];
-
-  for (const row of results) {
-    const serialised =
-      JSON.stringify(row ?? {})
-        .toLowerCase();
-
-    if (
-      serialised.includes("first") &&
-      (
-        serialised.includes("goal") ||
-        serialised.includes("scor")
-      )
-    ) {
-      const price =
-        selectionPriceForPlayer(
+      ) {
+        const price = selectionPriceForPlayer(
           row,
           playerId,
           playerName
         );
+
+        if (price !== null) {
+          return price;
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const consensusRows = results.filter(
+    (row: any) =>
+      normaliseToken(
+        row?.bookmaker_slug ??
+        row?.bookmaker
+      ) === "consensus"
+  );
+
+  const consensusPrice = findInRows(consensusRows);
+
+  if (consensusPrice !== null) {
+    return consensusPrice;
+  }
+
+  // Fall back to individual bookmaker rows when BSD does not expose
+  // the player's first-goalscorer price in the consensus result.
+  const anyResultPrice = findInRows(results);
+
+  if (anyResultPrice !== null) {
+    return anyResultPrice;
+  }
+
+  const markets = Array.isArray(payload?.markets)
+    ? payload.markets
+    : [];
+
+  for (const market of markets) {
+    if (!marketIsFirstGoalScorer(market)) {
+      continue;
+    }
+
+    const bookmakers = Array.isArray(market?.bookmakers)
+      ? market.bookmakers
+      : [];
+
+    const orderedBookmakers = [
+      ...bookmakers.filter(
+        (book: any) =>
+          normaliseToken(
+            book?.bookmaker_slug ??
+            book?.slug ??
+            book?.bookmaker ??
+            book?.name
+          ) === "consensus"
+      ),
+      ...bookmakers.filter(
+        (book: any) =>
+          normaliseToken(
+            book?.bookmaker_slug ??
+            book?.slug ??
+            book?.bookmaker ??
+            book?.name
+          ) !== "consensus"
+      )
+    ];
+
+    for (const book of orderedBookmakers) {
+      const price = selectionPriceForPlayer(
+        book,
+        playerId,
+        playerName
+      );
 
       if (price !== null) {
         return price;
@@ -1003,45 +1066,8 @@ function getConsensusFirstGoalScorer(
     }
   }
 
-  const markets =
-    Array.isArray(payload?.markets)
-      ? payload.markets
-      : [];
-
-  for (const market of markets) {
-    if (
-      !marketIsFirstGoalScorer(
-        market
-      )
-    ) {
-      continue;
-    }
-
-    const book =
-      consensusBookmaker(
-        payload,
-        market?.bookmakers
-      );
-
-    if (!book) {
-      continue;
-    }
-
-    const price =
-      selectionPriceForPlayer(
-        book,
-        playerId,
-        playerName
-      );
-
-    if (price !== null) {
-      return price;
-    }
-  }
-
   return null;
 }
-
 function hasComplete1X2(
   odds: any
 ): boolean {
@@ -1825,6 +1851,14 @@ export default async function Home() {
           font-weight: 900;
         }
 
+        .detail-stat-value.yes {
+          color: #006a4e;
+        }
+
+        .detail-stat-value.no {
+          color: #f42a41;
+        }
+
         .hamza-outcomes {
           margin-top: 14px;
           border-top:
@@ -2601,7 +2635,13 @@ export default async function Home() {
                     Started
                   </div>
 
-                  <div className="detail-stat-value">
+                  <div
+                    className={
+                      appearance?.started === true
+                        ? "detail-stat-value yes"
+                        : "detail-stat-value no"
+                    }
+                  >
                     {appearance?.started ===
                     true
                       ? "Yes"
@@ -2614,7 +2654,13 @@ export default async function Home() {
                     Bench
                   </div>
 
-                  <div className="detail-stat-value">
+                  <div
+                    className={
+                      appearance?.bench === true
+                        ? "detail-stat-value yes"
+                        : "detail-stat-value no"
+                    }
+                  >
                     {appearance?.bench ===
                     true
                       ? "Yes"
