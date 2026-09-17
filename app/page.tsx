@@ -1906,16 +1906,16 @@ export default async function Home() {
             />
 
             <p>
-Hamza Dewan Choudhury is a professional footballer. Born in England to a Bangladeshi mother and a father from Grenada, he was raised in a traditional Bangladeshi Muslim household. His ancestral home is in Bahubal, Habiganj District, Sylhet.                    </p>
+Hamza Dewan Choudhury is a professional footballer. Born in England to a Bangladeshi mother and a father from Grenada, he was raised in a traditional Bangladeshi Muslim household. His ancestral home is in Bahubal, Habiganj District, Sylhet.</p>
 
             <p>
-Hamza was born on 1 October 1997. He began playing football at a very young age, joining the Leicester City Academy at just seven years old. By 2015, he had broken into the first-team squad, attracting attention from several major European clubs.            </p>
+Hamza was born on 1 October 1997. He began playing football at a very young age, joining the Leicester City Academy at just seven years old. By 2015, he had broken into the first-team squad, attracting attention from several major European clubs.</p>
 
             <p>
-He made 123 league appearances for the Foxes and enjoyed successful loan spells at Burton Albion, Watford and Sheffield United. In 2026, he made his move to the Blades permanent, signing a one-year contract.            </p>
+He made 123 league appearances for the Foxes and enjoyed successful loan spells at Burton Albion, Watford and Sheffield United. In 2026, he made his move to the Blades permanent, signing a one-year contract.</p>
 
              <p>
-Hamza was eligible to play for England and Grenada and did, in fact, turn out for England’s under-21 side on no fewer than seven occasions. However, in August 2024, he obtained a Bangladeshi passport before switching his allegiance in December. Hamza made his debut for the Tigers in March 2025, before scoring his first goal in June of the same year in a 2–0 win over Bhutan.            </p>
+Hamza was eligible to play for England and Grenada. In fact, he turned out for England’s under-21 side on no fewer than seven occasions. However, in August 2024, he obtained a Bangladeshi passport and switched his allegiance in December. Hamza then made his debut for the Tigers in March 2025,  scoring his first goal in June of the same year in a 2–0 win over Bhutan.</p>
             
             <div className="bio-caption">
               Biography section — placeholder text and image.
