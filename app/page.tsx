@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Did Ben Brereton Díaz Play?",
   description:
-    "Did Ben Brereton Díaz play for Sheffield United or Chile? Check his latest appearance, next match, fixtures and odds.",
+    "Did Ben Brereton Díaz play in his club's last game? What about Chile? Check his latest appearance, next match, fixtures and odds.",
   openGraph: {
     title: "Did Ben Brereton Díaz Play?",
     description:
