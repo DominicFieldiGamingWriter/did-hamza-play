@@ -1906,13 +1906,21 @@ export default async function Home() {
             />
 
             <p>
-              Hamza Choudhury is a professional footballer whose career has included club football in England and international football. This section is a placeholder for a fuller biography.
+              Hamza Dewan Choudhury is a professional footballer. Born in England, to a Bangladeshi mother and a father from Grenada, he was raised in a traditional Bangladeshi Muslim household. His ancestral home is in Bahubal, Habiganj District, Sylhet. 
+                    </p>
+
+            <p>
+              Hamza came into the world on the 1st of October 1997. He played football from a very young age, joining the Leicester City Academy at just seven years old. By 2015, he'd broken into the first team squad, drawing attention from several big European clubs.
             </p>
 
             <p>
-              The final version can cover his background, playing career, position, clubs, international appearances and other key milestones in a concise, Wikipedia-style format.
+              He made 123 league appearances for the Foxes, and enjoyed successful loan spells at Burton Albion, Watford and Sheffield United. In 2026, he made his move to the Blades permanent, signing a one-year contract.
             </p>
 
+             <p>
+              Hamza was eligible to play for England and Grenada, and did in fact turn out for Englanbd's Under-21 side on no fewer than seven occassions. However, in August 2024, he obtained a Bangladeshi passport, before swithching his allegiance in December. Hamza made his debut for the Tigers in March 2025, before notching his first goal in June of that same year in a 2-0 win over Bhutan. 
+            </p>
+            
             <div className="bio-caption">
               Biography section — placeholder text and image.
             </div>
