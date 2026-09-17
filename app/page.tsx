@@ -203,7 +203,7 @@ function fixtureTimes(
         {formatUKTime(
           fixture
         )}{" "}
-        (UK)
+        (UK Time)
       </span>
 
       <span>
@@ -2659,7 +2659,7 @@ export default async function Home() {
 
                     <div className="fixture-time">
                       {date
-                        ? `${formatUKTime(fixture)} (UK)`
+                        ? `${formatUKTime(fixture)} (UK Time)`
                         : ""}
                     </div>
 
@@ -2873,7 +2873,7 @@ export default async function Home() {
                 new Date(
                   data.updated_at
                 )
-              )} (Bangladesh)`
+              )} (Bangladesh Time)`
             : ""}
         </div>
       </main>
