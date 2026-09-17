@@ -1177,6 +1177,44 @@ function isFirstGoalScorerMarketText(value: any): boolean {
   );
 }
 
+function isConsensusBookmakerValue(value: any): boolean {
+  const token = normaliseToken(value);
+
+  return (
+    token === "consensus" ||
+    token === "consensusavg" ||
+    token === "consensusprice" ||
+    token === "consensusodds"
+  );
+}
+
+function marketTextFromNode(node: any): string {
+  if (!node || typeof node !== "object") {
+    return "";
+  }
+
+  const fields = [
+    node.market,
+    node.market_kind,
+    node.market_family,
+    node.market_name,
+    node.market_title,
+    node.name,
+    node.label,
+    node.kind,
+    node.type,
+    node.code,
+    node.market_code,
+    node.market_type,
+    node.selection_type
+  ];
+
+  return fields
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => String(value))
+    .join(" ");
+}
+
 function getConsensusFirstGoalScorer(
   payload: any,
   playerId: number,
@@ -1186,108 +1224,74 @@ function getConsensusFirstGoalScorer(
     return null;
   }
 
-  const results =
-    Array.isArray(payload?.results)
-      ? payload.results
-      : [];
+  /*
+   * The Odds API attached to BSD is the authoritative source here.
+   * Its event endpoint can return the bookmaker/market hierarchy rather
+   * than the flat v2 `results` shape. Walk that hierarchy and only read
+   * a player's price from an object explicitly identified as consensus.
+   * Never choose a bookmaker price merely because it happens to be first.
+   */
+  const visited = new WeakSet<object>();
 
-  // The documented free-key odds feed returns one consensus row
-  // per event × market × outcome. Never fall back to an individual
-  // bookmaker here because the UI is specifically supposed to show
-  // the consensus price.
-  const consensusRows =
-    results.filter((row: any) => {
-      const bookmaker =
-        normaliseToken(
-          row?.bookmaker_slug ??
-          row?.bookmaker ??
-          row?.bookmaker_name
+  function walk(
+    node: any,
+    consensusContext: boolean,
+    firstGoalContext: boolean
+  ): number | null {
+    if (node === null || node === undefined) {
+      return null;
+    }
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const price = walk(
+          item,
+          consensusContext,
+          firstGoalContext
         );
 
-      if (bookmaker !== "consensus") {
-        return false;
+        if (price !== null) {
+          return price;
+        }
       }
 
-      const marketFields = [
-        row?.market,
-        row?.market_kind,
-        row?.market_family,
-        row?.market_name,
-        row?.name,
-        row?.kind,
-        row?.type,
-        row?.code,
-        row?.market_code
-      ];
-
-      return marketFields.some(
-        isFirstGoalScorerMarketText
-      );
-    });
-
-  for (const row of consensusRows) {
-    const price =
-      selectionPriceForPlayer(
-        row,
-        playerId,
-        playerName
-      );
-
-    if (price !== null) {
-      return price;
+      return null;
     }
-  }
 
-  // Some responses expose a nested markets array instead of flat
-  // result rows. Again, only accept a bookmaker explicitly labelled
-  // consensus.
-  const markets =
-    Array.isArray(payload?.markets)
-      ? payload.markets
-      : [];
+    if (typeof node !== "object") {
+      return null;
+    }
 
-  for (const market of markets) {
-    const marketFields = [
-      market?.market,
-      market?.market_kind,
-      market?.market_family,
-      market?.market_name,
-      market?.name,
-      market?.kind,
-      market?.type,
-      market?.code,
-      market?.market_code
-    ];
+    if (visited.has(node)) {
+      return null;
+    }
+
+    visited.add(node);
+
+    const bookmakerValue =
+      node.bookmaker_slug ??
+      node.bookmaker ??
+      node.bookmaker_name ??
+      node.source ??
+      null;
+
+    const nextConsensusContext =
+      consensusContext ||
+      isConsensusBookmakerValue(bookmakerValue);
+
+    const nextFirstGoalContext =
+      firstGoalContext ||
+      isFirstGoalScorerMarketText(
+        marketTextFromNode(node)
+      );
 
     if (
-      !marketFields.some(
-        isFirstGoalScorerMarketText
-      )
+      nextConsensusContext &&
+      nextFirstGoalContext
     ) {
-      continue;
-    }
-
-    const bookmakers =
-      Array.isArray(market?.bookmakers)
-        ? market.bookmakers
-        : [];
-
-    for (const book of bookmakers) {
-      const bookmaker =
-        normaliseToken(
-          book?.bookmaker_slug ??
-          book?.slug ??
-          book?.bookmaker ??
-          book?.name
-        );
-
-      if (bookmaker !== "consensus") {
-        continue;
-      }
-
       const price =
         selectionPriceForPlayer(
-          book,
+          node,
           playerId,
           playerName
         );
@@ -1296,20 +1300,26 @@ function getConsensusFirstGoalScorer(
         return price;
       }
     }
-  }
 
-  // Finally, support a first-goalscorer market represented directly
-  // inside the odds summary object, should BSD ever add one there.
-  if (payload?.odds) {
-    const oddsText =
-      JSON.stringify(
-        payload.odds
-      ).toLowerCase();
+    /*
+     * Some BSD responses put the consensus value in a dedicated object
+     * rather than naming the bookmaker `consensus`. If the current node
+     * itself contains explicit consensus wording and is a first-goal
+     * market, inspect it too.
+     */
+    const nodeText = JSON.stringify(node).toLowerCase();
+    const explicitConsensus =
+      nodeText.includes("consensus") ||
+      nodeText.includes("consensus avg") ||
+      nodeText.includes("consensus price");
 
-    if (isFirstGoalScorerMarketText(oddsText)) {
+    if (
+      explicitConsensus &&
+      nextFirstGoalContext
+    ) {
       const price =
         selectionPriceForPlayer(
-          payload.odds,
+          node,
           playerId,
           playerName
         );
@@ -1318,9 +1328,27 @@ function getConsensusFirstGoalScorer(
         return price;
       }
     }
+
+    for (const [key, child] of Object.entries(node)) {
+      const price = walk(
+        child,
+        nextConsensusContext,
+        nextFirstGoalContext
+      );
+
+      if (price !== null) {
+        return price;
+      }
+    }
+
+    return null;
   }
 
-  return null;
+  return walk(
+    payload,
+    false,
+    false
+  );
 }
 
 function hasComplete1X2(
@@ -1421,7 +1449,7 @@ async function getConsensusMatchOdds(
     try {
       const feedResponse =
         await fetch(
-          `https://sports.bzzoiro.com/api/v2/odds/?event_id=${fixtureId}&limit=200`,
+          `https://sports.bzzoiro.com/odds/api/events/${fixtureId}/?sport=football`,
           {
             headers,
             next: {
