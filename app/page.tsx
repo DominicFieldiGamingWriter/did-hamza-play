@@ -1495,21 +1495,16 @@ export default async function Home() {
         }
 
         .top-row {
-          display: grid;
-          grid-template-columns:
-            auto
-            86px
-            215px;
+          display: flex;
           align-items: center;
-          column-gap: 8px;
-          row-gap: 0;
-          justify-content: start;
+          gap: 8px;
         }
 
         .top-image-wrap {
           display: flex;
           align-items: center;
           justify-content: center;
+          margin-left: auto;
         }
 
         .top-image {
@@ -2223,6 +2218,7 @@ export default async function Home() {
 
           .top-image-wrap {
             justify-content: flex-start;
+            margin-left: 0;
           }
 
           .top-image {
