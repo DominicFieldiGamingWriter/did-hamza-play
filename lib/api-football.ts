@@ -379,7 +379,7 @@ function getFixtureTeamName(
   return "Unknown";
 }
 
-async function getTeamById(
+async function getTeamByIdInternal(
   id: number
 ) {
   if (
@@ -486,7 +486,7 @@ async function resolveFixture(
   ) {
     homeName =
       getTeamName(
-        await getTeamById(
+        await getTeamByIdInternal(
           homeId
         )
       );
@@ -499,7 +499,7 @@ async function resolveFixture(
   ) {
     awayName =
       getTeamName(
-        await getTeamById(
+        await getTeamByIdInternal(
           awayId
         )
       );
@@ -589,6 +589,24 @@ export async function findPlayer(
   return responseArray(
     data
   );
+}
+
+export async function getTeamById(
+  id: number
+) {
+  if (!Number.isFinite(id) || id <= 0) {
+    return null;
+  }
+
+  try {
+    const data = await bsdGet<any>(
+      `/teams/${id}/`
+    );
+
+    return responseObject(data);
+  } catch {
+    return null;
+  }
 }
 
 export async function findTeam(
