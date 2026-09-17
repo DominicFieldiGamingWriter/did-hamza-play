@@ -2306,8 +2306,8 @@ export default async function Home() {
         }
 
         .top-image {
-          width: 92px;
-          height: 92px;
+          width: 108px;
+          height: 108px;
           display: block;
           object-fit: contain;
           object-position: center;
@@ -3247,6 +3247,11 @@ export default async function Home() {
                   ? "Happy Ben Brereton Díaz"
                   : "Serious Ben Brereton Díaz"
               }
+              width={108}
+              height={108}
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
             />
           </div>
 
@@ -3858,10 +3863,7 @@ export default async function Home() {
           <div className="bio-content">
             <img
               className="bio-photo"
-              src={
-                data.player_photo ??
-                "/ben-bio.jpg"
-              }
+              src="/ben-bio.jpg"
               alt="Ben Brereton Díaz"
             />
 
