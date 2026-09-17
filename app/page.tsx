@@ -2306,7 +2306,7 @@ function appearanceSummary(
       appearance?.subbed_on_minute !==
         undefined
     ) {
-      return "Didn't start. Sub in.";
+      return "Didn't start. Subbed on.";
     }
 
     return "Didn't start. Didn't come on.";
@@ -2335,7 +2335,7 @@ function appearanceSummary(
     subbedOff !== null
   ) {
     return (
-      `Started. Sub out. Played ${
+      `Started. Subbed off. Played ${
         minutes ??
         subbedOff
       } mins.`
@@ -3804,7 +3804,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Subbed on
+                    Sub in
                   </div>
 
                   <div className="detail-stat-value">
@@ -3821,7 +3821,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Subbed off
+                    Sub out
                   </div>
 
                   <div className="detail-stat-value">
