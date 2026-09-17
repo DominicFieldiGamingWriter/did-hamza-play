@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { getSupabaseAdmin } from "../lib/supabase";
-import { findTeam, getTeamFixtures } from "../lib/api-football";
+import { findPlayer, findTeam, getTeamFixtures } from "../lib/api-football";
 
 function dateValue(value: any): string | null {
   if (!value) return null;
@@ -530,6 +530,8 @@ function normaliseToken(value: any): string {
   return String(value ?? "")
     .trim()
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "");
 }
 
@@ -1393,17 +1395,20 @@ async function getNextBangladeshFixture() {
   }
 }
 
-function betwayCandidateEventIds(fixture: any): number[] {
+function oneXBetCandidateEventIds(fixture: any): number[] {
   const candidates = [
-    fixture?.betway_event_id,
-    fixture?.betwayEventId,
-    fixture?.external_betway_event_id,
-    fixture?.externalBetwayEventId,
-    fixture?.betway?.event_id,
-    fixture?.betway?.eventId,
-    fixture?.external?.betway?.event_id,
-    fixture?.external?.betway?.eventId,
-    fixture?.id
+    fixture?.one_xbet_event_id,
+    fixture?.oneXBetEventId,
+    fixture?.xbet_event_id,
+    fixture?.xbetEventId,
+    fixture?.external_1xbet_event_id,
+    fixture?.external1xbetEventId,
+    fixture?.external_xbet_event_id,
+    fixture?.externalXbetEventId,
+    fixture?.xbet?.event_id,
+    fixture?.xbet?.eventId,
+    fixture?.oneXBet?.event_id,
+    fixture?.oneXBet?.eventId
   ];
 
   return Array.from(
@@ -1434,77 +1439,584 @@ function looksLikeFirstGoalScorerText(value: any): boolean {
     return false;
   }
 
-  const first =
+  return (
     text.includes("first goalscorer") ||
     text.includes("first goal scorer") ||
     text.includes("first scorer") ||
-    text.includes("first to score") ||
+    text.includes("to score first goal") ||
+    text.includes("score first goal") ||
+    text.includes("player to score first") ||
     text.includes("first player to score") ||
-    text.includes("first goal");
-
-  return (
-    first &&
-    (
-      text.includes("scor") ||
-      text.includes("player") ||
-      text.includes("goal")
-    )
+    text.includes("1st goalscorer") ||
+    text.includes("1st goal scorer") ||
+    text.includes("1st scorer") ||
+    text.includes("first to score")
   );
 }
 
-function genericPlayerNameMatch(
+function oneXBetSearchTeamText(
   node: any,
-  playerName: string
-): boolean {
-  const wanted = normaliseToken(playerName);
-  const wantedSurname = normaliseToken(
-    surname(playerName)
+  side: "home" | "away"
+): string {
+  return String(
+    side === "home"
+      ? node?.O1 ??
+        node?.o1 ??
+        node?.home ??
+        node?.home_name ??
+        node?.homeTeam ??
+        node?.home_team
+      : node?.O2 ??
+        node?.o2 ??
+        node?.away ??
+        node?.away_name ??
+        node?.awayTeam ??
+        node?.away_team ??
+        ""
+  ).trim();
+}
+
+function oneXBetEventIdFromNode(node: any): number | null {
+  const values = [
+    node?.I,
+    node?.i,
+    node?.id,
+    node?.Id,
+    node?.event_id,
+    node?.eventId,
+    node?.game_id,
+    node?.gameId
+  ];
+
+  for (const value of values) {
+    const id = Number(value);
+
+    if (Number.isFinite(id) && id > 0) {
+      return id;
+    }
+  }
+
+  return null;
+}
+
+function oneXBetEventTimeFromNode(node: any): number {
+  const values = [
+    node?.S,
+    node?.s,
+    node?.start,
+    node?.start_time,
+    node?.startTime,
+    node?.kickoff,
+    node?.kickoff_at,
+    node?.event_date,
+    node?.date
+  ];
+
+  for (const value of values) {
+    const numeric = Number(value);
+
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric < 100000000000
+        ? numeric * 1000
+        : numeric;
+    }
+
+    const parsed = new Date(String(value ?? "")).getTime();
+
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
+function normaliseOneXBetEventName(value: any): string {
+  return normaliseToken(
+    String(value ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+  );
+}
+
+function oneXBetEventMatchScore(
+  candidate: any,
+  fixture: any
+): number {
+  const wantedHome = normaliseOneXBetEventName(
+    teamName(fixture, "home")
+  );
+  const wantedAway = normaliseOneXBetEventName(
+    teamName(fixture, "away")
+  );
+  const candidateHome = normaliseOneXBetEventName(
+    oneXBetSearchTeamText(candidate, "home")
+  );
+  const candidateAway = normaliseOneXBetEventName(
+    oneXBetSearchTeamText(candidate, "away")
   );
 
-  const names = [
+  if (!wantedHome || !wantedAway) {
+    return 0;
+  }
+
+  if (
+    candidateHome === wantedHome &&
+    candidateAway === wantedAway
+  ) {
+    return 1000;
+  }
+
+  if (
+    candidateHome.includes(wantedHome) &&
+    candidateAway.includes(wantedAway)
+  ) {
+    return 900;
+  }
+
+  if (
+    wantedHome.includes(candidateHome) &&
+    wantedAway.includes(candidateAway)
+  ) {
+    return 800;
+  }
+
+  const wantedHomeSurname = normaliseOneXBetEventName(
+    wantedHome
+  );
+  const wantedAwaySurname = normaliseOneXBetEventName(
+    wantedAway
+  );
+
+  let score = 0;
+
+  if (
+    candidateHome &&
+    wantedHomeSurname &&
+    (candidateHome.includes(wantedHomeSurname) ||
+      wantedHomeSurname.includes(candidateHome))
+  ) {
+    score += 350;
+  }
+
+  if (
+    candidateAway &&
+    wantedAwaySurname &&
+    (candidateAway.includes(wantedAwaySurname) ||
+      wantedAwaySurname.includes(candidateAway))
+  ) {
+    score += 350;
+  }
+
+  return score;
+}
+
+function collectOneXBetEventCandidates(
+  payload: any
+): any[] {
+  const results: any[] = [];
+  const visited = new WeakSet<object>();
+
+  function walk(node: any) {
+    if (node === null || node === undefined) {
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        walk(item);
+      }
+      return;
+    }
+
+    if (typeof node !== "object") {
+      return;
+    }
+
+    if (visited.has(node)) {
+      return;
+    }
+
+    visited.add(node);
+
+    const eventId = oneXBetEventIdFromNode(node);
+    const home = oneXBetSearchTeamText(node, "home");
+    const away = oneXBetSearchTeamText(node, "away");
+
+    if (eventId && home && away) {
+      results.push({
+        node,
+        eventId,
+        home,
+        away,
+        eventTime:
+          oneXBetEventTimeFromNode(node)
+      });
+    }
+
+    for (const child of Object.values(node)) {
+      walk(child);
+    }
+  }
+
+  walk(payload);
+  return results;
+}
+
+async function fetch1xBetJson(
+  path: string,
+  params: Record<string, string | number>,
+  signal: AbortSignal
+): Promise<any | null> {
+  const bases = [
+    "https://1xbet.com/LineFeed/",
+    "https://1xbet.com/service-api/LineFeed/"
+  ];
+
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    query.set(key, String(value));
+  }
+
+  for (const base of bases) {
+    try {
+      const response = await fetch(
+        `${base}${path}?${query.toString()}`,
+        {
+          headers: {
+            Accept:
+              "application/json, text/plain, */*",
+            "Accept-Language":
+              "en-GB,en;q=0.9",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
+          },
+          cache: "no-store",
+          signal
+        }
+      );
+
+      if (!response.ok) {
+        console.warn(
+          `1XBET ${path} failed (${response.status}) via ${base}`
+        );
+        continue;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.warn(
+        `1XBET ${path} request error via ${base}:`,
+        error
+      );
+    }
+  }
+
+  return null;
+}
+
+async function find1xBetEventId(
+  fixture: any,
+  signal: AbortSignal
+): Promise<number | null> {
+  const directIds =
+    oneXBetCandidateEventIds(fixture);
+
+  if (directIds.length) {
+    return directIds[0];
+  }
+
+  const home = teamName(fixture, "home");
+  const away = teamName(fixture, "away");
+  const searchText = `${home} ${away}`.trim();
+
+  if (!searchText) {
+    return null;
+  }
+
+  const payload = await fetch1xBetJson(
+    "Web_SearchZip",
+    {
+      text: searchText,
+      limit: 50,
+      lng: "en"
+    },
+    signal
+  );
+
+  if (!payload) {
+    return null;
+  }
+
+  const candidates =
+    collectOneXBetEventCandidates(
+      payload
+    );
+
+  const fixtureTime = fixtureTimestamp(
+    fixture
+  );
+
+  const ranked = candidates
+    .map((candidate) => {
+      const baseScore = oneXBetEventMatchScore(
+        candidate.node,
+        fixture
+      );
+
+      const distance =
+        fixtureTime && candidate.eventTime
+          ? Math.abs(
+              fixtureTime -
+                candidate.eventTime
+            )
+          : Number.MAX_SAFE_INTEGER;
+
+      const timeBonus =
+        distance === Number.MAX_SAFE_INTEGER
+          ? 0
+          : Math.max(
+              0,
+              150 -
+                Math.round(
+                  distance /
+                    (60 * 60 * 1000)
+                )
+            );
+
+      return {
+        ...candidate,
+        score:
+          baseScore + timeBonus,
+        distance
+      };
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+
+      return a.distance - b.distance;
+    });
+
+  const best = ranked[0];
+
+  if (!best || oneXBetEventMatchScore(best.node, fixture) < 700) {
+    console.warn(
+      `1XBET event not found for ${home} vs ${away}`
+    );
+    return null;
+  }
+
+  console.info(
+    `1XBET event matched: ${best.eventId} for ${home} vs ${away}`
+  );
+
+  return best.eventId;
+}
+
+function extractOneXBetNodeText(
+  node: any
+): string {
+  if (!node || typeof node !== "object") {
+    return "";
+  }
+
+  const values = [
+    node?.G,
+    node?.g,
+    node?.N,
+    node?.n,
+    node?.Name,
+    node?.name,
+    node?.L,
+    node?.l,
+    node?.LE,
+    node?.Market,
+    node?.market,
+    node?.marketName,
+    node?.market_name,
+    node?.marketTitle,
+    node?.market_title,
+    node?.T,
+    node?.type,
+    node?.Type,
+    node?.code,
+    node?.Code,
+    node?.PN,
+    node?.PlayerName,
     node?.player_name,
     node?.playerName,
-    node?.player?.name,
-    node?.player?.full_name,
-    node?.player?.fullName,
+    node?.selection_name,
+    node?.selectionName,
+    node?.label
+  ];
+
+  return values
+    .filter(
+      (value) =>
+        value !== null &&
+        value !== undefined
+    )
+    .map((value) => String(value))
+    .join(" ");
+}
+
+function extractOneXBetPlayerText(
+  node: any
+): string {
+  if (!node || typeof node !== "object") {
+    return "";
+  }
+
+  const values = [
+    node?.player_name,
+    node?.playerName,
+    node?.PlayerName,
+    node?.PN,
     node?.name,
+    node?.Name,
+    node?.N,
+    node?.n,
     node?.label,
     node?.selection_name,
     node?.selectionName,
-    node?.selection,
     node?.outcome_name,
     node?.outcomeName,
+    typeof node?.selection === "string"
+      ? node.selection
+      : null,
     typeof node?.outcome === "string"
       ? node.outcome
       : null
   ];
 
-  return names.some((value) => {
-    const token = normaliseToken(value);
+  return values
+    .filter(
+      (value) =>
+        value !== null &&
+        value !== undefined
+    )
+    .map((value) => String(value))
+    .join(" ");
+}
 
-    if (!token) {
-      return false;
+function oneXBetPlayerMatches(
+  node: any,
+  playerId: number,
+  playerName: string
+): boolean {
+  const directIds = [
+    node?.player_id,
+    node?.playerId,
+    node?.PlayerId,
+    node?.PID,
+    node?.selection?.player_id,
+    node?.selection?.playerId,
+    node?.selection?.PlayerId,
+    node?.selection?.player?.id,
+    node?.selection?.player?.player_id
+  ];
+
+  if (
+    directIds.some(
+      (value) => Number(value) === playerId
+    )
+  ) {
+    return true;
+  }
+
+  const nodeText = normaliseToken(
+    extractOneXBetPlayerText(node)
+  );
+
+  if (!nodeText) {
+    return false;
+  }
+
+  const parts = String(playerName ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const aliases = new Set<string>();
+
+  if (playerName) {
+    aliases.add(normaliseToken(playerName));
+  }
+
+  if (parts.length >= 1) {
+    aliases.add(
+      normaliseToken(parts[parts.length - 1])
+    );
+  }
+
+  // Ben Brereton Díaz is frequently listed as
+  // "Ben Brereton" or "Brereton" by bookmakers.
+  if (parts.length >= 2) {
+    const firstName = normaliseToken(parts[0]);
+    const mainSurname = normaliseToken(
+      parts[parts.length - 2]
+    );
+
+    if (firstName && mainSurname) {
+      aliases.add(`${firstName}${mainSurname}`);
     }
 
-    if (wanted && token === wanted) {
-      return true;
+    if (mainSurname.length >= 5) {
+      aliases.add(mainSurname);
     }
+  }
 
+  for (const alias of aliases) {
     if (
-      wantedSurname &&
-      token === wantedSurname
+      alias &&
+      alias.length >= 5 &&
+      (nodeText === alias || nodeText.includes(alias))
     ) {
       return true;
     }
+  }
 
-    return (
-      wantedSurname.length >= 5 &&
-      token.includes(wantedSurname)
-    );
-  });
+  return false;
 }
 
-function extractFirstGoalScorerPriceFromBetway(
+function oneXBetPriceFromNode(
+  node: any
+): number | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+
+  const directKeys = [
+    "C",
+    "c",
+    "price",
+    "Price",
+    "odds",
+    "Odds",
+    "coefficient",
+    "Coefficient",
+    "decimal_odds",
+    "decimalOdds",
+    "value",
+    "Value"
+  ];
+
+  for (const key of directKeys) {
+    const value = node?.[key];
+    const price = numericPrice(value);
+
+    if (price !== null) {
+      return price;
+    }
+  }
+
+  return null;
+}
+
+function extractFirstGoalScorerPriceFrom1xBet(
   payload: any,
   playerId: number,
   playerName: string
@@ -1514,24 +2026,16 @@ function extractFirstGoalScorerPriceFromBetway(
   }
 
   const visited = new WeakSet<object>();
+  const ancestry: any[] = [];
 
-  function walk(
-    node: any,
-    firstGoalContext: boolean
-  ): number | null {
-    if (
-      node === null ||
-      node === undefined
-    ) {
+  function walk(node: any): number | null {
+    if (node === null || node === undefined) {
       return null;
     }
 
     if (Array.isArray(node)) {
       for (const item of node) {
-        const price = walk(
-          item,
-          firstGoalContext
-        );
+        const price = walk(item);
 
         if (price !== null) {
           return price;
@@ -1550,263 +2054,155 @@ function extractFirstGoalScorerPriceFromBetway(
     }
 
     visited.add(node);
+    ancestry.push(node);
 
-    const nodeText = [
-      node.market,
-      node.marketName,
-      node.market_name,
-      node.marketTitle,
-      node.market_title,
-      node.name,
-      node.label,
-      node.cname,
-      node.cName,
-      node.type,
-      node.code
-    ]
-      .filter((value) =>
-        value !== null &&
-        value !== undefined
-      )
-      .map((value) => String(value))
-      .join(" ");
-
-    const nextFirstGoalContext =
-      firstGoalContext ||
-      looksLikeFirstGoalScorerText(
-        nodeText
-      );
-
-    const directPlayerId = [
-      node.player_id,
-      node.playerId,
-      node.player?.id,
-      node.player?.player_id,
-      node.player?.playerId,
-      node.selection?.player_id,
-      node.selection?.playerId,
-      node.selection?.player?.id
-    ].some(
-      (value) =>
-        Number(value) === playerId
-    );
-
-    const playerMatch =
-      directPlayerId ||
-      genericPlayerNameMatch(
-        node,
-        playerName
+    const firstGoalContext =
+      ancestry.some((ancestor) =>
+        looksLikeFirstGoalScorerText(
+          extractOneXBetNodeText(
+            ancestor
+          )
+        )
       );
 
     if (
-      nextFirstGoalContext &&
-      playerMatch
+      firstGoalContext &&
+      oneXBetPlayerMatches(
+        node,
+        playerId,
+        playerName
+      )
     ) {
-      const directPrice = priceFromNode(node);
+      const directPrice =
+        oneXBetPriceFromNode(node);
 
       if (directPrice !== null) {
+        ancestry.pop();
         return directPrice;
       }
 
-      const nestedPriceKeys = [
+      const nestedKeys = [
         "price",
+        "Price",
         "odds",
-        "decimal_odds",
-        "decimalOdds",
-        "current_price",
-        "currentPrice",
-        "current_odds",
-        "currentOdds"
+        "Odds",
+        "C",
+        "c"
       ];
 
-      for (const key of nestedPriceKeys) {
-        const value = node[key];
+      for (const key of nestedKeys) {
+        const value = node?.[key];
+        const price = numericPrice(value);
 
+        if (price !== null) {
+          ancestry.pop();
+          return price;
+        }
+      }
+    }
+
+    /*
+     * 1XBET uses terse market objects in GetGameZip. Some player rows
+     * expose the market context in an ancestor while the player's price
+     * lives one or two levels below it. Inspect the object's immediate
+     * children explicitly as well as the recursive walk.
+     */
+    if (firstGoalContext) {
+      for (const child of Object.values(node)) {
         if (
-          value !== null &&
-          value !== undefined
+          child &&
+          typeof child === "object" &&
+          oneXBetPlayerMatches(
+            child,
+            playerId,
+            playerName
+          )
         ) {
-          const price = numericPrice(value);
+          const childPrice =
+            oneXBetPriceFromNode(child);
 
-          if (price !== null) {
-            return price;
+          if (childPrice !== null) {
+            ancestry.pop();
+            return childPrice;
           }
         }
       }
     }
 
     for (const child of Object.values(node)) {
-      const price = walk(
-        child,
-        nextFirstGoalContext
-      );
+      const price = walk(child);
 
       if (price !== null) {
+        ancestry.pop();
         return price;
       }
     }
 
+    ancestry.pop();
     return null;
   }
 
-  return walk(
-    payload,
-    false
-  );
+  return walk(payload);
 }
 
-function betwayRequestPayload(
-  fixtureId: number,
-  marketCName: string,
-  useExternalIds = false,
-  jurisdictionId = 1
-) {
-  return {
-    ...(useExternalIds
-      ? {
-          ExternalIds: [fixtureId]
-        }
-      : {
-          EventId: fixtureId
-        }),
-    LanguageId: 1,
-    ClientTypeId: 2,
-    BrandId: 3,
-    JurisdictionId: jurisdictionId,
-    ClientIntegratorId: 1,
-    MarketCName: marketCName,
-    ScoreboardRequest: {
-      ScoreboardType: 0,
-      IncidentRequest: {}
-    },
-    BrowserId: 5,
-    OsId: 3,
-    ApplicationVersion: "",
-    BrowserVersion: "131.0.0.0",
-    OsVersion: "NT 10.0",
-    SessionId: null,
-    TerritoryId: 165,
-    CorrelationId: crypto.randomUUID(),
-    VisitId: crypto.randomUUID(),
-    ViewName: "sports",
-    JourneyId: crypto.randomUUID()
-  };
-}
-
-async function fetchBetwayFirstGoalScorer(
+async function fetch1xBetFirstGoalScorer(
   fixture: any,
   playerId: number,
   playerName: string
 ): Promise<number | null> {
-  const candidateIds =
-    betwayCandidateEventIds(
-      fixture
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    10000
+  );
+
+  try {
+    const eventId = await find1xBetEventId(
+      fixture,
+      controller.signal
     );
 
-  if (!candidateIds.length) {
-    return null;
-  }
-
-  /*
-   * Betway's sportsbook is backed by a JSON endpoint used by its own
-   * football pages. Public examples show the V2 GetEvents endpoint and
-   * the EventId/MarketCName request shape. We try the same-origin and
-   * sports-api hosts because Betway has used both forms, and we try the
-   * common first-goalscorer market names used by the frontend.
-   */
-  const hosts = [
-    "https://betway.com",
-    "https://sportsapi.betway.com"
-  ];
-
-  const marketNames = [
-    "first-goalscorer",
-    "first-goal-scorer",
-    "firstscorer",
-    "first-scorer"
-  ];
-
-  const headers = {
-    "Accept":
-      "application/json, text/plain, */*",
-    "Content-Type":
-      "application/json; charset=UTF-8",
-    "Accept-Language":
-      "en-GB,en;q=0.9",
-    "Origin":
-      "https://betway.com",
-    "Referer":
-      "https://betway.com/",
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
-  };
-
-  for (const host of hosts) {
-    for (const fixtureId of candidateIds) {
-      for (const marketCName of marketNames) {
-        for (const useExternalIds of [
-          false,
-          true
-        ]) {
-          for (const jurisdictionId of [
-            1,
-            2
-          ]) {
-            try {
-              const response =
-                await fetch(
-                  `${host}/api/Events/V2/GetEvents`,
-                  {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify(
-                      betwayRequestPayload(
-                        fixtureId,
-                        marketCName,
-                        useExternalIds,
-                        jurisdictionId
-                      )
-                    ),
-                    cache: "no-store"
-                  }
-                );
-
-              if (!response.ok) {
-                console.warn(
-                  `Betway first-scorer request failed (${response.status}) host=${host} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
-                );
-                continue;
-              }
-
-              const payload =
-                await response.json();
-
-              const price =
-                extractFirstGoalScorerPriceFromBetway(
-                  payload,
-                  playerId,
-                  playerName
-                );
-
-              if (price !== null) {
-                console.info(
-                  `Betway first-scorer price found: ${price} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
-                );
-                return price;
-              }
-            } catch (error) {
-              console.warn(
-                "Betway first-scorer request error:",
-                error
-              );
-            }
-          }
-        }
-      }
+    if (!eventId) {
+      return null;
     }
-  }
 
-  return null;
+    const payload = await fetch1xBetJson(
+      "GetGameZip",
+      {
+        id: eventId,
+        lng: "en",
+        cfview: 0,
+        isSubGames: "true",
+        GroupEvents: "true",
+        allEventsGroupSubGames: "true",
+        countevents: 250,
+        partner: 51,
+        grMode: 2
+      },
+      controller.signal
+    );
+
+    const price =
+      extractFirstGoalScorerPriceFrom1xBet(
+        payload,
+        playerId,
+        playerName
+      );
+
+    if (price !== null) {
+      console.info(
+        `1XBET first-scorer price found: ${price} fixture=${eventId}`
+      );
+    } else {
+      console.info(
+        `1XBET first-scorer price not found for fixture=${eventId}`
+      );
+    }
+
+    return price;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function getConsensusMatchOdds(
@@ -1833,38 +2229,39 @@ async function getConsensusMatchOdds(
       Authorization: `Token ${apiKey}`
     };
 
-    const summaryResponse =
-      await fetch(
-        `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
-        {
-          headers,
-          next: {
-            revalidate: 60
+    const [summaryPayload, oneXBetFirstGoalScorer] =
+      await Promise.all([
+        (async () => {
+          const summaryResponse =
+            await fetch(
+              `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
+              {
+                headers,
+                next: {
+                  revalidate: 60
+                }
+              }
+            );
+
+          if (!summaryResponse.ok) {
+            console.error(
+              "Consensus odds summary request failed:",
+              summaryResponse.status
+            );
+            return null;
           }
-        }
-      );
 
-    const summaryPayload =
-      summaryResponse.ok
-        ? await summaryResponse.json()
-        : null;
-
-    if (!summaryResponse.ok) {
-      console.error(
-        "Consensus odds summary request failed:",
-        summaryResponse.status
-      );
-    }
-
-    const betwayFirstGoalScorer =
-      await fetchBetwayFirstGoalScorer(
-        fixture,
-        playerId,
-        playerName
-      );
+          return await summaryResponse.json();
+        })(),
+        fetch1xBetFirstGoalScorer(
+          fixture,
+          playerId,
+          playerName
+        )
+      ]);
 
     const firstGoalScorerPrice =
-      betwayFirstGoalScorer;
+      oneXBetFirstGoalScorer;
 
     return {
       fixtureId,
@@ -1967,6 +2364,29 @@ function appearanceSummary(
 }
 
 export default async function Home() {
+  const debugPlayers =
+    await findPlayer("Ben Brereton");
+
+  const debugChile =
+    await findTeam("Chile");
+
+  console.log(
+    "BEN BSD DEBUG:",
+    JSON.stringify(
+      debugPlayers,
+      null,
+      2
+    )
+  );
+
+  console.log(
+    "CHILE BSD DEBUG:",
+    JSON.stringify(
+      debugChile,
+      null,
+      2
+    )
+  );
   const supabase =
     getSupabaseAdmin();
 
