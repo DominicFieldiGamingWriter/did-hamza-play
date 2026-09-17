@@ -683,48 +683,38 @@ function isCurrentlyLive(
       .trim()
       .toLowerCase();
 
-  if (
-    status ===
-    "live"
-  ) {
-    return true;
-  }
-
   /*
-   * BSD's real event feed has returned
-   * values such as "1st_half" for an
-   * actively running match.
+   * BSD documents `live` as a match that
+   * is currently in progress. Do not infer
+   * live status from the kickoff time alone:
+   * historical events can carry unexpected
+   * non-terminal status values and must not
+   * appear as CURRENTLY PLAYING.
    *
-   * Treat an event as live when:
-   *
-   * - it has started,
-   * - it is not terminal,
-   * - and BSD has not classified it as
-   *   a future "notstarted" event.
+   * The feed can also expose more granular
+   * in-play statuses, so recognise those
+   * explicitly as well.
    */
-  if (
-    status ===
-      "notstarted" ||
-    status ===
-      "upcoming"
-  ) {
-    return false;
-  }
+  const liveStatuses = new Set([
+    "live",
+    "inprogress",
+    "inplay",
+    "1sthalf",
+    "halftime",
+    "2ndhalf",
+    "extratime",
+    "penaltyshootout",
+    "overtime"
+  ]);
 
-  const timestamp =
-    fixtureTimestamp(
-      fixture
+  const normalisedStatus =
+    status.replace(
+      /[^a-z0-9]+/g,
+      ""
     );
 
-  if (
-    timestamp <= 0
-  ) {
-    return false;
-  }
-
-  return (
-    timestamp <=
-    Date.now()
+  return liveStatuses.has(
+    normalisedStatus
   );
 }
 
