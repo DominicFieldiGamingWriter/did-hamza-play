@@ -1024,7 +1024,7 @@ function appearanceSummary(
       appearance?.subbed_on_minute !==
         undefined
     ) {
-      return "Didn't start. Subbed on.";
+      return "Didn't start. Sub in.";
     }
 
     return "Didn't start. Didn't come on.";
@@ -1053,7 +1053,7 @@ function appearanceSummary(
     subbedOff !== null
   ) {
     return (
-      `Started. Subbed off. Played ${
+      `Started. Sub out. Played ${
         minutes ??
         subbedOff
       } mins.`
