@@ -4,7 +4,7 @@ import Script from "next/script";
 
 export const metadata: Metadata = {
   title: "Did Hamza Choudhury Play?",
-  description: "Did Hamza Choudhury play in his club's last match? Find out whether Hamza started, was on the bench, scored or assisted in his latest match."
+  description: "Did Hamza Choudhury play in his last match for club or country? Find out whether Hamza  started, was on the bench, scored or assisted in his latest game."
 };
 
 export default function RootLayout({
