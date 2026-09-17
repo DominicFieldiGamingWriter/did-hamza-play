@@ -479,10 +479,12 @@ function numericPrice(value: any): number | null {
     : null;
 }
 
-function bookmakerBrandClass(name: string): string {
-  return normaliseToken(name) === "1xbet"
-    ? "odds-brand odds-brand-1xbet"
-    : "odds-brand odds-brand-betway";
+function formatOddsPrice(value: any): string {
+  const price = numericPrice(value);
+
+  return price !== null
+    ? price.toFixed(2)
+    : "—";
 }
 
 function priceFromNode(node: any): number | null {
@@ -492,6 +494,7 @@ function priceFromNode(node: any): number | null {
 
   const candidates = [
     node.price,
+    node.decimal_odds,
     node.odds,
     node.value,
     node.current_price,
@@ -509,30 +512,9 @@ function priceFromNode(node: any): number | null {
   return null;
 }
 
-function bookmakerMatches(
-  bookmaker: any,
-  target: string
-): boolean {
-  const targetToken =
-    normaliseToken(target);
-
+function marketIs1X2(market: any): boolean {
   const values = [
-    bookmaker?.bookmaker_slug,
-    bookmaker?.slug,
-    bookmaker?.bookmaker,
-    bookmaker?.name
-  ];
-
-  return values.some(
-    (value) =>
-      normaliseToken(value) === targetToken
-  );
-}
-
-function marketIs1X2(
-  market: any
-): boolean {
-  const values = [
+    market?.market,
     market?.market_kind,
     market?.market_family,
     market?.market_name,
@@ -549,10 +531,9 @@ function marketIs1X2(
   );
 }
 
-function marketIsAnytimeScorer(
-  market: any
-): boolean {
+function marketIsAnytimeScorer(market: any): boolean {
   const values = [
+    market?.market,
     market?.market_kind,
     market?.market_family,
     market?.market_name,
@@ -623,7 +604,8 @@ function selectionPriceForPlayer(
     node.player_id,
     node.player?.id,
     node.player?.player_id,
-    node.selection_id
+    node.selection_id,
+    node.id
   ];
 
   const hasPlayerId = directIds.some(
@@ -642,6 +624,7 @@ function selectionPriceForPlayer(
     node.player_name,
     node.player?.name,
     node.player?.full_name,
+    node.player?.short_name,
     node.name,
     node.label,
     node.selection_name,
@@ -678,8 +661,7 @@ function selectionPriceForPlayer(
       normaliseToken(key);
 
     if (
-      keyToken ===
-      String(playerId) ||
+      keyToken === String(playerId) ||
       (targetSurname &&
         keyToken === targetSurname) ||
       (targetName &&
@@ -713,149 +695,326 @@ function selectionPriceForPlayer(
   return null;
 }
 
-function marketPricesForBookmaker(
+function consensusBookmaker(
   payload: any,
-  targetBookmaker: string,
-  marketMatcher: (market: any) => boolean
-): any[] {
-  const markets =
-    Array.isArray(payload?.markets)
-      ? payload.markets
+  nestedBookmakers?: any[]
+) {
+  const books = Array.isArray(
+    nestedBookmakers
+  )
+    ? nestedBookmakers
+    : Array.isArray(payload?.bookmakers)
+      ? payload.bookmakers
       : [];
 
-  const matches: any[] = [];
-
-  for (const market of markets) {
-    if (!marketMatcher(market)) {
-      continue;
-    }
-
-    const marketBooks =
-      Array.isArray(market?.bookmakers)
-        ? market.bookmakers
-        : [];
-
-    for (const bookmaker of marketBooks) {
-      if (
-        bookmakerMatches(
-          bookmaker,
-          targetBookmaker
-        )
-      ) {
-        matches.push(bookmaker);
-      }
-    }
-  }
-
-  return matches;
+  return (
+    books.find(
+      (bookmaker: any) =>
+        normaliseToken(
+          bookmaker?.bookmaker_slug ??
+          bookmaker?.slug ??
+          bookmaker?.bookmaker ??
+          bookmaker?.name
+        ) === "consensus"
+    ) ?? null
+  );
 }
 
-function get1X2Prices(
-  payload: any,
-  targetBookmaker: string
+function oddsFromSelectionRows(
+  rows: any[]
 ) {
-  const rootBookmaker =
-    Array.isArray(payload?.bookmakers)
-      ? payload.bookmakers.find(
-          (bookmaker: any) =>
-            bookmakerMatches(
-              bookmaker,
-              targetBookmaker
-            )
-        )
-      : null;
-
-  if (rootBookmaker) {
-    const home = numericPrice(
-      rootBookmaker?.odds_home ??
-      rootBookmaker?.home ??
-      rootBookmaker?.odds_1
-    );
-
-    const draw = numericPrice(
-      rootBookmaker?.odds_draw ??
-      rootBookmaker?.draw ??
-      rootBookmaker?.odds_x
-    );
-
-    const away = numericPrice(
-      rootBookmaker?.odds_away ??
-      rootBookmaker?.away ??
-      rootBookmaker?.odds_2
-    );
-
-    if (
-      home !== null ||
-      draw !== null ||
-      away !== null
-    ) {
-      return {
-        home,
-        draw,
-        away
-      };
-    }
-  }
-
-  const marketBooks =
-    marketPricesForBookmaker(
-      payload,
-      targetBookmaker,
-      marketIs1X2
-    );
-
   const result = {
     home: null as number | null,
     draw: null as number | null,
     away: null as number | null
   };
 
-  for (const bookmaker of marketBooks) {
-    const directHome = numericPrice(
-      bookmaker?.odds_home
-    );
-    const directDraw = numericPrice(
-      bookmaker?.odds_draw
-    );
-    const directAway = numericPrice(
-      bookmaker?.odds_away
-    );
-
-    result.home ??= directHome;
-    result.draw ??= directDraw;
-    result.away ??= directAway;
-
-    const prices =
-      bookmaker?.prices;
-
-    if (prices && typeof prices === "object") {
-      const homeNode =
-        prices.HOME ??
-        prices.home ??
-        prices["1"];
-      const drawNode =
-        prices.DRAW ??
-        prices.draw ??
-        prices["X"] ??
-        prices["x"];
-      const awayNode =
-        prices.AWAY ??
-        prices.away ??
-        prices["2"];
-
-      result.home ??= priceFromNode(
-        homeNode
+  for (const row of rows) {
+    const outcome =
+      normaliseToken(
+        row?.outcome ??
+        row?.selection ??
+        row?.label ??
+        row?.name
       );
-      result.draw ??= priceFromNode(
-        drawNode
-      );
-      result.away ??= priceFromNode(
-        awayNode
-      );
+
+    const price =
+      priceFromNode(row) ??
+      numericPrice(row?.decimal_odds);
+
+    if (outcome === "home" || outcome === "1") {
+      result.home ??= price;
+    }
+
+    if (outcome === "draw" || outcome === "x") {
+      result.draw ??= price;
+    }
+
+    if (outcome === "away" || outcome === "2") {
+      result.away ??= price;
     }
   }
 
   return result;
+}
+
+function getConsensus1X2(
+  payload: any
+) {
+  const rootBookmaker =
+    consensusBookmaker(payload);
+
+  if (rootBookmaker) {
+    const rootResult = {
+      home:
+        numericPrice(
+          rootBookmaker?.odds_home ??
+          rootBookmaker?.home ??
+          rootBookmaker?.odds_1
+        ),
+      draw:
+        numericPrice(
+          rootBookmaker?.odds_draw ??
+          rootBookmaker?.draw ??
+          rootBookmaker?.odds_x
+        ),
+      away:
+        numericPrice(
+          rootBookmaker?.odds_away ??
+          rootBookmaker?.away ??
+          rootBookmaker?.odds_2
+        )
+    };
+
+    if (
+      rootResult.home !== null ||
+      rootResult.draw !== null ||
+      rootResult.away !== null
+    ) {
+      return rootResult;
+    }
+  }
+
+  const directRows = Array.isArray(
+    payload?.results
+  )
+    ? payload.results.filter(
+        (row: any) =>
+          normaliseToken(
+            row?.bookmaker_slug ??
+            row?.bookmaker
+          ) === "consensus" &&
+          normaliseToken(
+            row?.market
+          ) === "1x2"
+      )
+    : [];
+
+  const fromRows =
+    oddsFromSelectionRows(
+      directRows
+    );
+
+  if (
+    fromRows.home !== null ||
+    fromRows.draw !== null ||
+    fromRows.away !== null
+  ) {
+    return fromRows;
+  }
+
+  const markets =
+    Array.isArray(payload?.markets)
+      ? payload.markets
+      : [];
+
+  for (const market of markets) {
+    if (
+      !marketIs1X2(market)
+    ) {
+      continue;
+    }
+
+    const book =
+      consensusBookmaker(
+        payload,
+        market?.bookmakers
+      );
+
+    if (!book) {
+      continue;
+    }
+
+    const direct = {
+      home:
+        numericPrice(
+          book?.odds_home ??
+          book?.home ??
+          book?.odds_1
+        ),
+      draw:
+        numericPrice(
+          book?.odds_draw ??
+          book?.draw ??
+          book?.odds_x
+        ),
+      away:
+        numericPrice(
+          book?.odds_away ??
+          book?.away ??
+          book?.odds_2
+        )
+    };
+
+    const prices =
+      book?.prices;
+
+    if (
+      prices &&
+      typeof prices === "object"
+    ) {
+      direct.home ??=
+        priceFromNode(
+          prices.HOME ??
+          prices.home ??
+          prices["1"]
+        );
+
+      direct.draw ??=
+        priceFromNode(
+          prices.DRAW ??
+          prices.draw ??
+          prices["X"] ??
+          prices["x"]
+        );
+
+      direct.away ??=
+        priceFromNode(
+          prices.AWAY ??
+          prices.away ??
+          prices["2"]
+        );
+    }
+
+    if (
+      direct.home !== null ||
+      direct.draw !== null ||
+      direct.away !== null
+    ) {
+      return direct;
+    }
+
+    const fromSelections =
+      oddsFromSelectionRows(
+        Array.isArray(
+          book?.selections
+        )
+          ? book.selections
+          : []
+      );
+
+    if (
+      fromSelections.home !== null ||
+      fromSelections.draw !== null ||
+      fromSelections.away !== null
+    ) {
+      return fromSelections;
+    }
+  }
+
+  return {
+    home: null,
+    draw: null,
+    away: null
+  };
+}
+
+function getConsensusAnytimeScorer(
+  payload: any,
+  playerId: number,
+  playerName: string
+): number | null {
+  const results =
+    Array.isArray(payload?.results)
+      ? payload.results.filter(
+          (row: any) =>
+            normaliseToken(
+              row?.bookmaker_slug ??
+              row?.bookmaker
+            ) === "consensus"
+        )
+      : [];
+
+  for (const row of results) {
+    const serialised =
+      JSON.stringify(row ?? {})
+        .toLowerCase();
+
+    if (
+      serialised.includes("anytime") ||
+      serialised.includes("to_score") ||
+      serialised.includes("goalscorer")
+    ) {
+      const price =
+        selectionPriceForPlayer(
+          row,
+          playerId,
+          playerName
+        );
+
+      if (price !== null) {
+        return price;
+      }
+    }
+  }
+
+  const markets =
+    Array.isArray(payload?.markets)
+      ? payload.markets
+      : [];
+
+  for (const market of markets) {
+    if (
+      !marketIsAnytimeScorer(
+        market
+      )
+    ) {
+      continue;
+    }
+
+    const book =
+      consensusBookmaker(
+        payload,
+        market?.bookmakers
+      );
+
+    if (!book) {
+      continue;
+    }
+
+    const price =
+      selectionPriceForPlayer(
+        book,
+        playerId,
+        playerName
+      );
+
+    if (price !== null) {
+      return price;
+    }
+  }
+
+  return null;
+}
+
+function hasComplete1X2(
+  odds: any
+): boolean {
+  return (
+    numericPrice(odds?.home) !== null &&
+    numericPrice(odds?.draw) !== null &&
+    numericPrice(odds?.away) !== null
+  );
 }
 
 async function getNextBangladeshFixture() {
@@ -890,7 +1049,7 @@ async function getNextBangladeshFixture() {
   }
 }
 
-async function getNextMatchOdds(
+async function getConsensusMatchOdds(
   fixture: any,
   playerId: number,
   playerName: string
@@ -912,7 +1071,7 @@ async function getNextMatchOdds(
   try {
     const response =
       await fetch(
-        `https://sports.bzzoiro.com/odds/api/events/${fixtureId}/?sport=football`,
+        `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
         {
           headers: {
             Authorization: `Token ${apiKey}`
@@ -925,7 +1084,7 @@ async function getNextMatchOdds(
 
     if (!response.ok) {
       console.error(
-        "Odds API request failed:",
+        "Consensus odds request failed:",
         response.status
       );
 
@@ -935,68 +1094,26 @@ async function getNextMatchOdds(
     const payload =
       await response.json();
 
-    const bookmakers = [
-      {
-        name: "1xBet",
-        slug: "1xbet"
-      },
-      {
-        name: "Betway",
-        slug: "betway"
-      }
-    ].map(
-      ({ name, slug }) => {
-        const oneXTwo =
-          get1X2Prices(
-            payload,
-            slug
-          );
-
-        const anytimeScorerBooks =
-          marketPricesForBookmaker(
-            payload,
-            slug,
-            marketIsAnytimeScorer
-          );
-
-        let hamzaAnytimeScorer: number | null = null;
-
-        for (const bookmaker of anytimeScorerBooks) {
-          hamzaAnytimeScorer =
-            selectionPriceForPlayer(
-              bookmaker,
-              playerId,
-              playerName
-            );
-
-          if (
-            hamzaAnytimeScorer !== null
-          ) {
-            break;
-          }
-        }
-
-        return {
-          name,
-          oneXTwo,
-          hamzaAnytimeScorer
-        };
-      }
-    );
-
     return {
       fixtureId,
-      bookmakers,
+      oneXTwo:
+        getConsensus1X2(
+          payload
+        ),
+      hamzaAnytimeScorer:
+        getConsensusAnytimeScorer(
+          payload,
+          playerId,
+          playerName
+        ),
       updatedAt:
         payload?.updated_at ??
-        payload?.markets?.[0]
-          ?.bookmakers?.[0]
-          ?.updated_at ??
+        payload?.last_update_at ??
         null
     };
   } catch (error) {
     console.error(
-      "Odds API request failed:",
+      "Consensus odds request failed:",
       error
     );
 
@@ -1223,7 +1340,7 @@ export default async function Home() {
     await getNextBangladeshFixture();
 
   const nextOdds = next
-    ? await getNextMatchOdds(
+    ? await getConsensusMatchOdds(
         next,
         hamzaPlayerId,
         data.player_name ??
@@ -1231,9 +1348,23 @@ export default async function Home() {
       )
     : null;
 
+  const firstUpcomingFixture =
+    upcomingFixtures[0] ??
+    null;
+
+  const firstUpcomingOdds =
+    firstUpcomingFixture
+      ? await getConsensusMatchOdds(
+          firstUpcomingFixture,
+          hamzaPlayerId,
+          data.player_name ??
+            "Hamza Choudhury"
+        )
+      : null;
+
   const bangladeshOdds =
     nextBangladeshFixture
-      ? await getNextMatchOdds(
+      ? await getConsensusMatchOdds(
           nextBangladeshFixture,
           hamzaPlayerId,
           data.player_name ??
@@ -1815,6 +1946,15 @@ export default async function Home() {
           font-weight: 800;
         }
 
+        .fixture-odds {
+          margin-top: 8px;
+          color: #111a29;
+          font-size: 14px;
+          line-height: 1.2;
+          font-weight: 900;
+          letter-spacing: .2px;
+        }
+
         .bio-card {
           margin-top: 24px;
           background: #ffffff;
@@ -1965,6 +2105,12 @@ export default async function Home() {
           color: #111111;
           font-size: 17px;
           letter-spacing: -0.6px;
+        }
+
+        .odds-brand-consensus {
+          color: #111111;
+          font-size: 14px;
+          letter-spacing: -0.3px;
         }
 
         .odds-prices {
@@ -2643,10 +2789,31 @@ export default async function Home() {
                       `${fixtureTimestamp(fixture)}-${index}`
                     }
                   >
-                    <div className="fixture-title">
-                      {fixtureName(
-                        fixture
-                      )}
+                    <div>
+                      <div className="fixture-title">
+                        {fixtureName(
+                          fixture
+                        )}
+                      </div>
+
+                      {index === 0 &&
+                        hasComplete1X2(
+                          firstUpcomingOdds?.oneXTwo
+                        ) && (
+                          <div className="fixture-odds">
+                            {formatOddsPrice(
+                              firstUpcomingOdds.oneXTwo.home
+                            )}{" "}
+                            -{" "}
+                            {formatOddsPrice(
+                              firstUpcomingOdds.oneXTwo.draw
+                            )}{" "}
+                            -{" "}
+                            {formatOddsPrice(
+                              firstUpcomingOdds.oneXTwo.away
+                            )}
+                          </div>
+                        )}
                     </div>
 
                     <div className="fixture-date">
@@ -2680,148 +2847,174 @@ export default async function Home() {
 
           <div className="odds-grid">
             <div className="odds-mini-card">
-              <h3 className="odds-mini-title">Next match odds</h3>
-              <div className="odds-mini-subtitle">1X2</div>
+              <h3 className="odds-mini-title">
+                Next match odds
+              </h3>
+              <div className="odds-mini-subtitle">
+                1X2
+              </div>
               <div className="odds-mini-match">
                 {next
                   ? fixtureName(next)
                   : "No upcoming fixture"}
               </div>
 
-              {nextOdds ? (
-                nextOdds.bookmakers.map(
-                  (bookmaker: any) => (
-                    <div
-                      className="odds-mini-row"
-                      key={`next-1x2-${bookmaker.name}`}
-                    >
-                      <div className="odds-book">
-                        <span className={bookmakerBrandClass(bookmaker.name)}>
-                          {bookmaker.name === "1xBet" ? "1XBET" : "betway"}
-                        </span>
-                      </div>
-                      <div className="odds-prices">
-                        <span>1: {bookmaker.oneXTwo.home ?? "—"}</span>
-                        <span>X: {bookmaker.oneXTwo.draw ?? "—"}</span>
-                        <span>2: {bookmaker.oneXTwo.away ?? "—"}</span>
-                      </div>
-                    </div>
-                  )
-                )
-              ) : (
-                <div className="odds-unavailable">
-                  Odds are currently unavailable.
+              {hasComplete1X2(
+                nextOdds?.oneXTwo
+              ) && (
+                <div className="odds-mini-row">
+                  <div className="odds-book">
+                    <span className="odds-brand odds-brand-consensus">
+                      Consensus
+                    </span>
+                  </div>
+
+                  <div className="odds-prices">
+                    <span>
+                      1:{" "}
+                      {formatOddsPrice(
+                        nextOdds.oneXTwo.home
+                      )}
+                    </span>
+                    <span>
+                      X:{" "}
+                      {formatOddsPrice(
+                        nextOdds.oneXTwo.draw
+                      )}
+                    </span>
+                    <span>
+                      2:{" "}
+                      {formatOddsPrice(
+                        nextOdds.oneXTwo.away
+                      )}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="odds-mini-card">
-              <h3 className="odds-mini-title">Next match odds</h3>
-              <div className="odds-mini-subtitle">Hamza to score anytime</div>
+              <h3 className="odds-mini-title">
+                Next match odds
+              </h3>
+              <div className="odds-mini-subtitle">
+                Hamza to score anytime
+              </div>
               <div className="odds-mini-match">
                 {next
                   ? fixtureName(next)
                   : "No upcoming fixture"}
               </div>
 
-              {nextOdds ? (
-                nextOdds.bookmakers.map(
-                  (bookmaker: any) => (
-                    <div
-                      className="odds-mini-row"
-                      key={`next-scorer-${bookmaker.name}`}
-                    >
-                      <div className="odds-book">
-                        <span className={bookmakerBrandClass(bookmaker.name)}>
-                          {bookmaker.name === "1xBet" ? "1XBET" : "betway"}
-                        </span>
-                      </div>
-                      <div className="odds-prices">
-                        <span>{bookmaker.hamzaAnytimeScorer ?? "—"}</span>
-                      </div>
-                    </div>
-                  )
-                )
-              ) : (
-                <div className="odds-unavailable">
-                  Odds are currently unavailable.
+              {numericPrice(
+                nextOdds?.hamzaAnytimeScorer
+              ) !== null && (
+                <div className="odds-mini-row">
+                  <div className="odds-book">
+                    <span className="odds-brand odds-brand-consensus">
+                      Consensus
+                    </span>
+                  </div>
+
+                  <div className="odds-prices">
+                    <span>
+                      {formatOddsPrice(
+                        nextOdds.hamzaAnytimeScorer
+                      )}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="odds-mini-card">
-              <h3 className="odds-mini-title">Next Bangladesh match odds</h3>
-              <div className="odds-mini-subtitle">1X2</div>
+              <h3 className="odds-mini-title">
+                Next Bangladesh match odds
+              </h3>
+              <div className="odds-mini-subtitle">
+                1X2
+              </div>
               <div className="odds-mini-match">
                 {nextBangladeshFixture
-                  ? fixtureName(nextBangladeshFixture)
+                  ? fixtureName(
+                      nextBangladeshFixture
+                    )
                   : "No upcoming Bangladesh fixture"}
               </div>
 
-              {bangladeshOdds ? (
-                bangladeshOdds.bookmakers.map(
-                  (bookmaker: any) => (
-                    <div
-                      className="odds-mini-row"
-                      key={`bd-1x2-${bookmaker.name}`}
-                    >
-                      <div className="odds-book">
-                        <span className={bookmakerBrandClass(bookmaker.name)}>
-                          {bookmaker.name === "1xBet" ? "1XBET" : "betway"}
-                        </span>
-                      </div>
-                      <div className="odds-prices">
-                        <span>1: {bookmaker.oneXTwo.home ?? "—"}</span>
-                        <span>X: {bookmaker.oneXTwo.draw ?? "—"}</span>
-                        <span>2: {bookmaker.oneXTwo.away ?? "—"}</span>
-                      </div>
-                    </div>
-                  )
-                )
-              ) : (
-                <div className="odds-unavailable">
-                  Odds are currently unavailable.
+              {hasComplete1X2(
+                bangladeshOdds?.oneXTwo
+              ) && (
+                <div className="odds-mini-row">
+                  <div className="odds-book">
+                    <span className="odds-brand odds-brand-consensus">
+                      Consensus
+                    </span>
+                  </div>
+
+                  <div className="odds-prices">
+                    <span>
+                      1:{" "}
+                      {formatOddsPrice(
+                        bangladeshOdds.oneXTwo.home
+                      )}
+                    </span>
+                    <span>
+                      X:{" "}
+                      {formatOddsPrice(
+                        bangladeshOdds.oneXTwo.draw
+                      )}
+                    </span>
+                    <span>
+                      2:{" "}
+                      {formatOddsPrice(
+                        bangladeshOdds.oneXTwo.away
+                      )}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="odds-mini-card">
-              <h3 className="odds-mini-title">Next Bangladesh match odds</h3>
-              <div className="odds-mini-subtitle">Hamza to score anytime</div>
+              <h3 className="odds-mini-title">
+                Next Bangladesh match odds
+              </h3>
+              <div className="odds-mini-subtitle">
+                Hamza to score anytime
+              </div>
               <div className="odds-mini-match">
                 {nextBangladeshFixture
-                  ? fixtureName(nextBangladeshFixture)
+                  ? fixtureName(
+                      nextBangladeshFixture
+                    )
                   : "No upcoming Bangladesh fixture"}
               </div>
 
-              {bangladeshOdds ? (
-                bangladeshOdds.bookmakers.map(
-                  (bookmaker: any) => (
-                    <div
-                      className="odds-mini-row"
-                      key={`bd-scorer-${bookmaker.name}`}
-                    >
-                      <div className="odds-book">
-                        <span className={bookmakerBrandClass(bookmaker.name)}>
-                          {bookmaker.name === "1xBet" ? "1XBET" : "betway"}
-                        </span>
-                      </div>
-                      <div className="odds-prices">
-                        <span>{bookmaker.hamzaAnytimeScorer ?? "—"}</span>
-                      </div>
-                    </div>
-                  )
-                )
-              ) : (
-                <div className="odds-unavailable">
-                  Odds are currently unavailable.
+              {numericPrice(
+                bangladeshOdds?.hamzaAnytimeScorer
+              ) !== null && (
+                <div className="odds-mini-row">
+                  <div className="odds-book">
+                    <span className="odds-brand odds-brand-consensus">
+                      Consensus
+                    </span>
+                  </div>
+
+                  <div className="odds-prices">
+                    <span>
+                      {formatOddsPrice(
+                        bangladeshOdds.hamzaAnytimeScorer
+                      )}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
           <div className="odds-note">
-            Decimal odds. Prices can change.
+            Decimal odds. Consensus prices can change.
           </div>
         </section>
 
