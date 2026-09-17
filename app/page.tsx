@@ -1,6 +1,22 @@
 export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Did Ben Brereton Díaz Play?",
+  description:
+    "Did Ben Brereton Díaz play in his last match for club or country? Find out whether Big Ben started, was on the bench, scored or assisted in his latest game.",
+  openGraph: {
+    title: "Did Ben Brereton Díaz Play?",
+    description:
+      "Did Ben Brereton Díaz play in his last match for club or country? Find out whether Big Ben started, was on the bench, scored or assisted in his latest game.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Did Ben Brereton Díaz Play?",
+    description:
+      "Did Ben Brereton Díaz play in his last match for club or country? Find out whether Big Ben started, was on the bench, scored or assisted in his latest game.",
+  },
+};
 import { getSupabaseAdmin } from "../lib/supabase";
-import { findPlayer, findTeam, getTeamFixtures } from "../lib/api-football";
 
 function dateValue(value: any): string | null {
   if (!value) return null;
@@ -157,7 +173,7 @@ function formatUKTime(
   ).format(parsed);
 }
 
-function formatBangladeshTime(
+function formatChileTime(
   value: any
 ): string {
   const date =
@@ -183,7 +199,7 @@ function formatBangladeshTime(
       minute: "2-digit",
       hour12: false,
       timeZone:
-        "Asia/Dhaka"
+        "America/Santiago"
     }
   ).format(parsed);
 }
@@ -207,10 +223,10 @@ function fixtureTimes(
       </span>
 
       <span>
-        {formatBangladeshTime(
+        {formatChileTime(
           fixture
         )}{" "}
-        (Bangladesh)
+        (Chile)
       </span>
     </div>
   );
@@ -1363,36 +1379,43 @@ function hasComplete1X2(
   );
 }
 
-async function getNextBangladeshFixture() {
-  try {
-    const teams = await findTeam("Bangladesh");
+function isChileFixture(fixture: any): boolean {
+  const type = String(
+    fixture?.tracked_team_type ??
+      fixture?.team_type ??
+      fixture?.fixture_type ??
+      ""
+  ).toLowerCase();
 
-    const team =
-      teams.find(
-        (candidate: any) =>
-          String(candidate?.name ?? "")
-            .trim()
-            .toLowerCase() === "bangladesh"
-      ) ?? teams[0] ?? null;
-
-    if (!team?.id) {
-      return null;
-    }
-
-    const fixtures = await getTeamFixtures(
-      Number(team.id)
-    );
-
-    return Array.isArray(fixtures?.next)
-      ? fixtures.next[0] ?? null
-      : null;
-  } catch (error) {
-    console.error(
-      "Bangladesh fixture lookup failed:",
-      error
-    );
-    return null;
+  if (type === "national") {
+    return true;
   }
+
+  const trackedName = String(
+    fixture?.tracked_team_name ??
+      fixture?.team_name ??
+      ""
+  ).toLowerCase();
+
+  if (trackedName.includes("chile")) {
+    return true;
+  }
+
+  const homeName = String(
+    fixture?.home_name ??
+      fixture?.home_team_name ??
+      fixture?.home?.name ??
+      ""
+  ).toLowerCase();
+
+  const awayName = String(
+    fixture?.away_name ??
+      fixture?.away_team_name ??
+      fixture?.away?.name ??
+      ""
+  ).toLowerCase();
+
+  return homeName === "chile" || awayName === "chile";
 }
 
 function oneXBetCandidateEventIds(fixture: any): number[] {
@@ -1669,8 +1692,10 @@ async function fetch1xBetJson(
   signal: AbortSignal
 ): Promise<any | null> {
   const bases = [
+    "https://1xbet.com/service-api/LineFeed/",
     "https://1xbet.com/LineFeed/",
-    "https://1xbet.com/service-api/LineFeed/"
+    "https://1xbet.mobi/service-api/LineFeed/",
+    "https://1xbet.mobi/LineFeed/"
   ];
 
   const query = new URLSearchParams();
@@ -1679,8 +1704,12 @@ async function fetch1xBetJson(
     query.set(key, String(value));
   }
 
-  for (const base of bases) {
+  const requests = bases.map(async (base) => {
     try {
+      const origin = base.startsWith("https://1xbet.mobi")
+        ? "https://1xbet.mobi"
+        : "https://1xbet.com";
+
       const response = await fetch(
         `${base}${path}?${query.toString()}`,
         {
@@ -1689,6 +1718,10 @@ async function fetch1xBetJson(
               "application/json, text/plain, */*",
             "Accept-Language":
               "en-GB,en;q=0.9",
+            Origin: origin,
+            Referer: `${origin}/`,
+            "X-Requested-With":
+              "XMLHttpRequest",
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
           },
@@ -1701,64 +1734,50 @@ async function fetch1xBetJson(
         console.warn(
           `1XBET ${path} failed (${response.status}) via ${base}`
         );
-        continue;
+        return null;
       }
 
-      return await response.json();
+      const payload = await response.json();
+      return payload ?? null;
     } catch (error) {
       console.warn(
         `1XBET ${path} request error via ${base}:`,
         error
       );
+      return null;
     }
-  }
+  });
 
-  return null;
-}
+  const results = await Promise.all(requests);
 
-async function find1xBetEventId(
-  fixture: any,
-  signal: AbortSignal
-): Promise<number | null> {
-  const directIds =
-    oneXBetCandidateEventIds(fixture);
-
-  if (directIds.length) {
-    return directIds[0];
-  }
-
-  const home = teamName(fixture, "home");
-  const away = teamName(fixture, "away");
-  const searchText = `${home} ${away}`.trim();
-
-  if (!searchText) {
-    return null;
-  }
-
-  const payload = await fetch1xBetJson(
-    "Web_SearchZip",
-    {
-      text: searchText,
-      limit: 50,
-      lng: "en"
-    },
-    signal
+  const usable = results.find(
+    (payload) =>
+      payload &&
+      (
+        payload?.Value !== undefined ||
+        payload?.value !== undefined ||
+        payload?.Success === true ||
+        payload?.success === true
+      )
   );
 
-  if (!payload) {
-    return null;
-  }
+  return usable ??
+    results.find((payload) => payload !== null) ??
+    null;
+}
 
+function rank1xBetEventCandidates(
+  payload: any,
+  fixture: any
+): any[] {
   const candidates =
-    collectOneXBetEventCandidates(
-      payload
-    );
+    collectOneXBetEventCandidates(payload);
 
   const fixtureTime = fixtureTimestamp(
     fixture
   );
 
-  const ranked = candidates
+  return candidates
     .map((candidate) => {
       const baseScore = oneXBetEventMatchScore(
         candidate.node,
@@ -1799,21 +1818,145 @@ async function find1xBetEventId(
 
       return a.distance - b.distance;
     });
+}
 
-  const best = ranked[0];
+async function find1xBetEventId(
+  fixture: any,
+  signal: AbortSignal
+): Promise<number | null> {
+  const directIds =
+    oneXBetCandidateEventIds(fixture);
 
-  if (!best || oneXBetEventMatchScore(best.node, fixture) < 700) {
-    console.warn(
-      `1XBET event not found for ${home} vs ${away}`
+  const home = teamName(fixture, "home");
+  const away = teamName(fixture, "away");
+  const searchTexts = [
+    `${home} ${away}`.trim(),
+    `${away} ${home}`.trim()
+  ].filter(Boolean);
+
+  for (const searchText of searchTexts) {
+    const payload = await fetch1xBetJson(
+      "Web_SearchZip",
+      {
+        text: searchText,
+        limit: 100,
+        lng: "en"
+      },
+      signal
     );
-    return null;
+
+    if (!payload) {
+      continue;
+    }
+
+    const ranked =
+      rank1xBetEventCandidates(
+        payload,
+        fixture
+      );
+
+    const best = ranked[0];
+
+    if (
+      best &&
+      oneXBetEventMatchScore(
+        best.node,
+        fixture
+      ) >= 700
+    ) {
+      console.info(
+        `1XBET event matched via Web_SearchZip: ${best.eventId} for ${home} vs ${away}`
+      );
+      return best.eventId;
+    }
   }
 
-  console.info(
-    `1XBET event matched: ${best.eventId} for ${home} vs ${away}`
+  /*
+   * Web_SearchZip is convenient but not always available on every 1XBET
+   * skin. The football line feed is a second way to discover the same
+   * event. GetGameZip remains the source used for the actual first-
+   * goalscorer market and price.
+   */
+  const feedVariants = [
+    {
+      sports: 1,
+      count: 500,
+      lng: "en",
+      tf: 3000000,
+      tz: 0,
+      mode: 4,
+      country: 1,
+      getEmpty: "true"
+    },
+    {
+      sports: 1,
+      count: 500,
+      lng: "en",
+      tf: 3000000,
+      tz: 0,
+      mode: 4,
+      country: 75,
+      partner: 51,
+      getEmpty: "true"
+    },
+    {
+      sports: 1,
+      count: 500,
+      lng: "en",
+      tf: 3000000,
+      tz: 0,
+      mode: 4,
+      country: 153,
+      partner: 51,
+      getEmpty: "true"
+    }
+  ];
+
+  for (const params of feedVariants) {
+    const payload = await fetch1xBetJson(
+      "Get1x2_VZip",
+      params,
+      signal
+    );
+
+    if (!payload) {
+      continue;
+    }
+
+    const ranked =
+      rank1xBetEventCandidates(
+        payload,
+        fixture
+      );
+
+    const best = ranked[0];
+
+    if (
+      best &&
+      oneXBetEventMatchScore(
+        best.node,
+        fixture
+      ) >= 700
+    ) {
+      console.info(
+        `1XBET event matched via Get1x2_VZip: ${best.eventId} for ${home} vs ${away}`
+      );
+      return best.eventId;
+    }
+  }
+
+  if (directIds.length) {
+    console.warn(
+      `1XBET event search did not find ${home} vs ${away}; trying the supplied event id ${directIds[0]}`
+    );
+    return directIds[0];
+  }
+
+  console.warn(
+    `1XBET event not found for ${home} vs ${away}`
   );
 
-  return best.eventId;
+  return null;
 }
 
 function extractOneXBetNodeText(
@@ -1875,6 +2018,9 @@ function extractOneXBetPlayerText(
     node?.playerName,
     node?.PlayerName,
     node?.PN,
+    node?.player?.name,
+    node?.player?.full_name,
+    node?.player?.short_name,
     node?.name,
     node?.Name,
     node?.N,
@@ -1902,11 +2048,62 @@ function extractOneXBetPlayerText(
     .join(" ");
 }
 
+function oneXBetPlayerAliases(
+  playerName: string
+): string[] {
+  const parts = String(playerName ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const aliases = new Set<string>();
+
+  if (playerName) {
+    aliases.add(normaliseToken(playerName));
+  }
+
+  if (parts.length >= 1) {
+    aliases.add(
+      normaliseToken(parts[parts.length - 1])
+    );
+  }
+
+  if (parts.length >= 2) {
+    const firstName = normaliseToken(parts[0]);
+    const lastName = normaliseToken(
+      parts[parts.length - 1]
+    );
+    const previousName = normaliseToken(
+      parts[parts.length - 2]
+    );
+
+    if (firstName && previousName) {
+      aliases.add(`${firstName}${previousName}`);
+    }
+
+    if (previousName) {
+      aliases.add(previousName);
+    }
+
+    if (previousName && lastName) {
+      aliases.add(`${previousName}${lastName}`);
+    }
+  }
+
+  return Array.from(aliases).filter(
+    (alias) => alias.length >= 5
+  );
+}
+
 function oneXBetPlayerMatches(
   node: any,
   playerId: number,
   playerName: string
 ): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+
   const directIds = [
     node?.player_id,
     node?.playerId,
@@ -1916,7 +2113,9 @@ function oneXBetPlayerMatches(
     node?.selection?.playerId,
     node?.selection?.PlayerId,
     node?.selection?.player?.id,
-    node?.selection?.player?.player_id
+    node?.selection?.player?.player_id,
+    node?.player?.id,
+    node?.player?.player_id
   ];
 
   if (
@@ -1935,51 +2134,42 @@ function oneXBetPlayerMatches(
     return false;
   }
 
-  const parts = String(playerName ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const aliases = oneXBetPlayerAliases(
+    playerName
+  );
 
-  const aliases = new Set<string>();
+  return aliases.some(
+    (alias) =>
+      nodeText === alias ||
+      nodeText.includes(alias)
+  );
+}
 
-  if (playerName) {
-    aliases.add(normaliseToken(playerName));
+function oneXBetKeyMatchesPlayer(
+  key: any,
+  playerId: number,
+  playerName: string
+): boolean {
+  const raw = String(key ?? "").trim();
+
+  if (!raw) {
+    return false;
   }
 
-  if (parts.length >= 1) {
-    aliases.add(
-      normaliseToken(parts[parts.length - 1])
-    );
+  if (Number(raw) === playerId) {
+    return true;
   }
 
-  // Ben Brereton Díaz is frequently listed as
-  // "Ben Brereton" or "Brereton" by bookmakers.
-  if (parts.length >= 2) {
-    const firstName = normaliseToken(parts[0]);
-    const mainSurname = normaliseToken(
-      parts[parts.length - 2]
-    );
+  const token = normaliseToken(raw);
+  const aliases = oneXBetPlayerAliases(
+    playerName
+  );
 
-    if (firstName && mainSurname) {
-      aliases.add(`${firstName}${mainSurname}`);
-    }
-
-    if (mainSurname.length >= 5) {
-      aliases.add(mainSurname);
-    }
-  }
-
-  for (const alias of aliases) {
-    if (
-      alias &&
-      alias.length >= 5 &&
-      (nodeText === alias || nodeText.includes(alias))
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  return aliases.some(
+    (alias) =>
+      token === alias ||
+      token.includes(alias)
+  );
 }
 
 function oneXBetPriceFromNode(
@@ -2001,7 +2191,9 @@ function oneXBetPriceFromNode(
     "decimal_odds",
     "decimalOdds",
     "value",
-    "Value"
+    "Value",
+    "V",
+    "v"
   ];
 
   for (const key of directKeys) {
@@ -2011,6 +2203,25 @@ function oneXBetPriceFromNode(
     if (price !== null) {
       return price;
     }
+  }
+
+  return null;
+}
+
+function numericPriceFromAny(
+  value: any
+): number | null {
+  const direct = numericPrice(value);
+
+  if (direct !== null) {
+    return direct;
+  }
+
+  if (
+    value &&
+    typeof value === "object"
+  ) {
+    return oneXBetPriceFromNode(value);
   }
 
   return null;
@@ -2026,16 +2237,21 @@ function extractFirstGoalScorerPriceFrom1xBet(
   }
 
   const visited = new WeakSet<object>();
-  const ancestry: any[] = [];
 
-  function walk(node: any): number | null {
+  function walk(
+    node: any,
+    inheritedFirstGoalContext: boolean
+  ): number | null {
     if (node === null || node === undefined) {
       return null;
     }
 
     if (Array.isArray(node)) {
       for (const item of node) {
-        const price = walk(item);
+        const price = walk(
+          item,
+          inheritedFirstGoalContext
+        );
 
         if (price !== null) {
           return price;
@@ -2054,16 +2270,28 @@ function extractFirstGoalScorerPriceFrom1xBet(
     }
 
     visited.add(node);
-    ancestry.push(node);
+
+    const nodeText = extractOneXBetNodeText(
+      node
+    );
+
+    const directFirstGoalContext =
+      looksLikeFirstGoalScorerText(
+        nodeText
+      );
+
+    const serializedText =
+      JSON.stringify(node).toLowerCase();
+
+    const serializedFirstGoalContext =
+      looksLikeFirstGoalScorerText(
+        serializedText
+      );
 
     const firstGoalContext =
-      ancestry.some((ancestor) =>
-        looksLikeFirstGoalScorerText(
-          extractOneXBetNodeText(
-            ancestor
-          )
-        )
-      );
+      inheritedFirstGoalContext ||
+      directFirstGoalContext ||
+      serializedFirstGoalContext;
 
     if (
       firstGoalContext &&
@@ -2077,72 +2305,65 @@ function extractFirstGoalScorerPriceFrom1xBet(
         oneXBetPriceFromNode(node);
 
       if (directPrice !== null) {
-        ancestry.pop();
         return directPrice;
       }
 
-      const nestedKeys = [
-        "price",
-        "Price",
-        "odds",
-        "Odds",
-        "C",
-        "c"
-      ];
+      for (const [key, child] of Object.entries(node)) {
+        if (!oneXBetKeyMatchesPlayer(
+          key,
+          playerId,
+          playerName
+        )) {
+          continue;
+        }
 
-      for (const key of nestedKeys) {
-        const value = node?.[key];
-        const price = numericPrice(value);
+        const childPrice =
+          numericPriceFromAny(child);
 
-        if (price !== null) {
-          ancestry.pop();
-          return price;
+        if (childPrice !== null) {
+          return childPrice;
         }
       }
     }
 
-    /*
-     * 1XBET uses terse market objects in GetGameZip. Some player rows
-     * expose the market context in an ancestor while the player's price
-     * lives one or two levels below it. Inspect the object's immediate
-     * children explicitly as well as the recursive walk.
-     */
-    if (firstGoalContext) {
-      for (const child of Object.values(node)) {
-        if (
-          child &&
-          typeof child === "object" &&
-          oneXBetPlayerMatches(
-            child,
-            playerId,
-            playerName
-          )
-        ) {
-          const childPrice =
-            oneXBetPriceFromNode(child);
+    for (const [key, child] of Object.entries(node)) {
+      const keyFirstGoalContext =
+        looksLikeFirstGoalScorerText(key);
 
-          if (childPrice !== null) {
-            ancestry.pop();
-            return childPrice;
-          }
+      const childFirstGoalContext =
+        firstGoalContext ||
+        keyFirstGoalContext;
+
+      if (
+        childFirstGoalContext &&
+        oneXBetKeyMatchesPlayer(
+          key,
+          playerId,
+          playerName
+        )
+      ) {
+        const keyedPrice =
+          numericPriceFromAny(child);
+
+        if (keyedPrice !== null) {
+          return keyedPrice;
         }
       }
-    }
 
-    for (const child of Object.values(node)) {
-      const price = walk(child);
+      const price = walk(
+        child,
+        childFirstGoalContext
+      );
 
       if (price !== null) {
-        ancestry.pop();
         return price;
       }
     }
 
-    ancestry.pop();
     return null;
   }
 
-  return walk(payload);
+  return walk(payload, false);
 }
 
 async function fetch1xBetFirstGoalScorer(
@@ -2153,7 +2374,7 @@ async function fetch1xBetFirstGoalScorer(
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
-    10000
+    20000
   );
 
   try {
@@ -2166,8 +2387,7 @@ async function fetch1xBetFirstGoalScorer(
       return null;
     }
 
-    const payload = await fetch1xBetJson(
-      "GetGameZip",
+    const gameZipVariants = [
       {
         id: eventId,
         lng: "en",
@@ -2179,27 +2399,65 @@ async function fetch1xBetFirstGoalScorer(
         partner: 51,
         grMode: 2
       },
-      controller.signal
-    );
+      {
+        id: eventId,
+        lng: "en",
+        cfview: 0,
+        isSubGames: "true",
+        GroupEvents: "true",
+        allEventsGroupSubGames: "true",
+        countevents: 250,
+        partner: 36,
+        grMode: 2
+      },
+      {
+        id: eventId,
+        lng: "en",
+        cfview: 0,
+        isSubGames: "true",
+        GroupEvents: "true",
+        allEventsGroupSubGames: "true",
+        countevents: 250
+      }
+    ];
 
-    const price =
-      extractFirstGoalScorerPriceFrom1xBet(
-        payload,
-        playerId,
-        playerName
+    for (const params of gameZipVariants) {
+      const payload = await fetch1xBetJson(
+        "GetGameZip",
+        params,
+        controller.signal
       );
 
-    if (price !== null) {
-      console.info(
-        `1XBET first-scorer price found: ${price} fixture=${eventId}`
-      );
-    } else {
-      console.info(
-        `1XBET first-scorer price not found for fixture=${eventId}`
-      );
+      if (!payload) {
+        continue;
+      }
+
+      const price =
+        extractFirstGoalScorerPriceFrom1xBet(
+          payload,
+          playerId,
+          playerName
+        );
+
+      if (price !== null) {
+        console.info(
+          `1XBET first-scorer price found: ${price} fixture=${eventId}`
+        );
+        return price;
+      }
     }
 
-    return price;
+    console.info(
+      `1XBET first-scorer price not found for fixture=${eventId}`
+    );
+
+    return null;
+  } catch (error) {
+    console.warn(
+      "1XBET first-scorer lookup failed:",
+      error
+    );
+    return null;
   } finally {
     clearTimeout(timeout);
   }
@@ -2269,7 +2527,7 @@ async function getConsensusMatchOdds(
         getConsensus1X2(
           summaryPayload
         ),
-      hamzaFirstGoalScorer:
+      benFirstGoalScorer:
         firstGoalScorerPrice,
       updatedAt:
         summaryPayload?.last_update_at ??
@@ -2306,7 +2564,7 @@ function appearanceSummary(
       appearance?.subbed_on_minute !==
         undefined
     ) {
-      return "Didn't start. Subbed on.";
+      return "Didn't start. Sub in.";
     }
 
     return "Didn't start. Didn't come on.";
@@ -2335,7 +2593,7 @@ function appearanceSummary(
     subbedOff !== null
   ) {
     return (
-      `Started. Subbed off. Played ${
+      `Started. Sub out. Played ${
         minutes ??
         subbedOff
       } mins.`
@@ -2364,29 +2622,6 @@ function appearanceSummary(
 }
 
 export default async function Home() {
-  const debugPlayers =
-    await findPlayer("Ben Brereton");
-
-  const debugChile =
-    await findTeam("Chile");
-
-  console.log(
-    "BEN BSD DEBUG:",
-    JSON.stringify(
-      debugPlayers,
-      null,
-      2
-    )
-  );
-
-  console.log(
-    "CHILE BSD DEBUG:",
-    JSON.stringify(
-      debugChile,
-      null,
-      2
-    )
-  );
   const supabase =
     getSupabaseAdmin();
 
@@ -2408,8 +2643,8 @@ export default async function Home() {
       <main className="page">
         <h1 className="main-heading">
           DID{" "}
-          <span className="hamza-name">
-            HAMZA
+          <span className="ben-name">
+            BEN
           </span>{" "}
           PLAY?
         </h1>
@@ -2489,26 +2724,26 @@ export default async function Home() {
       lastFixture
     );
 
-  const hamzaPlayerId =
+  const benPlayerId =
     Number(
       data.player_id
     );
 
-  const hamzaScored =
+  const benScored =
     events.goals.some(
       (goal: any) =>
         Number(
           goal?.player_id
-        ) === hamzaPlayerId &&
+        ) === benPlayerId &&
         !isOwnGoal(goal)
     );
 
-  const hamzaAssisted =
+  const benAssisted =
     events.assists.some(
       (goal: any) =>
         Number(
           goal?.assist_id
-        ) === hamzaPlayerId
+        ) === benPlayerId
     );
 
   const latestDate =
@@ -2531,41 +2766,57 @@ export default async function Home() {
   const nextDate =
     dateValue(next);
 
-  const nextBangladeshFixture =
-    await getNextBangladeshFixture();
-
-  const nextOdds = next
-    ? await getConsensusMatchOdds(
-        next,
-        hamzaPlayerId,
-        data.player_name ??
-          "Hamza Choudhury"
-      )
-    : null;
+  const nextChileFixture =
+    nextFixtures.find(
+      (fixture: any) =>
+        isChileFixture(fixture)
+    ) ?? null;
 
   const firstUpcomingFixture =
     upcomingFixtures[0] ??
     null;
 
-  const firstUpcomingOdds =
-    firstUpcomingFixture
-      ? await getConsensusMatchOdds(
-          firstUpcomingFixture,
-          hamzaPlayerId,
-          data.player_name ??
-            "Hamza Choudhury"
-        )
-      : null;
+  const playerName =
+    data.player_name ??
+    "Ben Brereton Díaz";
 
-  const bangladeshOdds =
-    nextBangladeshFixture
-      ? await getConsensusMatchOdds(
-          nextBangladeshFixture,
-          hamzaPlayerId,
-          data.player_name ??
-            "Hamza Choudhury"
-        )
-      : null;
+  const oddsCache =
+    new Map<number, Promise<any>>();
+
+  const getOdds = (fixture: any) => {
+    if (!fixture) {
+      return Promise.resolve(null);
+    }
+
+    const fixtureId = Number(fixture?.id);
+
+    if (!Number.isFinite(fixtureId)) {
+      return Promise.resolve(null);
+    }
+
+    const cached = oddsCache.get(fixtureId);
+
+    if (cached) {
+      return cached;
+    }
+
+    const request = getConsensusMatchOdds(
+      fixture,
+      benPlayerId,
+      playerName
+    );
+
+    oddsCache.set(fixtureId, request);
+
+    return request;
+  };
+
+  const [nextOdds, firstUpcomingOdds, chileOdds] =
+    await Promise.all([
+      getOdds(next),
+      getOdds(firstUpcomingFixture),
+      getOdds(nextChileFixture)
+    ]);
 
   const appearanceSummaryText =
     appearanceSummary(
@@ -2628,8 +2879,8 @@ export default async function Home() {
         body {
           margin: 0;
           padding: 0;
-          background: #006a4e;
-          color: #ffffff;
+          background: #eef2f7;
+          color: #111a29;
           font-family:
             Arial,
             Helvetica,
@@ -2660,8 +2911,8 @@ export default async function Home() {
           white-space: nowrap;
         }
 
-        .hamza-name {
-          color: #f42a41;
+        .ben-name {
+          color: #d52b1e;
         }
 
         .top-row {
@@ -2678,8 +2929,8 @@ export default async function Home() {
         }
 
         .top-image {
-          width: 92px;
-          height: 92px;
+          width: 108px;
+          height: 108px;
           display: block;
           object-fit: contain;
           object-position: center;
@@ -2706,7 +2957,7 @@ export default async function Home() {
         }
 
         .answer.yes {
-          color: #00824f;
+          color: #0039A6;
         }
 
         .answer.no {
@@ -2731,7 +2982,7 @@ export default async function Home() {
 
         .live-heading {
           margin: 0;
-          color: #ffffff;
+          color: #111a29;
           font-size: clamp(
             29px,
             4vw,
@@ -2752,8 +3003,13 @@ export default async function Home() {
 
         .live-card {
           background: #111a29;
+          border: 1px solid #8fc3f4;
           border-radius: 30px;
           padding: 34px;
+        }
+
+        .live-card .section-label {
+          color: #c7d8ea;
         }
 
         .live-card-inner {
@@ -2780,7 +3036,7 @@ export default async function Home() {
 
         .live-date {
           margin-top: 13px;
-          color: #aab8cb;
+          color: #c7d8ea;
           font-size: 15px;
         }
 
@@ -2789,7 +3045,7 @@ export default async function Home() {
           gap: 20px;
           flex-wrap: wrap;
           margin-top: 6px;
-          color: #aab8cb;
+          color: #c7d8ea;
           font-size: 15px;
           font-weight: 800;
         }
@@ -2819,6 +3075,8 @@ export default async function Home() {
         .section-card {
           margin-top: 30px;
           background: #ffffff;
+          border: 1px solid #d52b1e;
+          box-shadow: 0 10px 30px rgba(17, 26, 41, .06);
           color: #090d13;
           border-radius: 30px;
           padding: 34px;
@@ -2986,21 +3244,21 @@ export default async function Home() {
         }
 
         .detail-stat-value.yes {
-          color: #006a4e;
+          color: #0039A6;
         }
 
         .detail-stat-value.no {
-          color: #f42a41;
+          color: #d52b1e;
         }
 
-        .hamza-outcomes {
+        .ben-outcomes {
           margin-top: 14px;
           border-top:
             1px solid
             #dfe4ea;
         }
 
-        .hamza-outcome {
+        .ben-outcome {
           display: flex;
           align-items: baseline;
           justify-content: space-between;
@@ -3013,11 +3271,11 @@ export default async function Home() {
           font-weight: 800;
         }
 
-        .hamza-outcome:last-child {
+        .ben-outcome:last-child {
           border-bottom: 0;
         }
 
-        .hamza-outcome-label {
+        .ben-outcome-label {
           color: #7084a1;
           font-size: 11px;
           font-weight: 900;
@@ -3025,13 +3283,13 @@ export default async function Home() {
           text-transform: uppercase;
         }
 
-        .hamza-outcome-value {
+        .ben-outcome-value {
           font-weight: 900;
         }
 
         .next-heading {
           margin: 42px 0 16px;
-          color: #ffffff;
+          color: #111a29;
           font-size: clamp(
             29px,
             4vw,
@@ -3044,12 +3302,14 @@ export default async function Home() {
 
         .next-card {
           background: #111a29;
+          border: 1px solid #0039A6;
           border-radius: 30px;
           padding: 34px;
         }
 
         .next-title {
           margin: 0;
+          color: #ffffff;
           font-size: clamp(
             30px,
             4.4vw,
@@ -3058,6 +3318,11 @@ export default async function Home() {
           line-height: 1;
           font-weight: 900;
           letter-spacing: -1.5px;
+        }
+
+        .next-card > .match-date,
+        .next-card > .times {
+          color: #c7d8ea;
         }
 
         .availability {
@@ -3102,6 +3367,8 @@ export default async function Home() {
         .fixtures-card {
           margin-top: 24px;
           background: #ffffff;
+          border: 1px solid #d52b1e;
+          box-shadow: 0 10px 30px rgba(17, 26, 41, .06);
           color: #090d13;
           border-radius: 30px;
           padding: 34px;
@@ -3157,6 +3424,8 @@ export default async function Home() {
         .bio-card {
           margin-top: 24px;
           background: #ffffff;
+          border: 1px solid #d52b1e;
+          box-shadow: 0 10px 30px rgba(17, 26, 41, .06);
           color: #090d13;
           border-radius: 30px;
           padding: 34px;
@@ -3205,6 +3474,7 @@ export default async function Home() {
         .odds-card {
           margin-top: 24px;
           background: #111a29;
+          border: 1px solid #0039A6;
           color: #ffffff;
           border-radius: 30px;
           padding: 34px;
@@ -3343,13 +3613,7 @@ export default async function Home() {
         .updated {
           margin-top: 23px;
           text-align: center;
-          color:
-            rgba(
-              255,
-              255,
-              255,
-              .76
-            );
+          color: #7084a1;
           font-size: 12px;
         }
 
@@ -3597,8 +3861,8 @@ export default async function Home() {
         <div className="top-row">
           <h1 className="main-heading">
             DID{" "}
-            <span className="hamza-name">
-              HAMZA
+            <span className="ben-name">
+              BEN
             </span>{" "}
             PLAY?
           </h1>
@@ -3608,14 +3872,19 @@ export default async function Home() {
               className="top-image"
               src={
                 latestPlayed
-                  ? "/hamza-happy.png"
-                  : "/hamza-serious.png"
+                  ? "/ben-happy.png"
+                  : "/ben-serious.png"
               }
               alt={
                 latestPlayed
-                  ? "Happy Hamza Choudhury"
-                  : "Serious Hamza Choudhury"
+                  ? "Happy Ben Brereton Díaz"
+                  : "Serious Ben Brereton Díaz"
               }
+              width={108}
+              height={108}
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
             />
           </div>
 
@@ -3804,7 +4073,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Sub in
+                    Subbed on
                   </div>
 
                   <div className="detail-stat-value">
@@ -3821,7 +4090,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Sub out
+                    Subbed off
                   </div>
 
                   <div className="detail-stat-value">
@@ -3837,24 +4106,24 @@ export default async function Home() {
                 </div>
               </div>
 
-              <div className="hamza-outcomes">
-                <div className="hamza-outcome">
-                  <div className="hamza-outcome-label">
-                    Did Hamza score?
+              <div className="ben-outcomes">
+                <div className="ben-outcome">
+                  <div className="ben-outcome-label">
+                    Did Ben score?
                   </div>
 
-                  <div className="hamza-outcome-value">
-                    {hamzaScored ? "Yes" : "No"}
+                  <div className="ben-outcome-value">
+                    {benScored ? "Yes" : "No"}
                   </div>
                 </div>
 
-                <div className="hamza-outcome">
-                  <div className="hamza-outcome-label">
-                    Did Hamza assist?
+                <div className="ben-outcome">
+                  <div className="ben-outcome-label">
+                    Did Ben assist?
                   </div>
 
-                  <div className="hamza-outcome-value">
-                    {hamzaAssisted ? "Yes" : "No"}
+                  <div className="ben-outcome-value">
+                    {benAssisted ? "Yes" : "No"}
                   </div>
                 </div>
               </div>
@@ -3926,7 +4195,7 @@ export default async function Home() {
         )}
 
         <h2 className="next-heading">
-          WILL HAMZA PLAY NEXT?
+          WILL BEN PLAY NEXT?
         </h2>
 
         <section className="next-card">
@@ -4043,7 +4312,7 @@ export default async function Home() {
 
                     <div className="fixture-time">
                       {date
-                        ? `${formatBangladeshTime(fixture)} (Bangladesh)`
+                        ? `${formatChileTime(fixture)} (Chile)`
                         : ""}
                     </div>
                   </div>
@@ -4106,7 +4375,7 @@ export default async function Home() {
                 Next match odds
               </h3>
               <div className="odds-mini-subtitle">
-                Hamza to score first goal
+                Ben to score first goal
               </div>
               <div className="odds-mini-match">
                 {next
@@ -4115,13 +4384,13 @@ export default async function Home() {
               </div>
 
               {numericPrice(
-                nextOdds?.hamzaFirstGoalScorer
+                nextOdds?.benFirstGoalScorer
               ) !== null ? (
                 <div className="odds-mini-row">
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
-                        nextOdds?.hamzaFirstGoalScorer
+                        nextOdds?.benFirstGoalScorer
                       )}
                     </span>
                   </div>
@@ -4135,39 +4404,39 @@ export default async function Home() {
 
             <div className="odds-mini-card">
               <h3 className="odds-mini-title">
-                Next Bangladesh match odds
+                Next Chile match odds
               </h3>
               <div className="odds-mini-subtitle">
                 1X2
               </div>
               <div className="odds-mini-match">
-                {nextBangladeshFixture
+                {nextChileFixture
                   ? fixtureName(
-                      nextBangladeshFixture
+                      nextChileFixture
                     )
-                  : "No upcoming Bangladesh fixture"}
+                  : "No upcoming Chile fixture"}
               </div>
 
               {hasComplete1X2(
-                bangladeshOdds?.oneXTwo
+                chileOdds?.oneXTwo
               ) ? (
                 <div className="odds-mini-row">
                   <div className="odds-prices">
                     <span>
                       (1) {formatOddsPrice(
-                        bangladeshOdds?.oneXTwo?.home
+                        chileOdds?.oneXTwo?.home
                       )}
                     </span>
                     <span>-</span>
                     <span>
                       (X) {formatOddsPrice(
-                        bangladeshOdds?.oneXTwo?.draw
+                        chileOdds?.oneXTwo?.draw
                       )}
                     </span>
                     <span>-</span>
                     <span>
                       (2) {formatOddsPrice(
-                        bangladeshOdds?.oneXTwo?.away
+                        chileOdds?.oneXTwo?.away
                       )}
                     </span>
                   </div>
@@ -4181,27 +4450,27 @@ export default async function Home() {
 
             <div className="odds-mini-card">
               <h3 className="odds-mini-title">
-                Next Bangladesh match odds
+                Next Chile match odds
               </h3>
               <div className="odds-mini-subtitle">
-                Hamza to score first goal
+                Ben to score first goal
               </div>
               <div className="odds-mini-match">
-                {nextBangladeshFixture
+                {nextChileFixture
                   ? fixtureName(
-                      nextBangladeshFixture
+                      nextChileFixture
                     )
-                  : "No upcoming Bangladesh fixture"}
+                  : "No upcoming Chile fixture"}
               </div>
 
               {numericPrice(
-                bangladeshOdds?.hamzaFirstGoalScorer
+                chileOdds?.benFirstGoalScorer
               ) !== null ? (
                 <div className="odds-mini-row">
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
-                        bangladeshOdds?.hamzaFirstGoalScorer
+                        chileOdds?.benFirstGoalScorer
                       )}
                     </span>
                   </div>
@@ -4221,30 +4490,38 @@ export default async function Home() {
 
         <section className="bio-card">
           <h2 className="bio-heading">
-            ABOUT HAMZA CHOUDHURY
+            ABOUT BEN BRERETON DÍAZ
           </h2>
 
           <div className="bio-content">
             <img
               className="bio-photo"
-              src="/hamza-bio.jpg"
-              alt="Hamza Choudhury"
+              src="/ben-bio.jpg"
+              alt="Ben Brereton Díaz"
             />
 
             <p>
-              Hamza Dewan Choudhury is a professional footballer. Born in England to a Bangladeshi mother and a father from Grenada, he was raised in a traditional Bangladeshi Muslim household. His ancestral home is in Bahubal, Habiganj District, Sylhet.
+              Ben Brereton Díaz is a professional footballer. Born in Stoke, his father is an Englishman, but his mother is from Concepción in Chile.
             </p>
 
             <p>
-              Born on 1 October 1997, Hamza began playing football at a very young age. He joined the Leicester City Academy at just seven years old, and by 2015, he had broken into the first-team squad. There, he attracted attention from several major European clubs.
+              Originally in the Manchester United youth academy, Díaz later played junior football for Stoke, then Nottingham Forest. It was at the City Ground where he made his first-team debut, before transferring to Blackburn Rovers, where he scored 45 goals in 144 league games.
             </p>
 
             <p>
-              He made 123 league appearances for the Foxes and enjoyed successful loan spells at Burton Albion, Watford and Sheffield United. In 2026, he made his move to the Blades permanent, signing a one-year contract.
+              An unsuccessful move to Villarreal followed, before Sheffield United gave Díaz an escape route on loan. He later moved to Southampton, after the Blades were relegated from the Premier League. But Díaz would soon play for them again, rejoining on loan in 2025.
             </p>
 
             <p>
-              Hamza was eligible to play for England and Grenada. In fact, he turned out for England’s under-21 side on no fewer than seven occasions. However, in August 2024, he obtained a Bangladeshi passport and switched his allegiance in December. Hamza then made his debut for the Tigers in March 2025, scoring his first goal in June of the same year in a 2–0 win over Bhutan.
+              A season on loan at Derby County yielded seven league goals from 40 league appearances, before Díaz opted to join Sheffield United for a third loan spell in 2026.
+            </p>
+
+            <p>
+              Born Benjamin Anthony Brereton, the talented attacker adopted his mother’s name in later life. He actually earned a combined 19 caps for the England Under-19 and Under-20 sides, before switching allegiance to La Roja in 2021.
+            </p>
+
+            <p>
+              The inclusion of Díaz in the Chile national squad came about thanks to a group of <em>Football Manager</em> players. They noticed his dual nationality in the game and called for him to be selected. The social media campaign took off, and the rest is history.
             </p>
           </div>
         </section>
@@ -4261,13 +4538,13 @@ export default async function Home() {
                   hour: "2-digit",
                   minute: "2-digit",
                   timeZone:
-                    "Asia/Dhaka"
+                    "America/Santiago"
                 }
               ).format(
                 new Date(
                   data.updated_at
                 )
-              )} (Bangladesh Time)`
+              )} (Chile Time)`
             : ""}
         </div>
       </main>
