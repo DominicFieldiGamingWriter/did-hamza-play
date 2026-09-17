@@ -792,14 +792,15 @@ export default async function Home() {
         }
 
         .top-image {
-          width: 96px;
-          height: 96px;
+          width: 110px;
+          height: 110px;
           display: block;
-          object-fit: cover;
-          object-position: center 28%;
-          border-radius: 50%;
-          border: 4px solid rgba(255, 255, 255, .95);
-          box-shadow: 0 8px 22px rgba(0, 0, 0, .16);
+          object-fit: contain;
+          object-position: center;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .15));
         }
 
         .answer {
@@ -1340,8 +1341,8 @@ export default async function Home() {
           }
 
           .top-image {
-            width: 88px;
-            height: 88px;
+            width: 92px;
+            height: 92px;
           }
 
           .answer {
@@ -1442,8 +1443,8 @@ export default async function Home() {
           }
 
           .top-image {
-            width: 82px;
-            height: 82px;
+            width: 86px;
+            height: 86px;
           }
 
           .answer {
