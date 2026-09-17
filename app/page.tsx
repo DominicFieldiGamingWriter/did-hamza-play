@@ -463,6 +463,502 @@ function getMatchEvents(
   };
 }
 
+function normaliseToken(value: any): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function numericPrice(value: any): number | null {
+  const number = Number(value);
+
+  return Number.isFinite(number) && number > 0
+    ? number
+    : null;
+}
+
+function priceFromNode(node: any): number | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+
+  const candidates = [
+    node.price,
+    node.odds,
+    node.value,
+    node.current_price,
+    node.current_odds
+  ];
+
+  for (const candidate of candidates) {
+    const price = numericPrice(candidate);
+
+    if (price !== null) {
+      return price;
+    }
+  }
+
+  return null;
+}
+
+function bookmakerMatches(
+  bookmaker: any,
+  target: string
+): boolean {
+  const targetToken =
+    normaliseToken(target);
+
+  const values = [
+    bookmaker?.bookmaker_slug,
+    bookmaker?.slug,
+    bookmaker?.bookmaker,
+    bookmaker?.name
+  ];
+
+  return values.some(
+    (value) =>
+      normaliseToken(value) === targetToken
+  );
+}
+
+function marketIs1X2(
+  market: any
+): boolean {
+  const values = [
+    market?.market_kind,
+    market?.market_family,
+    market?.market_name,
+    market?.name,
+    market?.kind,
+    market?.type
+  ].map(normaliseToken);
+
+  return values.some(
+    (value) =>
+      value === "1x2" ||
+      value === "winner" ||
+      value === "matchwinner"
+  );
+}
+
+function marketIsFirstScorer(
+  market: any
+): boolean {
+  const values = [
+    market?.market_kind,
+    market?.market_family,
+    market?.market_name,
+    market?.name,
+    market?.kind,
+    market?.type
+  ].map(
+    (value) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase()
+  );
+
+  const serialised =
+    JSON.stringify(market ?? {})
+      .toLowerCase();
+
+  return (
+    values.some(
+      (value) =>
+        value.includes("first") &&
+        (value.includes("scor") ||
+          value.includes("goal"))
+    ) ||
+    (serialised.includes("first") &&
+      (serialised.includes("scor") ||
+        serialised.includes("goal")))
+  );
+}
+
+function selectionPriceForPlayer(
+  node: any,
+  playerId: number,
+  playerName: string
+): number | null {
+  if (node === null || node === undefined) {
+    return null;
+  }
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const price =
+        selectionPriceForPlayer(
+          item,
+          playerId,
+          playerName
+        );
+
+      if (price !== null) {
+        return price;
+      }
+    }
+
+    return null;
+  }
+
+  if (typeof node !== "object") {
+    return null;
+  }
+
+  const directIds = [
+    node.player_id,
+    node.player?.id,
+    node.player?.player_id,
+    node.selection_id
+  ];
+
+  const hasPlayerId = directIds.some(
+    (value) => Number(value) === playerId
+  );
+
+  const targetName =
+    normaliseToken(playerName);
+
+  const targetSurname =
+    normaliseToken(
+      surname(playerName)
+    );
+
+  const names = [
+    node.player_name,
+    node.player?.name,
+    node.player?.full_name,
+    node.name,
+    node.label,
+    node.selection_name,
+    node.selection,
+    node.participant_name
+  ];
+
+  const hasPlayerName = names.some(
+    (value) => {
+      const token =
+        normaliseToken(value);
+
+      return (
+        (targetName &&
+          token.includes(targetName)) ||
+        (targetSurname &&
+          token === targetSurname)
+      );
+    }
+  );
+
+  const directPrice =
+    priceFromNode(node);
+
+  if (
+    directPrice !== null &&
+    (hasPlayerId || hasPlayerName)
+  ) {
+    return directPrice;
+  }
+
+  for (const [key, child] of Object.entries(node)) {
+    const keyToken =
+      normaliseToken(key);
+
+    if (
+      keyToken ===
+      String(playerId) ||
+      (targetSurname &&
+        keyToken === targetSurname) ||
+      (targetName &&
+        keyToken.includes(targetName))
+    ) {
+      const price =
+        priceFromNode(child);
+
+      if (price !== null) {
+        return price;
+      }
+    }
+
+    if (
+      child &&
+      typeof child === "object"
+    ) {
+      const price =
+        selectionPriceForPlayer(
+          child,
+          playerId,
+          playerName
+        );
+
+      if (price !== null) {
+        return price;
+      }
+    }
+  }
+
+  return null;
+}
+
+function marketPricesForBookmaker(
+  payload: any,
+  targetBookmaker: string,
+  marketMatcher: (market: any) => boolean
+): any[] {
+  const markets =
+    Array.isArray(payload?.markets)
+      ? payload.markets
+      : [];
+
+  const matches: any[] = [];
+
+  for (const market of markets) {
+    if (!marketMatcher(market)) {
+      continue;
+    }
+
+    const marketBooks =
+      Array.isArray(market?.bookmakers)
+        ? market.bookmakers
+        : [];
+
+    for (const bookmaker of marketBooks) {
+      if (
+        bookmakerMatches(
+          bookmaker,
+          targetBookmaker
+        )
+      ) {
+        matches.push(bookmaker);
+      }
+    }
+  }
+
+  return matches;
+}
+
+function get1X2Prices(
+  payload: any,
+  targetBookmaker: string
+) {
+  const rootBookmaker =
+    Array.isArray(payload?.bookmakers)
+      ? payload.bookmakers.find(
+          (bookmaker: any) =>
+            bookmakerMatches(
+              bookmaker,
+              targetBookmaker
+            )
+        )
+      : null;
+
+  if (rootBookmaker) {
+    const home = numericPrice(
+      rootBookmaker?.odds_home ??
+      rootBookmaker?.home ??
+      rootBookmaker?.odds_1
+    );
+
+    const draw = numericPrice(
+      rootBookmaker?.odds_draw ??
+      rootBookmaker?.draw ??
+      rootBookmaker?.odds_x
+    );
+
+    const away = numericPrice(
+      rootBookmaker?.odds_away ??
+      rootBookmaker?.away ??
+      rootBookmaker?.odds_2
+    );
+
+    if (
+      home !== null ||
+      draw !== null ||
+      away !== null
+    ) {
+      return {
+        home,
+        draw,
+        away
+      };
+    }
+  }
+
+  const marketBooks =
+    marketPricesForBookmaker(
+      payload,
+      targetBookmaker,
+      marketIs1X2
+    );
+
+  const result = {
+    home: null as number | null,
+    draw: null as number | null,
+    away: null as number | null
+  };
+
+  for (const bookmaker of marketBooks) {
+    const directHome = numericPrice(
+      bookmaker?.odds_home
+    );
+    const directDraw = numericPrice(
+      bookmaker?.odds_draw
+    );
+    const directAway = numericPrice(
+      bookmaker?.odds_away
+    );
+
+    result.home ??= directHome;
+    result.draw ??= directDraw;
+    result.away ??= directAway;
+
+    const prices =
+      bookmaker?.prices;
+
+    if (prices && typeof prices === "object") {
+      const homeNode =
+        prices.HOME ??
+        prices.home ??
+        prices["1"];
+      const drawNode =
+        prices.DRAW ??
+        prices.draw ??
+        prices["X"] ??
+        prices["x"];
+      const awayNode =
+        prices.AWAY ??
+        prices.away ??
+        prices["2"];
+
+      result.home ??= priceFromNode(
+        homeNode
+      );
+      result.draw ??= priceFromNode(
+        drawNode
+      );
+      result.away ??= priceFromNode(
+        awayNode
+      );
+    }
+  }
+
+  return result;
+}
+
+async function getNextMatchOdds(
+  fixture: any,
+  playerId: number,
+  playerName: string
+) {
+  const fixtureId =
+    Number(fixture?.id);
+
+  const apiKey =
+    process.env.BSD_API_KEY;
+
+  if (
+    !Number.isFinite(fixtureId) ||
+    fixtureId <= 0 ||
+    !apiKey
+  ) {
+    return null;
+  }
+
+  try {
+    const response =
+      await fetch(
+        `https://sports.bzzoiro.com/odds/api/events/${fixtureId}/?sport=football`,
+        {
+          headers: {
+            Authorization: `Token ${apiKey}`
+          },
+          next: {
+            revalidate: 60
+          }
+        }
+      );
+
+    if (!response.ok) {
+      console.error(
+        "Odds API request failed:",
+        response.status
+      );
+
+      return null;
+    }
+
+    const payload =
+      await response.json();
+
+    const bookmakers = [
+      {
+        name: "1xBet",
+        slug: "1xbet"
+      },
+      {
+        name: "Betway",
+        slug: "betway"
+      }
+    ].map(
+      ({ name, slug }) => {
+        const oneXTwo =
+          get1X2Prices(
+            payload,
+            slug
+          );
+
+        const firstScorerBooks =
+          marketPricesForBookmaker(
+            payload,
+            slug,
+            marketIsFirstScorer
+          );
+
+        let hamzaFirstScorer: number | null = null;
+
+        for (const bookmaker of firstScorerBooks) {
+          hamzaFirstScorer =
+            selectionPriceForPlayer(
+              bookmaker,
+              playerId,
+              playerName
+            );
+
+          if (
+            hamzaFirstScorer !== null
+          ) {
+            break;
+          }
+        }
+
+        return {
+          name,
+          oneXTwo,
+          hamzaFirstScorer
+        };
+      }
+    );
+
+    return {
+      fixtureId,
+      bookmakers,
+      updatedAt:
+        payload?.updated_at ??
+        payload?.markets?.[0]
+          ?.bookmakers?.[0]
+          ?.updated_at ??
+        null
+    };
+  } catch (error) {
+    console.error(
+      "Odds API request failed:",
+      error
+    );
+
+    return null;
+  }
+}
+
 function appearanceSummary(
   appearance: any,
   latestStatus: any
@@ -677,6 +1173,15 @@ export default async function Home() {
 
   const nextDate =
     dateValue(next);
+
+  const nextOdds = next
+    ? await getNextMatchOdds(
+        next,
+        hamzaPlayerId,
+        data.player_name ??
+          "Hamza Choudhury"
+      )
+    : null;
 
   const appearanceSummaryText =
     appearanceSummary(
@@ -1300,6 +1805,75 @@ export default async function Home() {
           line-height: 1.4;
         }
 
+        .odds-card {
+          margin-top: 24px;
+          background: #ffffff;
+          color: #090d13;
+          border-radius: 30px;
+          padding: 34px;
+        }
+
+        .odds-match {
+          margin-top: 9px;
+          color: #52647d;
+          font-size: 15px;
+          font-weight: 800;
+        }
+
+        .odds-table {
+          margin-top: 22px;
+          overflow-x: auto;
+        }
+
+        .odds-row {
+          display: grid;
+          grid-template-columns: minmax(120px, 1.35fr) repeat(4, minmax(78px, 0.65fr));
+          align-items: center;
+          gap: 10px;
+          padding: 15px 0;
+          border-top: 1px solid #dfe4ea;
+          min-width: 540px;
+        }
+
+        .odds-row:first-child {
+          border-top: 0;
+          padding-top: 0;
+        }
+
+        .odds-cell {
+          text-align: right;
+          font-size: 14px;
+          font-weight: 900;
+        }
+
+        .odds-bookmaker {
+          text-align: left;
+          font-size: 15px;
+          font-weight: 900;
+        }
+
+        .odds-heading {
+          color: #7084a1;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+
+        .odds-note {
+          margin-top: 14px;
+          color: #7084a1;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .odds-unavailable {
+          margin-top: 18px;
+          color: #52647d;
+          font-size: 15px;
+          line-height: 1.5;
+        }
+
         .updated {
           margin-top: 23px;
           text-align: center;
@@ -1391,7 +1965,8 @@ export default async function Home() {
           .live-card,
           .section-card,
           .next-card,
-          .fixtures-card {
+          .fixtures-card,
+          .odds-card {
             padding: 27px 22px;
             border-radius: 25px;
           }
@@ -1965,6 +2540,81 @@ export default async function Home() {
               }
             )
           )}
+        </section>
+
+        <section className="odds-card">
+          <div className="section-label">
+            MATCH ODDS
+          </div>
+
+          <div className="odds-match">
+            {next
+              ? fixtureName(next)
+              : "No upcoming fixture"}
+          </div>
+
+          {nextOdds ? (
+            <div className="odds-table">
+              <div className="odds-row">
+                <div className="odds-bookmaker odds-heading">
+                  Bookmaker
+                </div>
+                <div className="odds-cell odds-heading">
+                  1
+                </div>
+                <div className="odds-cell odds-heading">
+                  X
+                </div>
+                <div className="odds-cell odds-heading">
+                  2
+                </div>
+                <div className="odds-cell odds-heading">
+                  Hamza first to score
+                </div>
+              </div>
+
+              {nextOdds.bookmakers.map(
+                (bookmaker: any) => (
+                  <div
+                    className="odds-row"
+                    key={bookmaker.name}
+                  >
+                    <div className="odds-bookmaker">
+                      {bookmaker.name}
+                    </div>
+
+                    <div className="odds-cell">
+                      {bookmaker.oneXTwo.home ??
+                        "—"}
+                    </div>
+
+                    <div className="odds-cell">
+                      {bookmaker.oneXTwo.draw ??
+                        "—"}
+                    </div>
+
+                    <div className="odds-cell">
+                      {bookmaker.oneXTwo.away ??
+                        "—"}
+                    </div>
+
+                    <div className="odds-cell">
+                      {bookmaker.hamzaFirstScorer ??
+                        "—"}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          ) : (
+            <div className="odds-unavailable">
+              Odds are currently unavailable.
+            </div>
+          )}
+
+          <div className="odds-note">
+            Decimal odds. Prices can change.
+          </div>
         </section>
 
         <section className="bio-card">
