@@ -2822,24 +2822,31 @@ export default async function Home() {
                         )}
                       </div>
 
-                      {index === 0 &&
-                        hasComplete1X2(
-                          firstUpcomingOdds?.oneXTwo
-                        ) && (
-                          <div className="fixture-odds">
-                            {formatOddsPrice(
-                              firstUpcomingOdds?.oneXTwo?.home
-                            )}{" "}
-                            -{" "}
-                            {formatOddsPrice(
-                              firstUpcomingOdds?.oneXTwo?.draw
-                            )}{" "}
-                            -{" "}
-                            {formatOddsPrice(
-                              firstUpcomingOdds?.oneXTwo?.away
-                            )}
-                          </div>
-                        )}
+                      {index === 0 && (
+                        <>
+                          {hasComplete1X2(
+                            firstUpcomingOdds?.oneXTwo
+                          ) ? (
+                            <div className="fixture-odds">
+                              {formatOddsPrice(
+                                firstUpcomingOdds?.oneXTwo?.home
+                              )}{" "}
+                              -{" "}
+                              {formatOddsPrice(
+                                firstUpcomingOdds?.oneXTwo?.draw
+                              )}{" "}
+                              -{" "}
+                              {formatOddsPrice(
+                                firstUpcomingOdds?.oneXTwo?.away
+                              )}
+                            </div>
+                          ) : (
+                            <div className="fixture-odds">
+                              No odds yet
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
 
                     <div className="fixture-date">
@@ -2887,34 +2894,31 @@ export default async function Home() {
 
               {hasComplete1X2(
                 nextOdds?.oneXTwo
-              ) && (
+              ) ? (
                 <div className="odds-mini-row">
-                  <div className="odds-book">
-                    <span className="odds-brand odds-brand-consensus">
-                      Consensus
-                    </span>
-                  </div>
-
                   <div className="odds-prices">
                     <span>
-                      1:{" "}
                       {formatOddsPrice(
                         nextOdds?.oneXTwo?.home
                       )}
                     </span>
+                    <span>-</span>
                     <span>
-                      X:{" "}
                       {formatOddsPrice(
                         nextOdds?.oneXTwo?.draw
                       )}
                     </span>
+                    <span>-</span>
                     <span>
-                      2:{" "}
                       {formatOddsPrice(
                         nextOdds?.oneXTwo?.away
                       )}
                     </span>
                   </div>
+                </div>
+              ) : (
+                <div className="odds-unavailable">
+                  No odds yet
                 </div>
               )}
             </div>
@@ -2934,14 +2938,8 @@ export default async function Home() {
 
               {numericPrice(
                 nextOdds?.hamzaAnytimeScorer
-              ) !== null && (
+              ) !== null ? (
                 <div className="odds-mini-row">
-                  <div className="odds-book">
-                    <span className="odds-brand odds-brand-consensus">
-                      Consensus
-                    </span>
-                  </div>
-
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
@@ -2949,6 +2947,10 @@ export default async function Home() {
                       )}
                     </span>
                   </div>
+                </div>
+              ) : (
+                <div className="odds-unavailable">
+                  No odds yet
                 </div>
               )}
             </div>
@@ -2970,34 +2972,31 @@ export default async function Home() {
 
               {hasComplete1X2(
                 bangladeshOdds?.oneXTwo
-              ) && (
+              ) ? (
                 <div className="odds-mini-row">
-                  <div className="odds-book">
-                    <span className="odds-brand odds-brand-consensus">
-                      Consensus
-                    </span>
-                  </div>
-
                   <div className="odds-prices">
                     <span>
-                      1:{" "}
                       {formatOddsPrice(
                         bangladeshOdds?.oneXTwo?.home
                       )}
                     </span>
+                    <span>-</span>
                     <span>
-                      X:{" "}
                       {formatOddsPrice(
                         bangladeshOdds?.oneXTwo?.draw
                       )}
                     </span>
+                    <span>-</span>
                     <span>
-                      2:{" "}
                       {formatOddsPrice(
                         bangladeshOdds?.oneXTwo?.away
                       )}
                     </span>
                   </div>
+                </div>
+              ) : (
+                <div className="odds-unavailable">
+                  No odds yet
                 </div>
               )}
             </div>
@@ -3019,14 +3018,8 @@ export default async function Home() {
 
               {numericPrice(
                 bangladeshOdds?.hamzaAnytimeScorer
-              ) !== null && (
+              ) !== null ? (
                 <div className="odds-mini-row">
-                  <div className="odds-book">
-                    <span className="odds-brand odds-brand-consensus">
-                      Consensus
-                    </span>
-                  </div>
-
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
@@ -3034,6 +3027,10 @@ export default async function Home() {
                       )}
                     </span>
                   </div>
+                </div>
+              ) : (
+                <div className="odds-unavailable">
+                  No odds yet
                 </div>
               )}
             </div>
