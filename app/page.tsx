@@ -1230,6 +1230,54 @@ export default async function Home() {
           font-weight: 800;
         }
 
+        .bio-card {
+          margin-top: 24px;
+          background: #ffffff;
+          color: #090d13;
+          border-radius: 30px;
+          padding: 34px;
+        }
+
+        .bio-heading {
+          margin: 0 0 22px;
+          font-size: 30px;
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: -1px;
+        }
+
+        .bio-content {
+          color: #263241;
+          font-size: 16px;
+          line-height: 1.65;
+        }
+
+        .bio-photo {
+          float: right;
+          width: 170px;
+          height: 170px;
+          object-fit: cover;
+          object-position: center top;
+          margin: 0 0 18px 28px;
+          border-radius: 18px;
+        }
+
+        .bio-content p {
+          margin: 0 0 16px;
+        }
+
+        .bio-content p:last-child {
+          margin-bottom: 0;
+        }
+
+        .bio-caption {
+          clear: both;
+          margin-top: 8px;
+          color: #7084a1;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
         .updated {
           margin-top: 23px;
           text-align: center;
@@ -1294,6 +1342,17 @@ export default async function Home() {
           .fixtures-card {
             padding: 27px 22px;
             border-radius: 25px;
+          }
+
+          .bio-card {
+            padding: 27px 22px;
+            border-radius: 25px;
+          }
+
+          .bio-photo {
+            width: 145px;
+            height: 145px;
+            margin-left: 22px;
           }
 
           .live-card-inner {
@@ -1401,6 +1460,18 @@ export default async function Home() {
           .score,
           .live-score {
             font-size: 48px;
+          }
+
+          .bio-heading {
+            font-size: 27px;
+          }
+
+          .bio-photo {
+            float: none;
+            display: block;
+            width: 130px;
+            height: 130px;
+            margin: 0 0 18px;
           }
 
           .times,
@@ -1593,7 +1664,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Sub in
+                    Subbed on
                   </div>
 
                   <div className="detail-stat-value">
@@ -1610,7 +1681,7 @@ export default async function Home() {
 
                 <div className="detail-stat">
                   <div className="detail-stat-label">
-                    Sub out
+                    Subbed off
                   </div>
 
                   <div className="detail-stat-value">
@@ -1820,6 +1891,32 @@ export default async function Home() {
               }
             )
           )}
+        </section>
+
+        <section className="bio-card">
+          <h2 className="bio-heading">
+            ABOUT HAMZA CHOUDHURY
+          </h2>
+
+          <div className="bio-content">
+            <img
+              className="bio-photo"
+              src="/hamza-bio.jpg"
+              alt="Hamza Choudhury"
+            />
+
+            <p>
+              Hamza Choudhury is a professional footballer whose career has included club football in England and international football. This section is a placeholder for a fuller biography.
+            </p>
+
+            <p>
+              The final version can cover his background, playing career, position, clubs, international appearances and other key milestones in a concise, Wikipedia-style format.
+            </p>
+
+            <div className="bio-caption">
+              Biography section — placeholder text and image.
+            </div>
+          </div>
         </section>
 
         <div className="updated">
