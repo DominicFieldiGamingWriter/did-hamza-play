@@ -531,7 +531,7 @@ function marketIs1X2(market: any): boolean {
   );
 }
 
-function marketIsAnytimeScorer(market: any): boolean {
+function marketIsFirstGoalScorer(market: any): boolean {
   const values = [
     market?.market,
     market?.market_kind,
@@ -550,23 +550,31 @@ function marketIsAnytimeScorer(market: any): boolean {
     market ?? {}
   ).toLowerCase();
 
-  const hasAnytime = (text: string) =>
-    text.includes("anytime") ||
-    text.includes("to score") ||
-    text.includes("to_score");
+  const hasFirst = (text: string) =>
+    text.includes("first");
 
   const hasScorer = (text: string) =>
     text.includes("scor") ||
     text.includes("goal");
 
+  const hasPlayer = (text: string) =>
+    text.includes("player") ||
+    text.includes("selection");
+
+  const isFirstGoalMarket = (text: string) =>
+    hasFirst(text) &&
+    hasScorer(text) &&
+    (
+      text.includes("goal") ||
+      hasPlayer(text)
+    );
+
   return (
     values.some(
       (value) =>
-        hasAnytime(value) &&
-        hasScorer(value)
+        isFirstGoalMarket(value)
     ) ||
-    (hasAnytime(serialised) &&
-      hasScorer(serialised))
+    isFirstGoalMarket(serialised)
   );
 }
 
@@ -954,7 +962,7 @@ function getConsensus1X2(
   };
 }
 
-function getConsensusAnytimeScorer(
+function getConsensusFirstGoalScorer(
   payload: any,
   playerId: number,
   playerName: string
@@ -976,9 +984,11 @@ function getConsensusAnytimeScorer(
         .toLowerCase();
 
     if (
-      serialised.includes("anytime") ||
-      serialised.includes("to_score") ||
-      serialised.includes("goalscorer")
+      serialised.includes("first") &&
+      (
+        serialised.includes("goal") ||
+        serialised.includes("scor")
+      )
     ) {
       const price =
         selectionPriceForPlayer(
@@ -1000,7 +1010,7 @@ function getConsensusAnytimeScorer(
 
   for (const market of markets) {
     if (
-      !marketIsAnytimeScorer(
+      !marketIsFirstGoalScorer(
         market
       )
     ) {
@@ -1125,8 +1135,8 @@ async function getConsensusMatchOdds(
         getConsensus1X2(
           payload
         ),
-      hamzaAnytimeScorer:
-        getConsensusAnytimeScorer(
+      hamzaFirstGoalScorer:
+        getConsensusFirstGoalScorer(
           payload,
           playerId,
           playerName
@@ -2916,7 +2926,7 @@ export default async function Home() {
                 Next match odds
               </h3>
               <div className="odds-mini-subtitle">
-                Hamza to score anytime
+                Hamza to score first goal
               </div>
               <div className="odds-mini-match">
                 {next
@@ -2925,13 +2935,13 @@ export default async function Home() {
               </div>
 
               {numericPrice(
-                nextOdds?.hamzaAnytimeScorer
+                nextOdds?.hamzaFirstGoalScorer
               ) !== null ? (
                 <div className="odds-mini-row">
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
-                        nextOdds?.hamzaAnytimeScorer
+                        nextOdds?.hamzaFirstGoalScorer
                       )}
                     </span>
                   </div>
@@ -2994,7 +3004,7 @@ export default async function Home() {
                 Next Bangladesh match odds
               </h3>
               <div className="odds-mini-subtitle">
-                Hamza to score anytime
+                Hamza to score first goal
               </div>
               <div className="odds-mini-match">
                 {nextBangladeshFixture
@@ -3005,13 +3015,13 @@ export default async function Home() {
               </div>
 
               {numericPrice(
-                bangladeshOdds?.hamzaAnytimeScorer
+                bangladeshOdds?.hamzaFirstGoalScorer
               ) !== null ? (
                 <div className="odds-mini-row">
                   <div className="odds-prices">
                     <span>
                       {formatOddsPrice(
-                        bangladeshOdds?.hamzaAnytimeScorer
+                        bangladeshOdds?.hamzaFirstGoalScorer
                       )}
                     </span>
                   </div>
