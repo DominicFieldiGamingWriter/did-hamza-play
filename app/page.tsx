@@ -2858,7 +2858,7 @@ export default async function Home() {
         <div className="updated">
           Data updated{" "}
           {data.updated_at
-            ? new Intl.DateTimeFormat(
+            ? `${new Intl.DateTimeFormat(
                 "en-GB",
                 {
                   day: "2-digit",
@@ -2873,7 +2873,7 @@ export default async function Home() {
                 new Date(
                   data.updated_at
                 )
-              )} (Bangladesh)
+              )} (Bangladesh)`
             : ""}
         </div>
       </main>
