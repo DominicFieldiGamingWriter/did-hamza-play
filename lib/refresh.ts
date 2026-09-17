@@ -1,6 +1,7 @@
 import {
   findTeam,
   getPlayer,
+  getTeamById,
   getTeamSquad,
   getTeamFixtures,
   getLineups,
@@ -1647,6 +1648,505 @@ async function buildLivePlayerStatus(
   }
 }
 
+
+function playerTeamId(
+  player: any
+): number {
+  const candidates = [
+    player?.team_id,
+    player?.team?.id,
+    player?.current_team_id,
+    player?.current_team?.id,
+    player?.club_id,
+    player?.club?.id
+  ];
+
+  for (const candidate of candidates) {
+    const number = Number(candidate);
+
+    if (
+      Number.isFinite(number) &&
+      number > 0
+    ) {
+      return number;
+    }
+  }
+
+  return 0;
+}
+
+function playerTeamName(
+  player: any
+): string {
+  const candidates = [
+    player?.team?.name,
+    player?.team_name,
+    player?.current_team?.name,
+    player?.current_team_name,
+    player?.club?.name,
+    player?.club_name
+  ];
+
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === "string" &&
+      candidate.trim()
+    ) {
+      return candidate.trim();
+    }
+  }
+
+  return "";
+}
+
+function playerNationalTeamId(
+  player: any
+): number {
+  const candidates = [
+    player?.national_team_id,
+    player?.nationalTeamId,
+    player?.national_team?.id,
+    player?.nationalTeam?.id,
+    player?.international_team_id,
+    player?.internationalTeamId,
+    player?.international_team?.id,
+    player?.internationalTeam?.id
+  ];
+
+  for (const candidate of candidates) {
+    const number = Number(candidate);
+
+    if (
+      Number.isFinite(number) &&
+      number > 0
+    ) {
+      return number;
+    }
+  }
+
+  return 0;
+}
+
+function playerNationalTeamName(
+  player: any
+): string {
+  const candidates = [
+    player?.national_team?.name,
+    player?.nationalTeam?.name,
+    player?.national_team_name,
+    player?.nationalTeamName,
+    player?.international_team?.name,
+    player?.internationalTeam?.name,
+    player?.international_team_name,
+    player?.internationalTeamName,
+    player?.nationality?.name,
+    player?.country?.name,
+    player?.nationality,
+    player?.country
+  ];
+
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === "string" &&
+      candidate.trim()
+    ) {
+      return candidate.trim();
+    }
+
+    if (
+      candidate &&
+      typeof candidate === "object"
+    ) {
+      const name =
+        candidate?.name ??
+        candidate?.country_name ??
+        candidate?.country;
+
+      if (
+        typeof name === "string" &&
+        name.trim()
+      ) {
+        return name.trim();
+      }
+    }
+  }
+
+  return "";
+}
+
+function isNationalTeam(
+  team: any
+): boolean {
+  const flags = [
+    team?.is_national_team,
+    team?.national_team,
+    team?.is_national
+  ];
+
+  if (
+    flags.some(
+      (value: any) =>
+        value === true ||
+        String(value).toLowerCase() === "true"
+    )
+  ) {
+    return true;
+  }
+
+  const types = [
+    team?.type,
+    team?.team_type,
+    team?.category,
+    team?.kind
+  ]
+    .map(
+      (value: any) =>
+        String(value ?? "").toLowerCase()
+    );
+
+  return types.some(
+    (value: string) =>
+      value.includes("national")
+  );
+}
+
+async function resolvePlayerTeam(
+  player: any
+) {
+  const directId =
+    playerTeamId(player);
+
+  if (directId > 0) {
+    const directTeam =
+      await getTeamById(directId);
+
+    if (directTeam?.id) {
+      return directTeam;
+    }
+  }
+
+  const name =
+    playerTeamName(player);
+
+  if (name) {
+    const teams =
+      await findTeam(name);
+
+    const exact =
+      teams.find(
+        (candidate: any) =>
+          String(
+            candidate?.name ?? ""
+          )
+            .trim()
+            .toLowerCase() ===
+          name.toLowerCase()
+      ) ?? teams[0];
+
+    if (exact?.id) {
+      return exact;
+    }
+  }
+
+  return null;
+}
+
+function playerIdForFallback(
+  player: any
+): number {
+  return Number(
+    player?.id ??
+    player?.player_id ??
+    0
+  );
+}
+
+async function resolvePlayerNationalTeam(
+  player: any
+) {
+  const directId =
+    playerNationalTeamId(player);
+
+  if (directId > 0) {
+    const directTeam =
+      await getTeamById(directId);
+
+    if (directTeam?.id) {
+      return directTeam;
+    }
+  }
+
+  const discoveredName =
+    playerNationalTeamName(player);
+
+  /*
+   * BSD may expose Bangladesh as the player's
+   * nationality/country rather than as an explicit
+   * national_team field. For Hamza (player 6135),
+   * Bangladesh is therefore a deliberate fallback.
+   * We still require the returned team to look like a
+   * national side before using it.
+   */
+  const names = [
+    discoveredName,
+    playerIdForFallback(player) === 6135
+      ? "Bangladesh"
+      : ""
+  ].filter(
+    (value, index, array) =>
+      value &&
+      array.indexOf(value) === index
+  );
+
+  for (const name of names) {
+    const teams =
+      await findTeam(name);
+
+    const national =
+      teams.find(
+        (candidate: any) =>
+          isNationalTeam(candidate)
+      );
+
+    if (national?.id) {
+      return national;
+    }
+
+    const exact =
+      teams.find(
+        (candidate: any) =>
+          String(
+            candidate?.name ?? ""
+          )
+            .trim()
+            .toLowerCase() ===
+          name.toLowerCase()
+      );
+
+    if (exact?.id && isNationalTeam(exact)) {
+      return exact;
+    }
+  }
+
+  return null;
+}
+
+function fixtureTimestamp(
+  fixture: any
+): number {
+  const candidates = [
+    fixture?.date,
+    fixture?.time?.kickoff_at,
+    fixture?.time?.start_time,
+    fixture?.kickoff_at,
+    fixture?.kickoff,
+    fixture?.event_date,
+    fixture?.start_time
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const timestamp =
+      new Date(candidate).getTime();
+
+    if (!Number.isNaN(timestamp)) {
+      return timestamp;
+    }
+  }
+
+  return 0;
+}
+
+function tagFixture(
+  fixture: any,
+  trackedTeam: any,
+  teamType: "club" | "national"
+) {
+  if (!fixture) {
+    return null;
+  }
+
+  const normalised =
+    normaliseFixture(
+      fixture,
+      Number(trackedTeam.id)
+    );
+
+  return {
+    ...normalised,
+    tracked_team_id:
+      Number(trackedTeam.id),
+    tracked_team_name:
+      trackedTeam.name ??
+      "Unknown",
+    tracked_team_type:
+      teamType
+  };
+}
+
+
+const BANGLADESH_FALLBACK_FIXTURES = [
+  {
+    id: "bd-asean-2026-09-25",
+    date: "2026-09-25T09:00:00+00:00",
+    event_date: "2026-09-25T09:00:00+00:00",
+    status: "notstarted",
+    home_team: { id: 0, name: "Bangladesh" },
+    away_team: { id: 0, name: "Malaysia" },
+    home_score: null,
+    away_score: null,
+    opponent_name: "Malaysia",
+    opponent_id: null,
+    stage_name: "FIFA ASEAN Cup 2026",
+    round_label: "Group A",
+    league_name: "FIFA ASEAN Cup 2026",
+    is_fallback_fixture: true
+  },
+  {
+    id: "bd-asean-2026-09-28",
+    date: "2026-09-28T09:00:00+00:00",
+    event_date: "2026-09-28T09:00:00+00:00",
+    status: "notstarted",
+    home_team: { id: 0, name: "Singapore" },
+    away_team: { id: 0, name: "Bangladesh" },
+    home_score: null,
+    away_score: null,
+    opponent_name: "Singapore",
+    opponent_id: null,
+    stage_name: "FIFA ASEAN Cup 2026",
+    round_label: "Group A",
+    league_name: "FIFA ASEAN Cup 2026",
+    is_fallback_fixture: true
+  },
+  {
+    id: "bd-asean-2026-10-01",
+    date: "2026-10-01T12:30:00+00:00",
+    event_date: "2026-10-01T12:30:00+00:00",
+    status: "notstarted",
+    home_team: { id: 0, name: "Indonesia" },
+    away_team: { id: 0, name: "Bangladesh" },
+    home_score: null,
+    away_score: null,
+    opponent_name: "Indonesia",
+    opponent_id: null,
+    stage_name: "FIFA ASEAN Cup 2026",
+    round_label: "Group A",
+    league_name: "FIFA ASEAN Cup 2026",
+    is_fallback_fixture: true
+  }
+];
+
+function fallbackNationalFixturesIfNeeded(
+  fixtures: any[],
+  nationalTeam: any
+): any[] {
+  if (fixtures.length > 0 || !nationalTeam?.id) {
+    return fixtures;
+  }
+
+  return BANGLADESH_FALLBACK_FIXTURES.map(
+    (fixture) => ({
+      ...fixture,
+      tracked_team_id: Number(nationalTeam.id),
+      tracked_team_name:
+        nationalTeam.name ??
+        "Bangladesh",
+      tracked_team_type: "national"
+    })
+  );
+}
+
+function mergeUpcomingFixtures(
+  clubFixtures: any[],
+  nationalFixtures: any[]
+): any[] {
+  return [
+    ...clubFixtures,
+    ...nationalFixtures
+  ]
+    .filter(
+      (fixture) =>
+        fixture &&
+        fixtureTimestamp(fixture) > Date.now()
+    )
+    .sort(
+      (a, b) =>
+        fixtureTimestamp(a) -
+        fixtureTimestamp(b)
+    )
+    .slice(0, 6);
+}
+
+function chooseLatestFinishedFixture(
+  clubLast: any,
+  nationalLast: any
+) {
+  const candidates =
+    [
+      {
+        fixture: clubLast,
+        teamType: "club" as const
+      },
+      {
+        fixture: nationalLast,
+        teamType: "national" as const
+      }
+    ]
+      .filter(
+        (entry) =>
+          entry.fixture &&
+          fixtureTimestamp(
+            entry.fixture
+          ) > 0
+      )
+      .sort(
+        (a, b) =>
+          fixtureTimestamp(
+            b.fixture
+          ) -
+          fixtureTimestamp(
+            a.fixture
+          )
+      );
+
+  return candidates[0] ?? null;
+}
+
+function chooseLiveFixture(
+  clubLive: any,
+  nationalLive: any
+) {
+  const candidates =
+    [
+      {
+        fixture: clubLive,
+        teamType: "club" as const
+      },
+      {
+        fixture: nationalLive,
+        teamType: "national" as const
+      }
+    ]
+      .filter(
+        (entry) =>
+          entry.fixture
+      )
+      .sort(
+        (a, b) =>
+          fixtureTimestamp(
+            a.fixture
+          ) -
+          fixtureTimestamp(
+            b.fixture
+          )
+      );
+
+  return candidates[0] ?? null;
+}
+
 export async function refreshPlayerPage() {
   const playerName =
     process.env.PLAYER_NAME ||
@@ -1669,31 +2169,66 @@ export async function refreshPlayerPage() {
     );
   }
 
-  const teams =
-    await findTeam(
-      "Sheffield United"
-    );
-
+  /*
+   * Start with the player ID. We prefer
+   * the team references returned on that
+   * player record rather than relying on
+   * the player's name.
+   */
   const team =
-    teams.find(
-      (t: any) =>
-        String(
-          t.name
-        ).toLowerCase() ===
-        "sheffield united"
-    ) ??
-    teams[0];
+    await resolvePlayerTeam(
+      player
+    );
 
   if (!team?.id) {
     throw new Error(
-      "Could not find Sheffield United in BSD."
+      `Could not determine the current club for player ID ${playerId}.`
     );
   }
 
-  const squad =
-    await getTeamSquad(
-      team.id
+  /*
+   * Resolve the player's national team
+   * from the player record where possible.
+   * If BSD only exposes nationality on the
+   * player record, use that as a discovery
+   * key and prefer a team marked as national.
+   */
+  const nationalTeam =
+    await resolvePlayerNationalTeam(
+      player
     );
+
+  const [
+    squad,
+    clubFixtures,
+    nationalSquad,
+    nationalFixtures
+  ] = await Promise.all([
+    getTeamSquad(
+      team.id
+    ),
+    getTeamFixtures(
+      team.id
+    ),
+    nationalTeam?.id
+      ? getTeamSquad(
+          Number(
+            nationalTeam.id
+          )
+        )
+      : Promise.resolve([]),
+    nationalTeam?.id
+      ? getTeamFixtures(
+          Number(
+            nationalTeam.id
+          )
+        )
+      : Promise.resolve({
+          live: null,
+          last: null,
+          next: []
+        })
+  ]);
 
   const squadPlayer =
     squad.find(
@@ -1705,20 +2240,48 @@ export async function refreshPlayerPage() {
         playerId
     ) ?? null;
 
-  const {
-    live,
-    last,
-    next
-  } =
-    await getTeamFixtures(
-      team.id
+  const nationalSquadPlayer =
+    nationalSquad.find(
+      (p: any) =>
+        Number(
+          p.id ??
+          p.player?.id
+        ) ===
+        playerId
+    ) ?? null;
+
+  const latestFinished =
+    chooseLatestFinishedFixture(
+      clubFixtures.last,
+      nationalFixtures.last
     );
 
-  if (!last) {
+  if (!latestFinished?.fixture) {
     throw new Error(
-      "Could not find Sheffield United's latest completed match."
+      "Could not find a latest completed club or national-team match."
     );
   }
+
+  const latestLast =
+    latestFinished.fixture;
+
+  const lastTeam =
+    latestFinished.teamType ===
+    "national"
+      ? nationalTeam
+      : team;
+
+  if (!lastTeam?.id) {
+    throw new Error(
+      "Could not determine the team associated with the latest match."
+    );
+  }
+
+  const lastSquadPlayer =
+    latestFinished.teamType ===
+    "national"
+      ? nationalSquadPlayer
+      : squadPlayer;
 
   const [
     lineupData,
@@ -1727,15 +2290,13 @@ export async function refreshPlayerPage() {
   ] =
     await Promise.all([
       getLineups(
-        last.id
+        latestLast.id
       ),
-
       getFixturePlayerStats(
-        last.id
+        latestLast.id
       ),
-
       getFixtureIncidents(
-        last.id
+        latestLast.id
       )
     ]);
 
@@ -1749,6 +2310,7 @@ export async function refreshPlayerPage() {
   const actualPlayerName =
     player?.name ??
     squadPlayer?.name ??
+    nationalSquadPlayer?.name ??
     playerName;
 
   const lastStatus =
@@ -1767,12 +2329,16 @@ export async function refreshPlayerPage() {
     );
 
   const bench =
-    lineupRole === "substitute" ||
-    lastStatus?.type === "unused_substitute" ||
+    lineupRole ===
+      "substitute" ||
+    lastStatus?.type ===
+      "unused_substitute" ||
     incidents.some(
       (incident: any) =>
-        incident.type === "substitution" &&
-        incident.player_in_id === playerId
+        incident.type ===
+          "substitution" &&
+        incident.player_in_id ===
+          playerId
     );
 
   const appearanceDetails =
@@ -1782,29 +2348,97 @@ export async function refreshPlayerPage() {
       incidents,
       lastStatus,
       Boolean(
-        squadPlayer
+        lastSquadPlayer
       ),
       bench
     );
 
+  const clubUpcoming =
+    [
+      ...(
+        Array.isArray(
+          clubFixtures.next
+        )
+          ? clubFixtures.next
+          : []
+      ).map(
+        (fixture: any) =>
+          tagFixture(
+            fixture,
+            team,
+            "club"
+          )
+      )
+    ];
+
+  const nationalUpcomingFromBsd =
+    [
+      ...(
+        Array.isArray(
+          nationalFixtures.next
+        )
+          ? nationalFixtures.next
+          : []
+      ).map(
+        (fixture: any) =>
+          tagFixture(
+            fixture,
+            nationalTeam,
+            "national"
+          )
+      )
+    ];
+
+  const nationalUpcoming =
+    fallbackNationalFixturesIfNeeded(
+      nationalUpcomingFromBsd,
+      nationalTeam
+    );
+
+  const mergedUpcoming =
+    mergeUpcomingFixtures(
+      clubUpcoming,
+      nationalUpcoming
+    );
+
+  const nextFixture =
+    mergedUpcoming[0] ??
+    null;
+
+  const nextSquadPlayer =
+    nextFixture?.tracked_team_type ===
+      "national"
+      ? nationalSquadPlayer
+      : squadPlayer;
+
   const nextStatus =
     getAvailabilityStatus(
-      squadPlayer
+      nextSquadPlayer
+    );
+
+  const liveChoice =
+    chooseLiveFixture(
+      clubFixtures.live,
+      nationalFixtures.live
     );
 
   const normalisedLiveBase =
-    live
-      ? normaliseFixture(
-          live,
-          team.id
+    liveChoice?.fixture
+      ? tagFixture(
+          liveChoice.fixture,
+          liveChoice.teamType ===
+            "national"
+            ? nationalTeam
+            : team,
+          liveChoice.teamType
         )
       : null;
 
   const livePlayerStatus =
-    live
+    liveChoice?.fixture
       ? await buildLivePlayerStatus(
           playerId,
-          live
+          liveChoice.fixture
         )
       : null;
 
@@ -1818,20 +2452,10 @@ export async function refreshPlayerPage() {
       : null;
 
   const normalisedLast =
-    normaliseFixture(
-      last,
-      team.id
-    );
-
-  const normalisedNext =
-    next.map(
-      (
-        fixture: any
-      ) =>
-        normaliseFixture(
-          fixture,
-          team.id
-        )
+    tagFixture(
+      latestLast,
+      lastTeam,
+      latestFinished.teamType
     );
 
   const payload = {
@@ -1857,6 +2481,7 @@ export async function refreshPlayerPage() {
     player_photo:
       player?.photo ??
       squadPlayer?.photo ??
+      nationalSquadPlayer?.photo ??
       null,
 
     live_fixture:
@@ -1876,7 +2501,7 @@ export async function refreshPlayerPage() {
     },
 
     next_fixtures:
-      normalisedNext,
+      mergedUpcoming,
 
     player_status: {
       latest_match: {
@@ -1918,6 +2543,23 @@ export async function refreshPlayerPage() {
 
     team:
       team.name,
+
+    national_team:
+      nationalTeam?.name ??
+      null,
+
+    national_fixture_source:
+      nationalUpcomingFromBsd.length > 0
+        ? "bsd"
+        : nationalUpcoming.length > 0
+          ? "fallback"
+          : "none",
+
+    latest_match_type:
+      latestFinished.teamType,
+
+    upcoming_match_count:
+      mergedUpcoming.length,
 
     updated_at:
       payload.updated_at,
