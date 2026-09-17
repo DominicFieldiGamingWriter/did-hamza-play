@@ -2822,7 +2822,7 @@ export default async function Home() {
                         <>
                           {hasComplete1X2(
                             firstUpcomingOdds?.oneXTwo
-                          ) ? (
+                          ) && (
                             <div className="fixture-odds">
                               (1){" "}{formatOddsPrice(
                                 firstUpcomingOdds?.oneXTwo?.home
@@ -2831,10 +2831,6 @@ export default async function Home() {
                               )}{" "}-{" "}(2){" "}{formatOddsPrice(
                                 firstUpcomingOdds?.oneXTwo?.away
                               )}
-                            </div>
-                          ) : (
-                            <div className="fixture-odds">
-                              No odds yet
                             </div>
                           )}
                         </>
