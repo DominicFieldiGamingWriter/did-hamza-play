@@ -678,6 +678,7 @@ function isCurrentlyLive(
   const status =
     String(
       fixture?.status ??
+        fixture?.time?.status ??
         ""
     )
       .trim()
@@ -685,15 +686,9 @@ function isCurrentlyLive(
 
   /*
    * BSD documents `live` as a match that
-   * is currently in progress. Do not infer
-   * live status from the kickoff time alone:
-   * historical events can carry unexpected
-   * non-terminal status values and must not
-   * appear as CURRENTLY PLAYING.
-   *
-   * The feed can also expose more granular
-   * in-play statuses, so recognise those
-   * explicitly as well.
+   * is currently in progress. The feed can
+   * also expose more granular in-play states,
+   * so recognise those explicitly.
    */
   const liveStatuses = new Set([
     "live",
@@ -718,6 +713,72 @@ function isCurrentlyLive(
   );
 }
 
+function fixtureBelongsToTeam(
+  fixture: any,
+  teamId: number
+): boolean {
+  const targetId =
+    Number(teamId);
+
+  const homeId =
+    Number(
+      fixture?.home_team?.id ??
+        fixture?.home?.id ??
+        fixture?.home_team_id ??
+        fixture?.home_id ??
+        NaN
+    );
+
+  const awayId =
+    Number(
+      fixture?.away_team?.id ??
+        fixture?.away?.id ??
+        fixture?.away_team_id ??
+        fixture?.away_id ??
+        NaN
+    );
+
+  return (
+    homeId === targetId ||
+    awayId === targetId
+  );
+}
+
+function isFreshLiveFixture(
+  fixture: any
+): boolean {
+  const timestamp =
+    fixtureTimestamp(
+      fixture
+    );
+
+  if (!timestamp) {
+    return false;
+  }
+
+  const now =
+    Date.now();
+
+  /*
+   * A genuinely live football match should
+   * have kicked off recently. This is an
+   * additional guard against stale/corrupt
+   * records carrying a live-like status.
+   */
+  const maxAgeMs =
+    6 * 60 * 60 * 1000;
+
+  const maxFutureMs =
+    2 * 60 * 60 * 1000;
+
+  return (
+    timestamp >=
+      now - maxAgeMs &&
+    timestamp <=
+      now + maxFutureMs
+  );
+}
+
 export async function getTeamFixtures(
   teamId: number
 ) {
@@ -738,13 +799,9 @@ export async function getTeamFixtures(
     ),
 
     bsdGet<any>(
-      "/events/",
+      "/events/live/",
       {
-        team_id:
-          teamId,
-        status:
-          "live",
-        limit: 100
+        limit: 200
       }
     ),
 
@@ -768,6 +825,18 @@ export async function getTeamFixtures(
   let live =
     responseArray(
       liveData
+    ).filter(
+      (fixture) =>
+        fixtureBelongsToTeam(
+          fixture,
+          teamId
+        ) &&
+        isCurrentlyLive(
+          fixture
+        ) &&
+        isFreshLiveFixture(
+          fixture
+        )
     );
 
   let upcoming =
@@ -776,14 +845,15 @@ export async function getTeamFixtures(
     );
 
   /*
-   * The BSD "live" filter does not always
-   * return every active event. The Fleetwood
-   * match, for example, is returned by BSD
-   * with status "1st_half".
+   * Keep a team-scoped fallback for feeds
+   * where `/events/live/` is temporarily empty
+   * or does not include a match carrying a
+   * granular in-play status.
    *
-   * When the dedicated live query is empty,
-   * inspect the full team event list and
-   * identify active non-terminal events.
+   * The same explicit-status and freshness
+   * checks apply here, so a historical event
+   * cannot become CURRENTLY PLAYING merely
+   * because BSD labels it non-terminal/live.
    */
   if (
     live.length === 0
@@ -805,7 +875,17 @@ export async function getTeamFixtures(
 
     live =
       allEvents.filter(
-        isCurrentlyLive
+        (fixture) =>
+          fixtureBelongsToTeam(
+            fixture,
+            teamId
+          ) &&
+          isCurrentlyLive(
+            fixture
+          ) &&
+          isFreshLiveFixture(
+            fixture
+          )
       );
   }
 
@@ -857,7 +937,13 @@ export async function getTeamFixtures(
   live =
     live
       .filter(
-        isCurrentlyLive
+        (fixture) =>
+          isCurrentlyLive(
+            fixture
+          ) &&
+          isFreshLiveFixture(
+            fixture
+          )
       )
       .sort(
         (a, b) =>
