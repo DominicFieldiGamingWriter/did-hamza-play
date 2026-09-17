@@ -761,6 +761,31 @@ function oddsFromSelectionRows(
 function getConsensus1X2(
   payload: any
 ) {
+  const summary = payload?.odds;
+
+  const summaryResult = {
+    home: numericPrice(
+      summary?.home_win ??
+      summary?.match_winner?.home
+    ),
+    draw: numericPrice(
+      summary?.draw ??
+      summary?.match_winner?.draw
+    ),
+    away: numericPrice(
+      summary?.away_win ??
+      summary?.match_winner?.away
+    )
+  };
+
+  if (
+    summaryResult.home !== null ||
+    summaryResult.draw !== null ||
+    summaryResult.away !== null
+  ) {
+    return summaryResult;
+  }
+
   const rootBookmaker =
     consensusBookmaker(payload);
 
