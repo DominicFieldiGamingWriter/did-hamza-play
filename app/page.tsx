@@ -1434,6 +1434,15 @@ async function getConsensusMatchOdds(
         ? await summaryResponse.json()
         : null;
 
+    console.log(
+      "BSD SUMMARY ODDS DEBUG:",
+      JSON.stringify(
+        summaryPayload,
+        null,
+        2
+      )
+    );
+
     if (!summaryResponse.ok) {
       console.error(
         "Consensus odds summary request failed:",
@@ -1467,6 +1476,15 @@ async function getConsensusMatchOdds(
           feedResponse.status
         );
       }
+
+      console.log(
+        "BSD FEED ODDS DEBUG:",
+        JSON.stringify(
+          feedPayload,
+          null,
+          2
+        )
+      );
     } catch (feedError) {
       console.error(
         "Consensus odds feed request failed:",
