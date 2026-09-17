@@ -578,6 +578,103 @@ function marketIsFirstGoalScorer(market: any): boolean {
   );
 }
 
+function nodeContainsPlayer(
+  node: any,
+  playerId: number,
+  playerName: string
+): boolean {
+  if (node === null || node === undefined) {
+    return false;
+  }
+
+  if (Array.isArray(node)) {
+    return node.some((item) =>
+      nodeContainsPlayer(
+        item,
+        playerId,
+        playerName
+      )
+    );
+  }
+
+  if (typeof node !== "object") {
+    return false;
+  }
+
+  const directIds = [
+    node.player_id,
+    node.player?.id,
+    node.player?.player_id
+  ];
+
+  if (directIds.some(
+    (value) => Number(value) === playerId
+  )) {
+    return true;
+  }
+
+  const targetName =
+    normaliseToken(playerName);
+
+  const targetSurname =
+    normaliseToken(
+      surname(playerName)
+    );
+
+  const names = [
+    node.player_name,
+    node.player?.name,
+    node.player?.full_name,
+    node.player?.short_name,
+    node.name,
+    node.label,
+    node.selection_name,
+    node.selection,
+    node.participant_name,
+    node.outcome_name
+  ];
+
+  if (names.some((value) => {
+    const token =
+      normaliseToken(value);
+
+    return (
+      (targetName &&
+        token.includes(targetName)) ||
+      (targetSurname &&
+        token === targetSurname)
+    );
+  })) {
+    return true;
+  }
+
+  for (const [key, child] of Object.entries(node)) {
+    const keyToken =
+      normaliseToken(key);
+
+    if (
+      keyToken === String(playerId) ||
+      (targetSurname &&
+        keyToken === targetSurname) ||
+      (targetName &&
+        keyToken.includes(targetName))
+    ) {
+      return true;
+    }
+
+    if (child && typeof child === "object" &&
+        nodeContainsPlayer(
+          child,
+          playerId,
+          playerName
+        )) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function selectionPriceForPlayer(
   node: any,
   playerId: number,
@@ -637,7 +734,8 @@ function selectionPriceForPlayer(
     node.label,
     node.selection_name,
     node.selection,
-    node.participant_name
+    node.participant_name,
+    node.outcome_name
   ];
 
   const hasPlayerName = names.some(
@@ -660,6 +758,20 @@ function selectionPriceForPlayer(
   if (
     directPrice !== null &&
     (hasPlayerId || hasPlayerName)
+  ) {
+    return directPrice;
+  }
+
+  // Some BSD odds responses put the player's name/ID in a
+  // nested selection object while keeping the price on its
+  // parent row. If that happens, use the parent's price.
+  if (
+    directPrice !== null &&
+    nodeContainsPlayer(
+      node,
+      playerId,
+      playerName
+    )
   ) {
     return directPrice;
   }
