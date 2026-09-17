@@ -1497,7 +1497,7 @@ export default async function Home() {
         .top-row {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 28px;
         }
 
         .top-image-wrap {
