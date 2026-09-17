@@ -1393,6 +1393,454 @@ async function getNextBangladeshFixture() {
   }
 }
 
+function betwayCandidateEventIds(fixture: any): number[] {
+  const candidates = [
+    fixture?.betway_event_id,
+    fixture?.betwayEventId,
+    fixture?.external_betway_event_id,
+    fixture?.externalBetwayEventId,
+    fixture?.betway?.event_id,
+    fixture?.betway?.eventId,
+    fixture?.external?.betway?.event_id,
+    fixture?.external?.betway?.eventId,
+    fixture?.id
+  ];
+
+  return Array.from(
+    new Set(
+      candidates
+        .map((value) => Number(value))
+        .filter(
+          (value) =>
+            Number.isFinite(value) &&
+            value > 0
+        )
+    )
+  );
+}
+
+function looksLikeFirstGoalScorerText(value: any): boolean {
+  const text = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ");
+
+  if (!text) {
+    return false;
+  }
+
+  if (text.includes("anytime")) {
+    return false;
+  }
+
+  const first =
+    text.includes("first goalscorer") ||
+    text.includes("first goal scorer") ||
+    text.includes("first scorer") ||
+    text.includes("first to score") ||
+    text.includes("first player to score") ||
+    text.includes("first goal");
+
+  return (
+    first &&
+    (
+      text.includes("scor") ||
+      text.includes("player") ||
+      text.includes("goal")
+    )
+  );
+}
+
+function genericPlayerNameMatch(
+  node: any,
+  playerName: string
+): boolean {
+  const wanted = normaliseToken(playerName);
+  const wantedSurname = normaliseToken(
+    surname(playerName)
+  );
+
+  const names = [
+    node?.player_name,
+    node?.playerName,
+    node?.player?.name,
+    node?.player?.full_name,
+    node?.player?.fullName,
+    node?.name,
+    node?.label,
+    node?.selection_name,
+    node?.selectionName,
+    node?.selection,
+    node?.outcome_name,
+    node?.outcomeName,
+    typeof node?.outcome === "string"
+      ? node.outcome
+      : null
+  ];
+
+  return names.some((value) => {
+    const token = normaliseToken(value);
+
+    if (!token) {
+      return false;
+    }
+
+    if (wanted && token === wanted) {
+      return true;
+    }
+
+    if (
+      wantedSurname &&
+      token === wantedSurname
+    ) {
+      return true;
+    }
+
+    return (
+      wantedSurname.length >= 5 &&
+      token.includes(wantedSurname)
+    );
+  });
+}
+
+function extractFirstGoalScorerPriceFromBetway(
+  payload: any,
+  playerId: number,
+  playerName: string
+): number | null {
+  if (!payload) {
+    return null;
+  }
+
+  const visited = new WeakSet<object>();
+
+  function walk(
+    node: any,
+    firstGoalContext: boolean
+  ): number | null {
+    if (
+      node === null ||
+      node === undefined
+    ) {
+      return null;
+    }
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const price = walk(
+          item,
+          firstGoalContext
+        );
+
+        if (price !== null) {
+          return price;
+        }
+      }
+
+      return null;
+    }
+
+    if (typeof node !== "object") {
+      return null;
+    }
+
+    if (visited.has(node)) {
+      return null;
+    }
+
+    visited.add(node);
+
+    const nodeText = [
+      node.market,
+      node.marketName,
+      node.market_name,
+      node.marketTitle,
+      node.market_title,
+      node.name,
+      node.label,
+      node.cname,
+      node.cName,
+      node.type,
+      node.code
+    ]
+      .filter((value) =>
+        value !== null &&
+        value !== undefined
+      )
+      .map((value) => String(value))
+      .join(" ");
+
+    const nextFirstGoalContext =
+      firstGoalContext ||
+      looksLikeFirstGoalScorerText(
+        nodeText
+      );
+
+    const directPlayerId = [
+      node.player_id,
+      node.playerId,
+      node.player?.id,
+      node.player?.player_id,
+      node.player?.playerId,
+      node.selection?.player_id,
+      node.selection?.playerId,
+      node.selection?.player?.id
+    ].some(
+      (value) =>
+        Number(value) === playerId
+    );
+
+    const playerMatch =
+      directPlayerId ||
+      genericPlayerNameMatch(
+        node,
+        playerName
+      );
+
+    if (
+      nextFirstGoalContext &&
+      playerMatch
+    ) {
+      const directPrice = priceFromNode(node);
+
+      if (directPrice !== null) {
+        return directPrice;
+      }
+
+      const nestedPriceKeys = [
+        "price",
+        "odds",
+        "decimal_odds",
+        "decimalOdds",
+        "current_price",
+        "currentPrice",
+        "current_odds",
+        "currentOdds"
+      ];
+
+      for (const key of nestedPriceKeys) {
+        const value = node[key];
+
+        if (
+          value !== null &&
+          value !== undefined
+        ) {
+          const price = numericPrice(value);
+
+          if (price !== null) {
+            return price;
+          }
+        }
+      }
+    }
+
+    for (const child of Object.values(node)) {
+      const price = walk(
+        child,
+        nextFirstGoalContext
+      );
+
+      if (price !== null) {
+        return price;
+      }
+    }
+
+    return null;
+  }
+
+  return walk(
+    payload,
+    false
+  );
+}
+
+function betwayRequestPayload(
+  fixtureId: number,
+  marketCName: string,
+  useExternalIds = false,
+  jurisdictionId = 1
+) {
+  return {
+    ...(useExternalIds
+      ? {
+          ExternalIds: [fixtureId]
+        }
+      : {
+          EventId: fixtureId
+        }),
+    LanguageId: 1,
+    ClientTypeId: 2,
+    BrandId: 3,
+    JurisdictionId: jurisdictionId,
+    ClientIntegratorId: 1,
+    MarketCName: marketCName,
+    ScoreboardRequest: {
+      ScoreboardType: 0,
+      IncidentRequest: {}
+    },
+    BrowserId: 5,
+    OsId: 3,
+    ApplicationVersion: "",
+    BrowserVersion: "131.0.0.0",
+    OsVersion: "NT 10.0",
+    SessionId: null,
+    TerritoryId: 165,
+    CorrelationId: crypto.randomUUID(),
+    VisitId: crypto.randomUUID(),
+    ViewName: "sports",
+    JourneyId: crypto.randomUUID()
+  };
+}
+
+async function fetchBetwayFirstGoalScorer(
+  fixture: any,
+  playerId: number,
+  playerName: string
+): Promise<number | null> {
+  const candidateIds =
+    betwayCandidateEventIds(
+      fixture
+    );
+
+  if (!candidateIds.length) {
+    return null;
+  }
+
+  /*
+   * Betway's sportsbook is backed by a JSON endpoint used by its own
+   * football pages. Public examples show the V2 GetEvents endpoint and
+   * the EventId/MarketCName request shape. We try the same-origin and
+   * sports-api hosts because Betway has used both forms, and we try the
+   * common first-goalscorer market names used by the frontend.
+   */
+  const hosts = [
+    "https://betway.com",
+    "https://sportsapi.betway.com"
+  ];
+
+  const marketNames = [
+    "first-goalscorer",
+    "first-goal-scorer",
+    "firstscorer",
+    "first-scorer"
+  ];
+
+  const headers = {
+    "Accept":
+      "application/json, text/plain, */*",
+    "Content-Type":
+      "application/json; charset=UTF-8",
+    "Accept-Language":
+      "en-GB,en;q=0.9",
+    "Origin":
+      "https://betway.com",
+    "Referer":
+      "https://betway.com/",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
+  };
+
+  for (const host of hosts) {
+    for (const fixtureId of candidateIds) {
+      for (const marketCName of marketNames) {
+        for (const useExternalIds of [
+          false,
+          true
+        ]) {
+          for (const jurisdictionId of [
+            1,
+            2
+          ]) {
+            try {
+              const response =
+                await fetch(
+                  `${host}/api/Events/V2/GetEvents`,
+                  {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify(
+                      betwayRequestPayload(
+                        fixtureId,
+                        marketCName,
+                        useExternalIds,
+                        jurisdictionId
+                      )
+                    ),
+                    cache: "no-store"
+                  }
+                );
+
+              if (!response.ok) {
+                console.warn(
+                  `Betway first-scorer request failed (${response.status}) host=${host} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
+                );
+                continue;
+              }
+
+              const payload =
+                await response.json();
+
+              const price =
+                extractFirstGoalScorerPriceFromBetway(
+                  payload,
+                  playerId,
+                  playerName
+                );
+
+              if (price !== null) {
+                console.info(
+                  `Betway first-scorer price found: ${price} fixture=${fixtureId} market=${marketCName} external=${useExternalIds} jurisdiction=${jurisdictionId}`
+                );
+                return price;
+              }
+            } catch (error) {
+              console.warn(
+                "Betway first-scorer request error:",
+                error
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+async function getNextBangladeshFixture() {
+  try {
+    const teams = await findTeam("Bangladesh");
+
+    const team =
+      teams.find(
+        (candidate: any) =>
+          String(candidate?.name ?? "")
+            .trim()
+            .toLowerCase() === "bangladesh"
+      ) ?? teams[0] ?? null;
+
+    if (!team?.id) {
+      return null;
+    }
+
+    const fixtures = await getTeamFixtures(
+      Number(team.id)
+    );
+
+    return Array.isArray(fixtures?.next)
+      ? fixtures.next[0] ?? null
+      : null;
+  } catch (error) {
+    console.error(
+      "Bangladesh fixture lookup failed:",
+      error
+    );
+    return null;
+  }
+}
+
 async function getConsensusMatchOdds(
   fixture: any,
   playerId: number,
@@ -1417,7 +1865,6 @@ async function getConsensusMatchOdds(
       Authorization: `Token ${apiKey}`
     };
 
-    // Standard per-match shortcut: consensus summary odds.
     const summaryResponse =
       await fetch(
         `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
@@ -1434,15 +1881,6 @@ async function getConsensusMatchOdds(
         ? await summaryResponse.json()
         : null;
 
-    console.log(
-      "BSD SUMMARY ODDS DEBUG:",
-      JSON.stringify(
-        summaryPayload,
-        null,
-        2
-      )
-    );
-
     if (!summaryResponse.ok) {
       console.error(
         "Consensus odds summary request failed:",
@@ -1450,56 +1888,9 @@ async function getConsensusMatchOdds(
       );
     }
 
-    // The documented odds feed is the place to retrieve markets beyond
-    // the compact eleven-market summary. Scoped to this event, a free
-    // key returns the consensus row for each quoted market/outcome.
-    let feedPayload: any = null;
-
-    try {
-      const feedResponse =
-        await fetch(
-          `https://sports.bzzoiro.com/odds/api/events/${fixtureId}/?sport=football`,
-          {
-            headers,
-            next: {
-              revalidate: 60
-            }
-          }
-        );
-
-      if (feedResponse.ok) {
-        feedPayload =
-          await feedResponse.json();
-      } else {
-        console.error(
-          "Consensus odds feed request failed:",
-          feedResponse.status
-        );
-      }
-
-      console.log(
-        "BSD FEED ODDS DEBUG:",
-        JSON.stringify(
-          feedPayload,
-          null,
-          2
-        )
-      );
-    } catch (feedError) {
-      console.error(
-        "Consensus odds feed request failed:",
-        feedError
-      );
-    }
-
-    const firstGoalScorer =
-      getConsensusFirstGoalScorer(
-        feedPayload,
-        playerId,
-        playerName
-      ) ??
-      getConsensusFirstGoalScorer(
-        summaryPayload,
+    const betwayFirstGoalScorer =
+      await fetchBetwayFirstGoalScorer(
+        fixture,
         playerId,
         playerName
       );
@@ -1511,12 +1902,10 @@ async function getConsensusMatchOdds(
           summaryPayload
         ),
       hamzaFirstGoalScorer:
-        firstGoalScorer,
+        betwayFirstGoalScorer,
       updatedAt:
         summaryPayload?.last_update_at ??
         summaryPayload?.updated_at ??
-        feedPayload?.last_update_at ??
-        feedPayload?.updated_at ??
         null
     };
   } catch (error) {
