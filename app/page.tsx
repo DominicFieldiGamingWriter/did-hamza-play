@@ -1,4 +1,5 @@
-export const dynamic = "force-dynamic";
+
+export const revalidate = 60;
 import { getSupabaseAdmin } from "../lib/supabase";
 import { findPlayer, findTeam, getTeamFixtures } from "../lib/api-football";
 
