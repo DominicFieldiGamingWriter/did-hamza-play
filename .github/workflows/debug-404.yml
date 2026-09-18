@@ -6,15 +6,12 @@ on:
       - ".github/workflows/debug-404.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
       - name: Probe production URLs
         env:
           SITE_URL: ${{ secrets.SITE_URL }}
@@ -23,7 +20,6 @@ jobs:
 
           python3 - <<'PY'
           import os
-          import re
           import subprocess
           import urllib.parse
           from html.parser import HTMLParser
@@ -32,7 +28,6 @@ jobs:
               os.environ.get("SITE_URL", ""),
               "https://didhamzplay.com",
               "https://www.didhamzplay.com",
-              "https://did-hamza-play.vercel.app",
           ]
 
           bases = []
@@ -41,9 +36,17 @@ jobs:
               if not raw:
                   continue
               parsed = urllib.parse.urlsplit(raw)
-              if parsed.scheme in ("http", "https") and parsed.netloc:
-                  if raw not in bases:
-                      bases.append(raw)
+              if parsed.scheme in ("http", "https") and parsed.netloc and raw not in bases:
+                  bases.append(raw)
+
+          def fetch(url, output=None):
+              cmd = [
+                  "curl", "-L", "--silent", "--show-error",
+                  "--max-time", "20", "--retry", "2",
+                  "-o", output or "/dev/null",
+                  "-w", "%{http_code}|%{url_effective}", url
+              ]
+              return subprocess.check_output(cmd, text=True).strip()
 
           class Parser(HTMLParser):
               def __init__(self):
@@ -54,109 +57,71 @@ jobs:
                       if key in ("src", "href") and value:
                           self.urls.add(value)
 
-          def fetch(url, output=None):
-              cmd = [
-                  "curl", "-L", "--silent", "--show-error",
-                  "--max-time", "20", "--retry", "2",
-                  "-o", output or "/dev/null",
-                  "-w", "%{http_code}\\t%{url_effective}", url
-              ]
-              return subprocess.check_output(cmd, text=True).strip()
+          print("CANDIDATE BASES:")
+          for base in bases:
+              print(base)
 
-          all_results = []
-          successful_bases = []
+          successful_base = None
+          html_path = "/tmp/home.html"
 
           for base in bases:
-              html_path = "/tmp/home.html"
+              print(f"\nCHECK HOMEPAGE: {base}/")
               try:
-                  home_result = fetch(base + "/", html_path)
-                  all_results.append((home_result.split("\\t",1)[0], base + "/", home_result.split("\\t",1)[1]))
-
-                  code = home_result.split("\\t",1)[0]
-                  if not code.startswith("2"):
-                      continue
-
-                  successful_bases.append(base)
-
-                  parser = Parser()
-                  with open(html_path, encoding="utf-8", errors="ignore") as fh:
-                      parser.feed(fh.read())
-
-                  candidates = {
-                      base + "/favicon.ico",
-                      base + "/robots.txt",
-                      base + "/sitemap.xml",
-                      base + "/manifest.json",
-                      base + "/manifest.webmanifest",
-                      base + "/apple-touch-icon.png",
-                  }
-
-                  base_parts = urllib.parse.urlsplit(base)
-
-                  for raw in parser.urls:
-                      if raw.startswith(("data:", "mailto:", "javascript:", "#")):
-                          continue
-                      absolute = urllib.parse.urljoin(base + "/", raw)
-                      parts = urllib.parse.urlsplit(absolute)
-                      if parts.scheme in ("http", "https") and parts.netloc == base_parts.netloc:
-                          candidates.add(
-                              urllib.parse.urlunsplit(
-                                  (parts.scheme, parts.netloc, parts.path, parts.query, "")
-                              )
-                          )
-
-                  for url in sorted(candidates):
-                      try:
-                          result = fetch(url)
-                          code, final = result.split("\\t", 1)
-                          all_results.append((code, url, final))
-                      except subprocess.CalledProcessError:
-                          all_results.append(("CURL_ERROR", url, ""))
-
-                  break
-
+                  result = fetch(base + "/", html_path)
+                  print(result)
+                  code = result.split("|", 1)[0]
+                  if code.startswith("2"):
+                      successful_base = base
+                      break
               except subprocess.CalledProcessError as exc:
-                  all_results.append(("CURL_ERROR", base + "/", str(exc)))
+                  print(f"curl error: {exc}")
 
-          with open("404-debug-result.txt", "w", encoding="utf-8") as fh:
-              fh.write("PRODUCTION URL 404 DIAGNOSTIC\\n\\n")
-              fh.write("Candidate bases tried:\\n")
-              for base in bases:
-                  fh.write(f"- {base}\\n")
+          if successful_base is None:
+              raise SystemExit("No candidate production URL returned a 2xx homepage.")
 
-              fh.write("\\nSuccessful production base(s):\\n")
-              for base in successful_bases:
-                  fh.write(f"- {base}\\n")
+          parser = Parser()
+          with open(html_path, encoding="utf-8", errors="ignore") as fh:
+              parser.feed(fh.read())
 
-              fh.write("\\nNON-2XX RESPONSES\\n")
-              bad = [
-                  row for row in all_results
-                  if not re.fullmatch(r"2\\d\\d", row[0] or "")
-              ]
+          candidates = {
+              successful_base + "/favicon.ico",
+              successful_base + "/robots.txt",
+              successful_base + "/sitemap.xml",
+              successful_base + "/manifest.json",
+              successful_base + "/manifest.webmanifest",
+              successful_base + "/apple-touch-icon.png",
+          }
 
-              if bad:
-                  for code, url, final in bad:
-                      fh.write(f"{code}\\t{url}\\t{final}\\n")
-              else:
-                  fh.write("None found.\\n")
+          base_parts = urllib.parse.urlsplit(successful_base)
 
-              fh.write("\\nALL CHECKS\\n")
-              for code, url, final in all_results:
-                  fh.write(f"{code}\\t{url}\\t{final}\\n")
-
-              if not successful_bases:
-                  fh.write(
-                      "\\nNo candidate production hostname returned a 2xx homepage. " 
-                      "SITE_URL may be incorrect or unavailable.\\n"
+          for raw in parser.urls:
+              if raw.startswith(("data:", "mailto:", "javascript:", "#")):
+                  continue
+              absolute = urllib.parse.urljoin(successful_base + "/", raw)
+              parts = urllib.parse.urlsplit(absolute)
+              if parts.scheme in ("http", "https") and parts.netloc == base_parts.netloc:
+                  candidates.add(
+                      urllib.parse.urlunsplit(
+                          (parts.scheme, parts.netloc, parts.path, parts.query, "")
+                      )
                   )
+
+          results = []
+          for url in sorted(candidates):
+              try:
+                  result = fetch(url)
+                  code, final = result.split("|", 1)
+                  results.append((code, url, final))
+                  print(f"{code}\t{url}\t{final}")
+              except subprocess.CalledProcessError:
+                  results.append(("CURL_ERROR", url, ""))
+                  print(f"CURL_ERROR\t{url}")
+
+          print("\nNON-2XX RESPONSES:")
+          bad = [r for r in results if not r[0].startswith("2")]
+          if bad:
+              for row in bad:
+                  print("\t".join(row))
+          else:
+              print("None found.")
           PY
-
-          cat 404-debug-result.txt
-
-      - name: Commit diagnostic result
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add 404-debug-result.txt
-          git commit -m "[skip ci] Record one-off 404 diagnostic"
-          git push
