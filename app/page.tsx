@@ -915,8 +915,10 @@ async function getConsensusMatchOdds(
         `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
         {
           headers,
+          cache: "force-cache",
           next: {
-            revalidate: 60
+            revalidate: 60,
+            tags: [`odds-${fixtureId}`]
           }
         }
       );
