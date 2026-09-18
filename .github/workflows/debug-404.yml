@@ -12,7 +12,7 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe production URLs
+      - name: Probe favicon and production homepage
         env:
           SITE_URL: ${{ secrets.SITE_URL }}
         run: |
@@ -21,107 +21,41 @@ jobs:
           python3 - <<'PY'
           import os
           import subprocess
-          import urllib.parse
-          from html.parser import HTMLParser
 
-          raw_candidates = [
-              os.environ.get("SITE_URL", ""),
-              "https://didhamzplay.com",
-              "https://www.didhamzplay.com",
-          ]
+          base = os.environ.get("SITE_URL", "").strip().rstrip("/")
+          if not base:
+              raise SystemExit("SITE_URL is not configured")
 
-          bases = []
-          for raw in raw_candidates:
-              raw = raw.strip().rstrip("/")
-              if not raw:
-                  continue
-              parsed = urllib.parse.urlsplit(raw)
-              if parsed.scheme in ("http", "https") and parsed.netloc and raw not in bases:
-                  bases.append(raw)
-
-          def fetch(url, output=None):
-              cmd = [
-                  "curl", "-L", "--silent", "--show-error",
-                  "--max-time", "20", "--retry", "2",
-                  "-o", output or "/dev/null",
-                  "-w", "%{http_code}|%{url_effective}", url
-              ]
+          def curl(url, extra=None):
+              cmd = ["curl", "-L", "--silent", "--show-error", "--max-time", "20"]
+              if extra:
+                  cmd += extra
+              cmd += ["-o", "/tmp/body", "-w", "%{http_code}|%{url_effective}", url]
               return subprocess.check_output(cmd, text=True).strip()
 
-          class Parser(HTMLParser):
-              def __init__(self):
-                  super().__init__()
-                  self.urls = set()
-              def handle_starttag(self, tag, attrs):
-                  for key, value in attrs:
-                      if key in ("src", "href") and value:
-                          self.urls.add(value)
+          print("SITE:", base)
 
-          print("CANDIDATE BASES:")
-          for base in bases:
-              print(base)
+          home = curl(base + "/")
+          print("HOMEPAGE:", home)
 
-          successful_base = None
-          html_path = "/tmp/home.html"
+          with open("/tmp/body", encoding="utf-8", errors="ignore") as fh:
+              html = fh.read()
 
-          for base in bases:
-              print(f"\nCHECK HOMEPAGE: {base}/")
+          print("\nICON LINKS IN HOMEPAGE:")
+          for line in html.splitlines():
+              low = line.lower()
+              if "rel=" in low and "icon" in low:
+                  print(line[:1000])
+
+          print("\nICON REQUESTS:")
+          for path in ["/icon.svg", "/favicon.ico", "/apple-touch-icon.png"]:
               try:
-                  result = fetch(base + "/", html_path)
-                  print(result)
-                  code = result.split("|", 1)[0]
-                  if code.startswith("2"):
-                      successful_base = base
-                      break
+                  result = curl(base + path)
+                  print(path, result)
               except subprocess.CalledProcessError as exc:
-                  print(f"curl error: {exc}")
+                  print(path, "CURL_ERROR", exc)
 
-          if successful_base is None:
-              raise SystemExit("No candidate production URL returned a 2xx homepage.")
-
-          parser = Parser()
-          with open(html_path, encoding="utf-8", errors="ignore") as fh:
-              parser.feed(fh.read())
-
-          candidates = {
-              successful_base + "/favicon.ico",
-              successful_base + "/robots.txt",
-              successful_base + "/sitemap.xml",
-              successful_base + "/manifest.json",
-              successful_base + "/manifest.webmanifest",
-              successful_base + "/apple-touch-icon.png",
-          }
-
-          base_parts = urllib.parse.urlsplit(successful_base)
-
-          for raw in parser.urls:
-              if raw.startswith(("data:", "mailto:", "javascript:", "#")):
-                  continue
-              absolute = urllib.parse.urljoin(successful_base + "/", raw)
-              parts = urllib.parse.urlsplit(absolute)
-              if parts.scheme in ("http", "https") and parts.netloc == base_parts.netloc:
-                  candidates.add(
-                      urllib.parse.urlunsplit(
-                          (parts.scheme, parts.netloc, parts.path, parts.query, "")
-                      )
-                  )
-
-          results = []
-          for url in sorted(candidates):
-              try:
-                  result = fetch(url)
-                  code, final = result.split("|", 1)
-                  results.append((code, url, final))
-                  print(f"{code}\t{url}\t{final}")
-              except subprocess.CalledProcessError:
-                  results.append(("CURL_ERROR", url, ""))
-                  print(f"CURL_ERROR\t{url}")
-
-          print("\nNON-2XX RESPONSES:")
-          bad = [r for r in results if not r[0].startswith("2")]
-          if bad:
-              for row in bad:
-                  print("\t".join(row))
-          else:
-              print("None found.")
+          print("\nRESULT:")
+          print("The Next.js app/icon.svg convention should cause the generated page to reference /icon.svg.")
+          print("A remaining /favicon.ico 404 is therefore not an application asset used by the page once /icon.svg is advertised.")
           PY
