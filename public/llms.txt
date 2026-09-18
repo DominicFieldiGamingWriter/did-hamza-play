@@ -1,0 +1,9 @@
+# Did Hamza Choudhury Play?
+
+> Did Hamza Choudhury Play? provides current information about Hamza Choudhury's football appearances for club and country.
+
+The site answers whether Hamza Choudhury played in his latest match and provides relevant match information, including starting status, bench status, minutes played, goals, assists, upcoming fixtures, and match odds.
+
+## Site
+
+- [Did Hamza Choudhury Play?](https://did-hamza-play.vercel.app/): Main site containing Hamza Choudhury's latest appearance information, upcoming fixtures and related match data.

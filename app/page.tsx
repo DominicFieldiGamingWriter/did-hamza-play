@@ -1,6 +1,13 @@
 import Image from "next/image";
+import type { Metadata } from "next";
 
 export const revalidate = 60;
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "/"
+  }
+};
 import { unstable_cache } from "next/cache";
 import { getSupabaseAdmin } from "../lib/supabase";
 
