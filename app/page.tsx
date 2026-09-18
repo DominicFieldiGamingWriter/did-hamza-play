@@ -1211,29 +1211,25 @@ export default async function Home() {
     ) ?? null;
 
 
-  const nextOdds = next
-    ? await getConsensusMatchOdds(
-        next
-      )
-    : null;
-
   const firstUpcomingFixture =
     upcomingFixtures[0] ??
     null;
 
-  const firstUpcomingOdds =
+  const [
+    nextOdds,
+    firstUpcomingOdds,
+    bangladeshOdds
+  ] = await Promise.all([
+    next
+      ? getConsensusMatchOdds(next)
+      : Promise.resolve(null),
     firstUpcomingFixture
-      ? await getConsensusMatchOdds(
-          firstUpcomingFixture
-        )
-      : null;
-
-  const bangladeshOdds =
+      ? getConsensusMatchOdds(firstUpcomingFixture)
+      : Promise.resolve(null),
     nextBangladeshFixture
-      ? await getConsensusMatchOdds(
-          nextBangladeshFixture
-        )
-      : null;
+      ? getConsensusMatchOdds(nextBangladeshFixture)
+      : Promise.resolve(null)
+  ]);
 
   const appearanceSummaryText =
     appearanceSummary(
