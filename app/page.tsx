@@ -1,3 +1,4 @@
+import Image from "next/image";
 
 export const revalidate = 60;
 import { unstable_cache } from "next/cache";
@@ -1296,7 +1297,7 @@ export default async function Home() {
           </h1>
 
           <div className="top-image-wrap">
-            <img
+            <Image
               className="top-image"
               src={
                 latestPlayed
@@ -1308,6 +1309,10 @@ export default async function Home() {
                   ? "Happy Hamza Choudhury"
                   : "Serious Hamza Choudhury"
               }
+              width={108}
+              height={108}
+              sizes="(max-width: 500px) 86px, (max-width: 820px) 76px, 92px"
+              preload
             />
           </div>
 
@@ -1851,10 +1856,13 @@ export default async function Home() {
           </h2>
 
           <div className="bio-content">
-            <img
+            <Image
               className="bio-photo"
               src="/hamza-bio.jpg"
               alt="Hamza Choudhury"
+              width={170}
+              height={170}
+              sizes="(max-width: 500px) 130px, (max-width: 820px) 145px, 170px"
             />
 
             <p>
