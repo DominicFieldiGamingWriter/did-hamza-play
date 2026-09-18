@@ -1,7 +1,30 @@
 
 export const revalidate = 60;
+import { unstable_cache } from "next/cache";
 import { getSupabaseAdmin } from "../lib/supabase";
-import { findPlayer, findTeam, getTeamFixtures } from "../lib/api-football";
+
+
+const getCachedPlayerPage = unstable_cache(
+  async () => {
+    const { data, error } =
+      await getSupabaseAdmin()
+        .from("player_page")
+        .select("*")
+        .eq("id", 1)
+        .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return data;
+  },
+  ["hamza-player-page"],
+  {
+    revalidate: 60,
+    tags: ["hamza-player-page"]
+  }
+);
 
 function dateValue(value: any): string | null {
   if (!value) return null;
@@ -1364,38 +1387,6 @@ function hasComplete1X2(
   );
 }
 
-async function getNextBangladeshFixture() {
-  try {
-    const teams = await findTeam("Bangladesh");
-
-    const team =
-      teams.find(
-        (candidate: any) =>
-          String(candidate?.name ?? "")
-            .trim()
-            .toLowerCase() === "bangladesh"
-      ) ?? teams[0] ?? null;
-
-    if (!team?.id) {
-      return null;
-    }
-
-    const fixtures = await getTeamFixtures(
-      Number(team.id)
-    );
-
-    return Array.isArray(fixtures?.next)
-      ? fixtures.next[0] ?? null
-      : null;
-  } catch (error) {
-    console.error(
-      "Bangladesh fixture lookup failed:",
-      error
-    );
-    return null;
-  }
-}
-
 async function getConsensusMatchOdds(
   fixture: any
 ) {
@@ -1539,46 +1530,18 @@ function appearanceSummary(
 }
 
 export default async function Home() {
-  const debugPlayers =
-    await findPlayer("Ben Brereton");
+  let data: any = null;
 
-  const debugChile =
-    await findTeam("Chile");
+  try {
+    data = await getCachedPlayerPage();
+  } catch (error) {
+    console.error(
+      "Player page data lookup failed:",
+      error
+    );
+  }
 
-  console.log(
-    "BEN BSD DEBUG:",
-    JSON.stringify(
-      debugPlayers,
-      null,
-      2
-    )
-  );
-
-  console.log(
-    "CHILE BSD DEBUG:",
-    JSON.stringify(
-      debugChile,
-      null,
-      2
-    )
-  );
-  const supabase =
-    getSupabaseAdmin();
-
-  const {
-    data,
-    error
-  } =
-    await supabase
-      .from("player_page")
-      .select("*")
-      .eq("id", 1)
-      .maybeSingle();
-
-  if (
-    error ||
-    !data
-  ) {
+  if (!data) {
     return (
       <main className="page">
         <h1 className="main-heading">
@@ -1707,7 +1670,43 @@ export default async function Home() {
     dateValue(next);
 
   const nextBangladeshFixture =
-    await getNextBangladeshFixture();
+    nextFixtures.find(
+      (fixture: any) => {
+        const trackedTeamName =
+          String(
+            fixture?.tracked_team_name ??
+              ""
+          )
+            .trim()
+            .toLowerCase();
+
+        const homeName =
+          teamName(
+            fixture,
+            "home"
+          )
+            .trim()
+            .toLowerCase();
+
+        const awayName =
+          teamName(
+            fixture,
+            "away"
+          )
+            .trim()
+            .toLowerCase();
+
+        return (
+          trackedTeamName ===
+            "bangladesh" ||
+          homeName ===
+            "bangladesh" ||
+          awayName ===
+            "bangladesh"
+        );
+      }
+    ) ?? null;
+
 
   const nextOdds = next
     ? await getConsensusMatchOdds(
