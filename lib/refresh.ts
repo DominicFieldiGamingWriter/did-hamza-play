@@ -1279,7 +1279,7 @@ function getAvailabilityStatus(
 }
 
 
-function minutesUntilKickoff(
+function minutesToKickoff(
   fixture: any
 ): number | null {
   const timestamp =
@@ -1303,7 +1303,7 @@ async function getUpcomingSelectionStatus(
   fallbackStatus: any
 ) {
   const minutesUntilKickoff =
-    minutesUntilKickoff(
+    minutesToKickoff(
       fixture
     );
 
