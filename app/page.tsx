@@ -1256,21 +1256,22 @@ export default async function Home() {
     "playing"
       ? "YES"
       : liveStatus ===
-        "substitute"
-      ? "SUB"
-      : liveStatus ===
-        "not_playing"
+          "substitute" ||
+        liveStatus ===
+          "not_playing"
       ? "NO"
-      : null;
+      : "—";
 
   const liveAnswerClass =
     liveStatus ===
-    "playing"
+      "playing"
       ? "answer yes live-answer"
       : liveStatus ===
-        "substitute"
-      ? "answer sub live-answer"
-      : "answer no live-answer";
+          "substitute" ||
+        liveStatus ===
+          "not_playing"
+      ? "answer no live-answer"
+      : "answer live-answer";
 
   const liveDate =
     dateValue(

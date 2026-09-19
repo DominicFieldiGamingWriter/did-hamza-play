@@ -221,6 +221,39 @@ function hasPlayer(
   );
 }
 
+function isTruthyFlag(
+  value: any
+): boolean {
+  if (
+    value === true ||
+    value === 1
+  ) {
+    return true;
+  }
+
+  if (
+    typeof value === "string"
+  ) {
+    const normalised =
+      value
+        .trim()
+        .toLowerCase();
+
+    return (
+      normalised === "true" ||
+      normalised === "yes" ||
+      normalised === "y" ||
+      normalised === "1" ||
+      normalised === "starter" ||
+      normalised === "starting" ||
+      normalised === "substitute" ||
+      normalised === "bench"
+    );
+  }
+
+  return false;
+}
+
 function lineupRoleFromValue(
   value: any,
   playerId: number,
@@ -276,6 +309,9 @@ function lineupRoleFromValue(
         value.position_type ??
         value.lineup_role ??
         value.selection_status ??
+        value.status ??
+        value.status_name ??
+        value.player_status ??
         ""
       )
         .trim()
@@ -297,24 +333,42 @@ function lineupRoleFromValue(
         "start"
       ) ||
       explicitRole ===
-        "xi"
+        "xi" ||
+      explicitRole ===
+        "startingxi"
     ) {
       return "starting";
     }
 
+    const substituteFlags = [
+      value.is_substitute,
+      value.substitute,
+      value.on_bench,
+      value.bench,
+      value.is_bench
+    ];
+
     if (
-      value.is_substitute === true ||
-      value.substitute === true ||
-      value.on_bench === true ||
-      value.bench === true
+      substituteFlags.some(
+        isTruthyFlag
+      )
     ) {
       return "substitute";
     }
 
+    const starterFlags = [
+      value.is_starter,
+      value.starter,
+      value.starting,
+      value.in_starting_xi,
+      value.starting_xi,
+      value.is_starting
+    ];
+
     if (
-      value.is_starter === true ||
-      value.starter === true ||
-      value.starting === true
+      starterFlags.some(
+        isTruthyFlag
+      )
     ) {
       return "starting";
     }
@@ -352,7 +406,11 @@ function lineupRoleFromValue(
       ) ||
       lowerKey.includes(
         "bench"
-      )
+      ) ||
+      lowerKey ===
+        "subs" ||
+      lowerKey ===
+        "substitutes"
     ) {
       childContext =
         "substitute";
@@ -366,7 +424,11 @@ function lineupRoleFromValue(
         "starting"
       ) ||
       lowerKey ===
-        "xi"
+        "xi" ||
+      lowerKey ===
+        "startingxi" ||
+      lowerKey ===
+        "starters"
     ) {
       childContext =
         "starting";
@@ -409,6 +471,7 @@ function lineupRoleFromValue(
 
   return "unknown";
 }
+
 
 function playerStatsMinutes(
   playerId: number,
@@ -1671,9 +1734,10 @@ async function buildLivePlayerStatus(
 
   try {
     const [
-      lineupData,
-      rawIncidents
-    ] = await Promise.all([
+      lineupResult,
+      incidentResult,
+      playerStatsResult
+    ] = await Promise.allSettled([
       getLineups(
         Number(
           live.id
@@ -1684,19 +1748,41 @@ async function buildLivePlayerStatus(
         Number(
           live.id
         )
+      ),
+
+      getFixturePlayerStats(
+        Number(
+          live.id
+        )
       )
     ]);
 
-    const lineupRole =
-      lineupRoleFromValue(
-        lineupData,
-        playerId
-      );
+    const lineupData =
+      lineupResult.status === "fulfilled"
+        ? lineupResult.value
+        : null;
 
     const incidents =
-      responseArray(
-        rawIncidents
-      );
+      incidentResult.status === "fulfilled"
+        ? responseArray(
+            incidentResult.value
+          )
+        : [];
+
+    const playerStats =
+      playerStatsResult.status === "fulfilled"
+        ? responseArray(
+            playerStatsResult.value
+          )
+        : [];
+
+    const lineupRole =
+      lineupData
+        ? lineupRoleFromValue(
+            lineupData,
+            playerId
+          )
+        : "unknown";
 
     const subbedOn =
       incidents.some(
@@ -1780,9 +1866,37 @@ async function buildLivePlayerStatus(
       };
     }
 
+    const minutes =
+      playerStats.length
+        ? playerStatsMinutes(
+            playerId,
+            playerStats
+          )
+        : null;
+
+    if (
+      minutes !== null &&
+      minutes > 0
+    ) {
+      return {
+        status:
+          "playing",
+        role:
+          "playing",
+        lineup_status:
+          lineupData?.status ??
+          "unavailable"
+      };
+    }
+
     if (
       lineupData?.status ===
-      "confirmed"
+        "confirmed" &&
+      !hasPlayer(
+        lineupData?.lineups ??
+          lineupData,
+        playerId
+      )
     ) {
       return {
         status:
@@ -1804,9 +1918,17 @@ async function buildLivePlayerStatus(
         "unavailable"
     };
   } catch {
-    return null;
+    return {
+      status:
+        "unknown",
+      role:
+        "unknown",
+      lineup_status:
+        "unavailable"
+    };
   }
 }
+
 
 
 function playerTeamId(
