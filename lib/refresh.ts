@@ -262,211 +262,151 @@ function lineupRoleFromValue(
   | "starting"
   | "substitute"
   | "unknown" {
-  if (
-    value === null ||
-    value === undefined
-  ) {
-    return "unknown";
-  }
+  let foundStarting = false;
+  let foundSubstitute = false;
 
-  if (Array.isArray(value)) {
-    for (
-      const item of value
+  function walk(
+    node: any,
+    currentContext: string
+  ) {
+    if (
+      node === null ||
+      node === undefined ||
+      foundStarting
     ) {
-      const role =
-        lineupRoleFromValue(
-          item,
-          playerId,
-          context
-        );
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        walk(item, currentContext);
+
+        if (foundStarting) {
+          return;
+        }
+      }
+
+      return;
+    }
+
+    if (typeof node !== "object") {
+      return;
+    }
+
+    if (getId(node) === playerId) {
+      const explicitRole =
+        String(
+          node.role ??
+          node.position_type ??
+          node.lineup_role ??
+          node.selection_status ??
+          node.player_status ??
+          node.status_name ??
+          ""
+        )
+          .trim()
+          .toLowerCase();
 
       if (
-        role === "starting" ||
-        role === "substitute"
+        explicitRole.includes("start") ||
+        explicitRole === "xi" ||
+        explicitRole === "startingxi"
       ) {
-        return role;
+        foundStarting = true;
+        return;
+      }
+
+      if (
+        explicitRole.includes("sub") ||
+        explicitRole.includes("bench")
+      ) {
+        foundSubstitute = true;
+      }
+
+      const substituteFlags = [
+        node.is_substitute,
+        node.substitute,
+        node.on_bench,
+        node.bench,
+        node.is_bench
+      ];
+
+      if (substituteFlags.some(isTruthyFlag)) {
+        foundSubstitute = true;
+      }
+
+      const starterFlags = [
+        node.is_starter,
+        node.starter,
+        node.starting,
+        node.in_starting_xi,
+        node.starting_xi,
+        node.is_starting
+      ];
+
+      if (starterFlags.some(isTruthyFlag)) {
+        foundStarting = true;
+        return;
+      }
+
+      if (currentContext === "starting") {
+        foundStarting = true;
+        return;
+      }
+
+      if (currentContext === "substitute") {
+        foundSubstitute = true;
       }
     }
 
-    return "unknown";
-  }
+    for (const [key, child] of Object.entries(node)) {
+      if (
+        !child ||
+        typeof child !== "object"
+      ) {
+        continue;
+      }
 
-  if (
-    typeof value !== "object"
-  ) {
-    return "unknown";
-  }
+      const lowerKey =
+        key
+          .toLowerCase()
+          .replace(/[-_ ]/g, "");
 
-  const directId =
-    getId(value);
+      let childContext =
+        currentContext;
 
-  if (
-    directId === playerId
-  ) {
-    const explicitRole =
-      String(
-        value.role ??
-        value.position_type ??
-        value.lineup_role ??
-        value.selection_status ??
-        value.status ??
-        value.status_name ??
-        value.player_status ??
-        ""
-      )
-        .trim()
-        .toLowerCase();
+      if (
+        lowerKey.includes("starter") ||
+        lowerKey.includes("starting") ||
+        lowerKey === "xi" ||
+        lowerKey === "startingxi"
+      ) {
+        childContext = "starting";
+      } else if (
+        lowerKey.includes("substitute") ||
+        lowerKey.includes("bench") ||
+        lowerKey === "subs" ||
+        lowerKey === "substitutes"
+      ) {
+        childContext = "substitute";
+      }
 
-    if (
-      explicitRole.includes(
-        "sub"
-      ) ||
-      explicitRole.includes(
-        "bench"
-      )
-    ) {
-      return "substitute";
-    }
+      walk(child, childContext);
 
-    if (
-      explicitRole.includes(
-        "start"
-      ) ||
-      explicitRole ===
-        "xi" ||
-      explicitRole ===
-        "startingxi"
-    ) {
-      return "starting";
-    }
-
-    const substituteFlags = [
-      value.is_substitute,
-      value.substitute,
-      value.on_bench,
-      value.bench,
-      value.is_bench
-    ];
-
-    if (
-      substituteFlags.some(
-        isTruthyFlag
-      )
-    ) {
-      return "substitute";
-    }
-
-    const starterFlags = [
-      value.is_starter,
-      value.starter,
-      value.starting,
-      value.in_starting_xi,
-      value.starting_xi,
-      value.is_starting
-    ];
-
-    if (
-      starterFlags.some(
-        isTruthyFlag
-      )
-    ) {
-      return "starting";
+      if (foundStarting) {
+        return;
+      }
     }
   }
 
-  for (
-    const [
-      key,
-      child
-    ] of Object.entries(
-      value
-    )
-  ) {
-    if (
-      !child ||
-      typeof child !== "object"
-    ) {
-      continue;
-    }
+  walk(value, context);
 
-    const lowerKey =
-      key
-        .toLowerCase()
-        .replace(
-          /[-_ ]/g,
-          ""
-        );
-
-    let childContext =
-      context;
-
-    if (
-      lowerKey.includes(
-        "substitute"
-      ) ||
-      lowerKey.includes(
-        "bench"
-      ) ||
-      lowerKey ===
-        "subs" ||
-      lowerKey ===
-        "substitutes"
-    ) {
-      childContext =
-        "substitute";
-    }
-
-    if (
-      lowerKey.includes(
-        "starter"
-      ) ||
-      lowerKey.includes(
-        "starting"
-      ) ||
-      lowerKey ===
-        "xi" ||
-      lowerKey ===
-        "startingxi" ||
-      lowerKey ===
-        "starters"
-    ) {
-      childContext =
-        "starting";
-    }
-
-    const role =
-      lineupRoleFromValue(
-        child,
-        playerId,
-        childContext
-      );
-
-    if (
-      role === "starting" ||
-      role === "substitute"
-    ) {
-      return role;
-    }
-  }
-
-  if (
-    context === "substitute" &&
-    hasPlayer(
-      value,
-      playerId
-    )
-  ) {
-    return "substitute";
-  }
-
-  if (
-    context === "starting" &&
-    hasPlayer(
-      value,
-      playerId
-    )
-  ) {
+  if (foundStarting) {
     return "starting";
+  }
+
+  if (foundSubstitute) {
+    return "substitute";
   }
 
   return "unknown";
