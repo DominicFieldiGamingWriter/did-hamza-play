@@ -1209,7 +1209,7 @@ function getAvailabilityStatus(
     String(
       squadPlayer?.availability ??
         ""
-    ).toLowerCase();
+    ).trim().toLowerCase();
 
   const reason =
     squadPlayer?.injury_type ??
@@ -1217,18 +1217,27 @@ function getAvailabilityStatus(
 
   if (
     availability ===
-    "injured"
+      "injured" ||
+    availability ===
+      "suspended"
   ) {
     return {
       status:
-        "unavailable",
+        "definitely_out",
       type:
-        "injured",
+        availability,
+      phase:
+        "availability",
+      tone:
+        "negative",
       label:
-        "Unavailable",
+        "Definitely out",
       reason:
         reason ||
-        "Injured"
+        (availability ===
+        "suspended"
+          ? "Suspended"
+          : "Listed as injured")
     };
   }
 
@@ -1238,31 +1247,18 @@ function getAvailabilityStatus(
   ) {
     return {
       status:
-        "doubtful",
+        "unlikely_to_play",
       type:
         "doubtful",
+      phase:
+        "availability",
+      tone:
+        "warning",
       label:
-        "Doubtful",
+        "Unlikely to play",
       reason:
         reason ||
         "Listed as doubtful"
-    };
-  }
-
-  if (
-    availability ===
-    "suspended"
-  ) {
-    return {
-      status:
-        "unavailable",
-      type:
-        "suspended",
-      label:
-        "Unavailable",
-      reason:
-        reason ||
-        "Suspended"
     };
   }
 
@@ -1271,6 +1267,10 @@ function getAvailabilityStatus(
       "likely_available",
     type:
       "likely_available",
+    phase:
+      "availability",
+    tone:
+      "positive",
     label:
       "Likely available",
     reason:
