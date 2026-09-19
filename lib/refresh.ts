@@ -1787,9 +1787,7 @@ async function buildLivePlayerStatus(
       playerPlayed(
         playerId,
         playerName,
-        lineupData?.lineups ??
-          lineupData ??
-          [],
+        lineupData?.lineups ?? [],
         playerStats,
         incidents
       );
