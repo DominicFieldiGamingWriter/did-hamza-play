@@ -1724,6 +1724,7 @@ function normaliseFixture(
 
 async function buildLivePlayerStatus(
   playerId: number,
+  playerName: string,
   live: any
 ) {
   if (
@@ -1776,54 +1777,26 @@ async function buildLivePlayerStatus(
           )
         : [];
 
-    const lineupRole =
-      lineupData
-        ? lineupRoleFromValue(
-            lineupData,
-            playerId
-          )
-        : "unknown";
-
-    const subbedOn =
-      incidents.some(
-        (incident: any) =>
-          getIncidentType(
-            incident
-          ) === "substitution" &&
-          resolveIncidentPlayerId(
-            incident,
-            "player_in"
-          ) === playerId
-      );
-
-    const subbedOff =
-      incidents.some(
-        (incident: any) =>
-          getIncidentType(
-            incident
-          ) === "substitution" &&
-          resolveIncidentPlayerId(
-            incident,
-            "player_out"
-          ) === playerId
+    /*
+     * Use the same playerPlayed() decision path as the
+     * completed-match logic. It recognises starters,
+     * substitutes, substitution incidents and player
+     * records returned by the lineup/stats payload.
+     */
+    const appearance =
+      playerPlayed(
+        playerId,
+        playerName,
+        lineupData?.lineups ??
+          lineupData ??
+          [],
+        playerStats,
+        incidents
       );
 
     if (
-      subbedOff
-    ) {
-      return {
-        status:
-          "not_playing",
-        role:
-          "not_playing",
-        lineup_status:
-          lineupData?.status ??
-          "unavailable"
-      };
-    }
-
-    if (
-      subbedOn
+      appearance.played ===
+      true
     ) {
       return {
         status:
@@ -1837,52 +1810,14 @@ async function buildLivePlayerStatus(
     }
 
     if (
-      lineupRole ===
-      "starting"
-    ) {
-      return {
-        status:
-          "playing",
-        role:
-          "starting",
-        lineup_status:
-          lineupData?.status ??
-          "unavailable"
-      };
-    }
-
-    if (
-      lineupRole ===
-      "substitute"
+      appearance.type ===
+      "unused_substitute"
     ) {
       return {
         status:
           "substitute",
         role:
           "substitute",
-        lineup_status:
-          lineupData?.status ??
-          "unavailable"
-      };
-    }
-
-    const minutes =
-      playerStats.length
-        ? playerStatsMinutes(
-            playerId,
-            playerStats
-          )
-        : null;
-
-    if (
-      minutes !== null &&
-      minutes > 0
-    ) {
-      return {
-        status:
-          "playing",
-        role:
-          "playing",
         lineup_status:
           lineupData?.status ??
           "unavailable"
@@ -1892,11 +1827,25 @@ async function buildLivePlayerStatus(
     if (
       lineupData?.status ===
         "confirmed" &&
-      !hasPlayer(
+      hasPlayer(
         lineupData?.lineups ??
           lineupData,
         playerId
       )
+    ) {
+      return {
+        status:
+          "unknown",
+        role:
+          "unknown",
+        lineup_status:
+          "confirmed"
+      };
+    }
+
+    if (
+      lineupData?.status ===
+      "confirmed"
     ) {
       return {
         status:
@@ -2727,6 +2676,7 @@ export async function refreshPlayerPage() {
     liveChoice?.fixture
       ? await buildLivePlayerStatus(
           playerId,
+          actualPlayerName,
           liveChoice.fixture
         )
       : null;
