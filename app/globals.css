@@ -531,6 +531,18 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
           letter-spacing: -1px;
         }
 
+        .availability-status.warning {
+          color: #8a5a00;
+        }
+
+        .availability-status.negative {
+          color: #c01831;
+        }
+
+        .availability-status.positive {
+          color: #00824f;
+        }
+
         .availability-reason {
           margin-top: 10px;
           color: #52647d;
@@ -548,6 +560,16 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
           font-weight: 900;
           letter-spacing: .8px;
           text-transform: uppercase;
+        }
+
+        .status-pill.warning {
+          background: #fff4d8;
+          color: #8a5a00;
+        }
+
+        .status-pill.negative {
+          background: #fce4e8;
+          color: #c01831;
         }
 
         .fixtures-card {
