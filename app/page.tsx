@@ -1180,6 +1180,16 @@ export default async function Home() {
   const nextDate =
     dateValue(next);
 
+  const nextClubFixture =
+    nextFixtures.find(
+      (fixture: any) =>
+        String(
+          fixture?.tracked_team_type ??
+            fixture?.team_type ??
+            ""
+        ).toLowerCase() === "club"
+    ) ?? null;
+
   const nextBangladeshFixture =
     nextFixtures.find(
       (fixture: any) => {
@@ -1228,8 +1238,8 @@ export default async function Home() {
     firstUpcomingOdds,
     bangladeshOdds
   ] = await Promise.all([
-    next
-      ? getConsensusMatchOdds(next)
+    nextClubFixture
+      ? getConsensusMatchOdds(nextClubFixture)
       : Promise.resolve(null),
     firstUpcomingFixture
       ? getConsensusMatchOdds(firstUpcomingFixture)
@@ -1776,9 +1786,9 @@ export default async function Home() {
                 1X2
               </div>
               <div className="odds-mini-match">
-                {next
-                  ? fixtureName(next)
-                  : "No upcoming fixture"}
+                {nextClubFixture
+                  ? fixtureName(nextClubFixture)
+                  : "No upcoming club fixture"}
               </div>
 
               {hasComplete1X2(
