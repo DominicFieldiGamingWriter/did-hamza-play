@@ -924,6 +924,7 @@ function finalMinute(
 
 function buildAppearanceDetails(
   playerId: number,
+  playerName: string,
   playerStats: any[],
   incidents: any[],
   lastStatus: any,
@@ -1085,9 +1086,14 @@ function buildAppearanceDetails(
           type.includes("yellow_red") ||
           type.includes("second_yellow");
 
+        const incidentPlayerId = Number(incident?.player_id);
+        const samePlayerById = Number.isFinite(incidentPlayerId) && incidentPlayerId > 0 && incidentPlayerId === playerId;
+        const normalisePlayerName = (value: any) => String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+        const samePlayerByName = normalisePlayerName(incident?.player_name) !== "" && normalisePlayerName(incident?.player_name) === normalisePlayerName(playerName);
+
         return (
           isRedCard &&
-          incident?.player_id === playerId &&
+          (samePlayerById || samePlayerByName) &&
           incident?.minute !== null &&
           incident?.minute !== undefined
         );
@@ -2601,6 +2607,7 @@ export async function refreshPlayerPage() {
   const appearanceDetails =
     buildAppearanceDetails(
       playerId,
+      actualPlayerName,
       playerStats,
       incidents,
       lastStatus,
