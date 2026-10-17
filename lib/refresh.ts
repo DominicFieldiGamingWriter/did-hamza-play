@@ -610,8 +610,11 @@ function isRedCardIncident(
   return (
     /\bred\b/.test(signal) ||
     /\bred\s+card\b/.test(signal) ||
+    /\bredcard\b/.test(signal) ||
     /\bsecond\s+yellow\b/.test(signal) ||
+    /\bsecondyellow\b/.test(signal) ||
     /\byellow\s+red\b/.test(signal) ||
+    /\byellowred\b/.test(signal) ||
     /\bdismiss(?:al|ed)?\b/.test(signal) ||
     /\bsent\s+off\b/.test(signal)
   );
@@ -2929,21 +2932,5 @@ export async function refreshPlayerPage() {
     sent_off_minute:
       appearanceDetails.sent_off_minute ?? null,
 
-    appearance_player_name:
-      actualPlayerName,
-
-    card_incidents:
-      incidents
-        .filter((incident: any) => incident.type === "card")
-        .map((incident: any) => ({
-          minute: incident.minute,
-          player_id: incident.player_id,
-          player_name: incident.player_name,
-          card_type: incident.card_type,
-          subtype: incident.subtype,
-          type_name: incident.type_name,
-          description: incident.description,
-          is_red_card: incident.is_red_card
-        }))
   };
 }

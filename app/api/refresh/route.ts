@@ -77,12 +77,6 @@ export async function GET(
       sent_off_minute:
         result.sent_off_minute,
 
-      appearance_player_name:
-        result.appearance_player_name,
-
-      card_incidents:
-        result.card_incidents,
-
       build_sha:
         buildSha
     });
