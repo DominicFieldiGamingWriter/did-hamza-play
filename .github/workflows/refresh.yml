@@ -1,6 +1,9 @@
 name: Refresh football data
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
   schedule:
     - cron: "*/5 * * * *"
@@ -9,7 +12,31 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
-      - name: Refresh site data
+      - name: Wait for matching production deployment
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          curl --fail -X GET "${{ secrets.SITE_URL }}/api/refresh" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            response="$(curl --silent --show-error --fail "${SITE_URL}/api/refresh?check_build=1" \
+              -H "Authorization: Bearer ${CRON_SECRET}" || true)"
+            deployed_sha="$(printf '%s' "$response" | jq -r '.build_sha // empty' 2>/dev/null || true)"
+            if [ -n "$deployed_sha" ] && [ "$deployed_sha" = "$EXPECTED_SHA" ]; then
+              echo "Production deployment is on $deployed_sha"
+              exit 0
+            fi
+            echo "Waiting for production deployment: expected $EXPECTED_SHA, got ${deployed_sha:-no response} (attempt $attempt/36)"
+            sleep 10
+          done
+          echo "Timed out waiting for the matching production deployment." >&2
+          exit 1
+
+      - name: Refresh site data
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail --show-error -X GET "${SITE_URL}/api/refresh" \
+            -H "Authorization: Bearer ${CRON_SECRET}"

@@ -34,6 +34,18 @@ export async function GET(
     );
   }
 
+  const buildSha =
+    process.env.VERCEL_GIT_COMMIT_SHA ?? null;
+
+  if (
+    new URL(request.url).searchParams.get("check_build") === "1"
+  ) {
+    return NextResponse.json({
+      ok: true,
+      build_sha: buildSha
+    });
+  }
+
   try {
     const result =
       await refreshPlayerPage();
@@ -54,7 +66,19 @@ export async function GET(
         result.incident_count,
 
       incident_types:
-        result.incident_types
+        result.incident_types,
+
+      appearance_minutes:
+        result.appearance_minutes,
+
+      appearance_summary:
+        result.appearance_summary,
+
+      sent_off_minute:
+        result.sent_off_minute,
+
+      build_sha:
+        buildSha
     });
   } catch (error) {
     console.error(

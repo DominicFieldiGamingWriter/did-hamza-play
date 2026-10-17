@@ -591,6 +591,32 @@ function getIncidentType(
     .toLowerCase();
 }
 
+function isRedCardIncident(
+  incident: any
+): boolean {
+  const signal = [
+    getIncidentType(incident),
+    incident?.card_type,
+    incident?.subtype,
+    incident?.type_name,
+    incident?.description,
+    incident?.label
+  ]
+    .map((value) => String(value ?? "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/[^a-z0-9]+/g, " ");
+
+  return (
+    /\bred\b/.test(signal) ||
+    /\bred\s+card\b/.test(signal) ||
+    /\bsecond\s+yellow\b/.test(signal) ||
+    /\byellow\s+red\b/.test(signal) ||
+    /\bdismiss(?:al|ed)?\b/.test(signal) ||
+    /\bsent\s+off\b/.test(signal)
+  );
+}
+
 function resolveIncidentPlayerId(
   incident: any,
   field: string
@@ -849,6 +875,22 @@ async function normaliseIncidents(
               incident?.card_type ??
               null,
 
+            subtype:
+              incident?.subtype ??
+              null,
+
+            type_name:
+              incident?.type_name ??
+              null,
+
+            description:
+              incident?.description ??
+              incident?.label ??
+              null,
+
+            is_red_card:
+              isRedCardIncident(incident),
+
             goal_type:
               incident?.goal_type ??
               null,
@@ -1067,44 +1109,69 @@ function buildAppearanceDetails(
   // A dismissal ends the player's appearance just
   // like being substituted off. Keep the actual
   // substitution field separate for accurate display.
+  const normalisePlayerName = (value: any) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+
+  const playerNameKey =
+    normalisePlayerName(playerName);
+
+  const playerSurname =
+    playerNameKey.split(" ").filter(Boolean).pop() ?? "";
+
   const redCardIncident =
-    incidents.find(
-      (incident: any) => {
-        const type = String(
-          incident?.type ?? ""
-        ).toLowerCase();
+    incidents.find((incident: any) => {
+      const incidentPlayerId = getId(incident?.player_id);
+      const incidentNameKey =
+        normalisePlayerName(incident?.player_name);
+      const incidentSurname =
+        incidentNameKey.split(" ").filter(Boolean).pop() ?? "";
 
-        const cardType = String(
-          incident?.card_type ?? ""
-        ).toLowerCase();
+      const samePlayerById =
+        incidentPlayerId === playerId;
 
-        const isRedCard =
-          cardType.includes("red") ||
-          cardType.includes("second") ||
-          type.includes("red_card") ||
-          type.includes("red card") ||
-          type.includes("yellow_red") ||
-          type.includes("second_yellow");
-
-        const incidentPlayerId = Number(incident?.player_id);
-        const samePlayerById = Number.isFinite(incidentPlayerId) && incidentPlayerId > 0 && incidentPlayerId === playerId;
-        const normalisePlayerName = (value: any) => String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
-        const samePlayerByName = normalisePlayerName(incident?.player_name) !== "" && normalisePlayerName(incident?.player_name) === normalisePlayerName(playerName);
-
-        return (
-          isRedCard &&
-          (samePlayerById || samePlayerByName) &&
-          incident?.minute !== null &&
-          incident?.minute !== undefined
+      const samePlayerByName =
+        playerNameKey !== "" &&
+        incidentNameKey !== "" &&
+        (
+          incidentNameKey === playerNameKey ||
+          incidentSurname === playerSurname
         );
-      }
-    ) ?? null;
+
+      return (
+        (incident?.is_red_card === true ||
+          isRedCardIncident(incident)) &&
+        (samePlayerById || samePlayerByName) &&
+        incident?.minute !== null &&
+        incident?.minute !== undefined
+      );
+    }) ?? null;
 
   const sentOffMinute =
     redCardIncident?.minute ?? null;
 
+  // If both a dismissal and a substitution incident exist,
+  // the earliest event ends the player's appearance.
+  const appearanceEndCandidates = [
+    subbedOff,
+    sentOffMinute
+  ].filter(
+    (minute: any) =>
+      minute !== null &&
+      minute !== undefined &&
+      Number.isFinite(Number(minute))
+  ).map(Number);
+
   const appearanceEndMinute =
-    subbedOff ?? sentOffMinute;
+    appearanceEndCandidates.length > 0
+      ? Math.min(...appearanceEndCandidates)
+      : null;
 
   const sentOff =
     sentOffMinute !== null &&
@@ -1254,6 +1321,8 @@ function buildAppearanceDetails(
       subbedOffIncident
         ?.player_in_id ??
       null,
+    sent_off_minute:
+      sentOffMinute,
     summary
   };
 }
@@ -2849,6 +2918,15 @@ export async function refreshPlayerPage() {
               incident.type
           )
         )
-      )
+      ),
+
+    appearance_minutes:
+      appearanceDetails.minutes,
+
+    appearance_summary:
+      appearanceDetails.summary,
+
+    sent_off_minute:
+      appearanceDetails.sent_off_minute ?? null
   };
 }
