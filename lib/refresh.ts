@@ -1063,6 +1063,48 @@ function buildAppearanceDetails(
     subbedOffIncident?.minute ??
     null;
 
+  // A dismissal ends the player's appearance just
+  // like being substituted off. Keep the actual
+  // substitution field separate for accurate display.
+  const redCardIncident =
+    incidents.find(
+      (incident: any) => {
+        const type = String(
+          incident?.type ?? ""
+        ).toLowerCase();
+
+        const cardType = String(
+          incident?.card_type ?? ""
+        ).toLowerCase();
+
+        const isRedCard =
+          cardType.includes("red") ||
+          cardType.includes("second") ||
+          type.includes("red_card") ||
+          type.includes("red card") ||
+          type.includes("yellow_red") ||
+          type.includes("second_yellow");
+
+        return (
+          isRedCard &&
+          incident?.player_id === playerId &&
+          incident?.minute !== null &&
+          incident?.minute !== undefined
+        );
+      }
+    ) ?? null;
+
+  const sentOffMinute =
+    redCardIncident?.minute ?? null;
+
+  const appearanceEndMinute =
+    subbedOff ?? sentOffMinute;
+
+  const sentOff =
+    sentOffMinute !== null &&
+    (subbedOff === null ||
+      sentOffMinute <= subbedOff);
+
   const started =
     subbedOn === null;
 
@@ -1072,27 +1114,27 @@ function buildAppearanceDetails(
 
   if (
     started &&
-    subbedOff !== null
+    appearanceEndMinute !== null
   ) {
     minutes =
-      subbedOff;
+      appearanceEndMinute;
   }
 
   if (
     subbedOn !== null &&
-    subbedOff !== null
+    appearanceEndMinute !== null
   ) {
     minutes =
       Math.max(
         0,
-        subbedOff -
+        appearanceEndMinute -
           subbedOn
       );
   }
 
   if (
     subbedOn !== null &&
-    subbedOff === null
+    appearanceEndMinute === null
   ) {
     minutes =
       Math.max(
@@ -1157,7 +1199,12 @@ function buildAppearanceDetails(
   let summary =
     "Played.";
 
-  if (
+  if (sentOff) {
+    summary =
+      started
+        ? `Started. Sent off. Played ${minutes ?? sentOffMinute} mins.`
+        : `Didn't start. Subbed on. Sent off. Played ${minutes ?? 0} mins.`;
+  } else if (
     started &&
     subbedOff !== null
   ) {
