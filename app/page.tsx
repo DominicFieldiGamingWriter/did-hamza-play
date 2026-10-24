@@ -1,4 +1,5 @@
 import Image from "next/image";
+import SelectionStatusCard from "./selection-status-card";
 import type { Metadata } from "next";
 
 export const revalidate = 60;
@@ -1180,6 +1181,13 @@ export default async function Home() {
   const nextDate =
     dateValue(next);
 
+  const nextFixtureId = Number(next?.id ?? next?.event_id) || null;
+  const nextKickoffMinutes = nextDate && Number.isFinite(Date.parse(nextDate))
+    ? (Date.parse(nextDate) - Date.now()) / 60000
+    : null;
+  const selectionWindowActive = nextKickoffMinutes !== null &&
+    nextKickoffMinutes <= 75 && nextKickoffMinutes >= -120;
+
   const nextClubFixture =
     nextFixtures.find(
       (fixture: any) =>
@@ -1680,35 +1688,12 @@ export default async function Home() {
             </div>
           )}
 
-          <div className="availability">
-            <div>
-              <div className="section-label">
-                {nextStatus?.phase ===
-                "team_news"
-                  ? "TEAM NEWS"
-                  : "AVAILABILITY"}
-              </div>
-
-              <div
-                className={`availability-status ${nextStatus?.tone ?? "positive"}`}
-              >
-                {nextStatus?.label ??
-                  "Likely available"}
-              </div>
-
-              <div className="availability-reason">
-                {nextStatus?.reason ??
-                  "No current injury, doubt or suspension is listed."}
-              </div>
-            </div>
-
-            <div
-              className={`status-pill ${nextStatus?.tone ?? "positive"}`}
-            >
-              {nextStatus?.label ??
-                "LIKELY AVAILABLE"}
-            </div>
-          </div>
+          <SelectionStatusCard
+            fixtureId={nextFixtureId}
+            kickoff={nextDate}
+            initialStatus={nextStatus}
+            selectionWindowActive={selectionWindowActive}
+          />
         </section>
 
         <section className="fixtures-card">

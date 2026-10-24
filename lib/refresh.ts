@@ -12,6 +12,7 @@ import {
 import {
   getSupabaseAdmin
 } from "./supabase";
+import { resolveTeamSheetStatus } from "./status";
 
 function responseArray(
   data: any
@@ -1430,139 +1431,31 @@ async function getUpcomingSelectionStatus(
   playerId: number,
   fallbackStatus: any
 ) {
-  const minutesUntilKickoff =
-    minutesToKickoff(
-      fixture
-    );
-
-  /*
-   * Use concrete team news from one hour before
-   * kick-off. Before that point, keep the injury /
-   * suspension-based availability assessment.
-   */
+  const minutesUntilKickoff = minutesToKickoff(fixture);
+  const fixtureId = Number(fixture?.id ?? fixture?.event_id);
   if (
-    !fixture?.id ||
+    !Number.isFinite(fixtureId) || fixtureId <= 0 ||
     minutesUntilKickoff === null ||
-    minutesUntilKickoff > 60 ||
-    minutesUntilKickoff < 0
+    minutesUntilKickoff > 75 ||
+    minutesUntilKickoff < -120
   ) {
     return fallbackStatus;
   }
 
+  const checkedAt = new Date().toISOString();
   try {
-    const lineupData =
-      await getLineups(
-        Number(
-          fixture.id
-        )
-      );
-
-    const lineupStatus =
-      String(
-        lineupData?.status ??
-          ""
-      )
-        .trim()
-        .toLowerCase()
-        .replace(
-          /[^a-z0-9]+/g,
-          ""
-        );
-
-    /*
-     * Only treat a confirmed lineup as concrete
-     * team news. Predicted / unavailable lineups
-     * must never become a definitive selection.
-     */
-    if (
-      lineupStatus !==
-      "confirmed"
-    ) {
-      return fallbackStatus;
-    }
-
-    const lineups =
-      lineupData?.lineups ??
-      [];
-
-    const role =
-      lineupRoleFromValue(
-        lineups,
-        playerId
-      );
-
-    if (
-      role ===
-      "starting"
-    ) {
-      return {
-        status:
-          "confirmed_start",
-        type:
-          "confirmed_start",
-        phase:
-          "team_news",
-        tone:
-          "positive",
-        label:
-          "Yes — he starts",
-        reason:
-          "Confirmed in the starting XI."
-      };
-    }
-
-    if (
-      role ===
-      "substitute"
-    ) {
-      return {
-        status:
-          "confirmed_bench",
-        type:
-          "confirmed_bench",
-        phase:
-          "team_news",
-        tone:
-          "warning",
-        label:
-          "No — on the bench",
-        reason:
-          "Confirmed among the substitutes."
-      };
-    }
-
-    /*
-     * A confirmed lineup with no player record means
-     * the player is not in the matchday squad.
-     * If the lineup payload is malformed and we cannot
-     * safely establish that, retain the last known
-     * availability status instead.
-     */
-    if (
-      !hasPlayer(
-        lineups,
-        playerId
-      )
-    ) {
-      return {
-        status:
-          "confirmed_not_in_squad",
-        type:
-          "confirmed_not_in_squad",
-        phase:
-          "team_news",
-        tone:
-          "negative",
-        label:
-          "Not in squad",
-        reason:
-          "Not named in the confirmed matchday squad."
-      };
-    }
-
-    return fallbackStatus;
+    const lineupData = await getLineups(fixtureId);
+    return {
+      ...resolveTeamSheetStatus(playerId, lineupData),
+      lineup_fixture_id: fixtureId,
+      lineup_checked_at: checkedAt
+    };
   } catch {
-    return fallbackStatus;
+    return {
+      ...resolveTeamSheetStatus(playerId, null),
+      lineup_fixture_id: fixtureId,
+      lineup_checked_at: checkedAt
+    };
   }
 }
 
