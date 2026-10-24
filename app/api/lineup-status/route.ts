@@ -76,14 +76,15 @@ export async function GET(request: Request) {
     const minutesUntilKickoff = (Date.parse(kickoff) - now) / 60000;
     const cacheMatchesFixture = Number(storedNextStatus.lineup_fixture_id) === requestedId;
 
-    if (cacheMatchesFixture && isDefinitive(storedNextStatus)) {
+    // Keep confirmed team sheets for three minutes, then re-check. The
+    // frontend polls each minute so late lineup changes are eventually caught.
+    const cacheAgeMs = storedNextStatus.lineup_checked_at
+      ? now - Date.parse(String(storedNextStatus.lineup_checked_at))
+      : Number.POSITIVE_INFINITY;
+    if (cacheMatchesFixture && isDefinitive(storedNextStatus) && cacheAgeMs < 180_000) {
       return json({ ok: true, ...storedNextStatus });
     }
-    if (
-      cacheMatchesFixture &&
-      storedNextStatus.lineup_checked_at &&
-      now - Date.parse(String(storedNextStatus.lineup_checked_at)) < 45_000
-    ) {
+    if (cacheMatchesFixture && cacheAgeMs < 45_000) {
       return json({ ok: true, ...storedNextStatus });
     }
 

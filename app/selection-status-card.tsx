@@ -69,16 +69,18 @@ export default function SelectionStatusCard({
   );
 
   useEffect(() => {
-    if (!fixtureId || !kickoff || !Number.isFinite(Date.parse(kickoff))) return;
+    const activeFixtureId = fixtureId;
+    const activeKickoff = kickoff;
+    if (!activeFixtureId || !activeKickoff || !Number.isFinite(Date.parse(activeKickoff))) return;
 
     let active = true;
 
     async function checkLineup() {
-      const minutesUntilKickoff = (Date.parse(kickoff as string) - Date.now()) / 60000;
+      const minutesUntilKickoff = (Date.parse(activeKickoff) - Date.now()) / 60000;
       if (minutesUntilKickoff > 75 || minutesUntilKickoff < -120) return;
 
       setStatus(current =>
-        isDefinitiveForFixture(current, fixtureId)
+        isDefinitiveForFixture(current, activeFixtureId)
           ? current
           : { ...PENDING_STATUS, reason: minutesUntilKickoff < 0
               ? "Kick-off has passed, but the confirmed lineup has not been retrieved yet. Checking again."
@@ -87,7 +89,7 @@ export default function SelectionStatusCard({
 
       try {
         const response = await fetch(
-          `/api/lineup-status?event_id=${encodeURIComponent(String(fixtureId))}`,
+          `/api/lineup-status?event_id=${encodeURIComponent(String(activeFixtureId))}`,
           { cache: "no-store", headers: { Accept: "application/json" } }
         );
         const result = await response.json();
@@ -96,7 +98,7 @@ export default function SelectionStatusCard({
           setStatus(result as SelectionStatus);
         } else {
           setStatus(current =>
-            isDefinitiveForFixture(current, fixtureId)
+            isDefinitiveForFixture(current, activeFixtureId)
               ? current
               : { ...PENDING_STATUS, reason: result?.reason || "The lineup feed has not confirmed the starting XI. Retrying automatically." }
           );
@@ -104,7 +106,7 @@ export default function SelectionStatusCard({
       } catch {
         if (!active) return;
         setStatus(current =>
-          isDefinitiveForFixture(current, fixtureId)
+          isDefinitiveForFixture(current, activeFixtureId)
             ? current
             : { ...PENDING_STATUS, reason: "Could not check the official lineup feed. Retrying automatically." }
         );
