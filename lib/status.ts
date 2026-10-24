@@ -188,7 +188,6 @@ function lineupPlayerRole(value: any, playerId: number): "starting" | "substitut
     if (Array.isArray(node)) {
       for (const item of node) {
         walk(item, context);
-        if (role === "starting") return;
       }
       return;
     }
@@ -221,7 +220,6 @@ function lineupPlayerRole(value: any, playerId: number): "starting" | "substitut
       const childContext = keyMeansStartingXI(key) ? "starting" :
         keyMeansSubstitutes(key) ? "substitute" : context;
       walk(child, childContext);
-      if (role === "starting") return;
     }
   }
   walk(value);

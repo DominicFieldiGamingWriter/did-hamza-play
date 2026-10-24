@@ -69,9 +69,15 @@ export default function SelectionStatusCard({
   );
 
   useEffect(() => {
-    const activeFixtureId = fixtureId;
-    const activeKickoff = kickoff;
-    if (!activeFixtureId || !activeKickoff || !Number.isFinite(Date.parse(activeKickoff))) return;
+    if (
+      fixtureId === null ||
+      kickoff === null ||
+      !Number.isFinite(Date.parse(kickoff))
+    ) return;
+
+    // Explicit local types keep the async polling callback safely non-null.
+    const activeFixtureId: number = fixtureId;
+    const activeKickoff: string = kickoff;
 
     let active = true;
 
