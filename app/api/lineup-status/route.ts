@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLineups } from "../../../lib/api-football";
+import { getLineups } from "../../../lib/bsd";
 import { resolveTeamSheetStatus } from "../../../lib/status";
 import { getSupabaseAdmin } from "../../../lib/supabase";
 

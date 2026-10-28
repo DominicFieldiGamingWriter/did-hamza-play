@@ -7,7 +7,7 @@ import {
   getLineups,
   getFixturePlayerStats,
   getFixtureIncidents
-} from "./api-football";
+} from "./bsd";
 
 import {
   getSupabaseAdmin
