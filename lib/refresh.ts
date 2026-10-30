@@ -2371,8 +2371,10 @@ function chooseLiveFixture(
 
 function hasConfirmedFinalResult(fixture: any): boolean {
   const status = String(fixture?.status ?? fixture?.time?.status ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-  const homeScore = Number(fixture?.home_score ?? fixture?.score?.home ?? fixture?.scores?.home ?? fixture?.home_team_score);
-  const awayScore = Number(fixture?.away_score ?? fixture?.score?.away ?? fixture?.scores?.away ?? fixture?.away_team_score);
+  const homeRaw = fixture?.home_score ?? fixture?.score?.home ?? fixture?.scores?.home ?? fixture?.home_team_score;
+  const awayRaw = fixture?.away_score ?? fixture?.score?.away ?? fixture?.scores?.away ?? fixture?.away_team_score;
+  const homeScore = homeRaw === null || homeRaw === undefined || homeRaw === "" ? NaN : Number(homeRaw);
+  const awayScore = awayRaw === null || awayRaw === undefined || awayRaw === "" ? NaN : Number(awayRaw);
   return ["finished", "complete", "completed", "fulltime"].includes(status) && Number.isFinite(homeScore) && homeScore >= 0 && Number.isFinite(awayScore) && awayScore >= 0;
 }
 export async function refreshPlayerPage() {
