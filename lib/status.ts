@@ -145,11 +145,20 @@ function normalizedLineupKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function keyMeansStartingXI(key: string): boolean {
+function keyMeansStartingXI(key: string, parentNode?: any): boolean {
   const normalized = normalizedLineupKey(key);
-  return normalized.includes("startingxi") || normalized.includes("startxi") ||
+  const explicitlyNamed = normalized.includes("startingxi") || normalized.includes("startxi") ||
     normalized.includes("startinglineup") || normalized.includes("startingplayers") ||
     normalized.includes("startingeleven");
+
+  // BSD's confirmed schema stores each side's starting XI in "players",
+  // alongside a separate "substitutes" array.
+  const bsdStartingPlayers =
+    normalized === "players" &&
+    Array.isArray(parentNode?.players) &&
+    Array.isArray(parentNode?.substitutes);
+
+  return explicitlyNamed || bsdStartingPlayers;
 }
 
 function keyMeansSubstitutes(key: string): boolean {
@@ -172,7 +181,7 @@ function collectCompleteStartingXIs(value: any): number[] {
     }
     for (const [key, child] of Object.entries(node)) {
       if (!child || typeof child !== "object") continue;
-      const childContext = keyMeansStartingXI(key) ? "starting" :
+      const childContext = keyMeansStartingXI(key, node) ? "starting" :
         keyMeansSubstitutes(key) ? "substitute" : context;
       walk(child, childContext);
     }
@@ -217,7 +226,7 @@ function lineupPlayerRole(value: any, playerId: number): "starting" | "substitut
     }
     for (const [key, child] of Object.entries(node)) {
       if (!child || typeof child !== "object") continue;
-      const childContext = keyMeansStartingXI(key) ? "starting" :
+      const childContext = keyMeansStartingXI(key, node) ? "starting" :
         keyMeansSubstitutes(key) ? "substitute" : context;
       walk(child, childContext);
     }
@@ -261,9 +270,16 @@ export function resolveTeamSheetStatus(playerId: number, lineupData: any): TeamS
   const explicitlyConfirmed = [
     "confirmed", "official", "published", "complete", "completed", "finalized", "lineupsconfirmed"
   ].includes(rawStatus);
-  const structurallyConfirmed = collectCompleteStartingXIs(lineups).length >= 2;
-  const role = lineupPlayerRole(lineups, playerId);
-  const playerIsListed = lineupContainsPlayer(lineups, playerId);
+  // The BSD envelope also contains unavailable_players. Only inspect
+  // the actual home/away lineups when deciding whether a player is selected.
+  const teamSheets = lineups.map((item: any) =>
+    item && typeof item === "object" && item.lineups && typeof item.lineups === "object"
+      ? item.lineups
+      : item
+  );
+  const structurallyConfirmed = collectCompleteStartingXIs(teamSheets).length >= 2;
+  const role = lineupPlayerRole(teamSheets, playerId);
+  const playerIsListed = lineupContainsPlayer(teamSheets, playerId);
   const confirmed = explicitlyConfirmed || structurallyConfirmed;
 
   if (!confirmed) {
