@@ -16,7 +16,7 @@ export default function PostMatchRefresh({ eventId, kickoff, active }: Props) {
     const firstCheckAt = Date.parse(kickoff) + FIRST_CHECK_MINUTES * 60_000;
     let stopped = false;
     let inFlight = false;
-    let timer: ReturnType<typeof window.setTimeout> | null = null;
+    let timer: number | null = null;
 
     async function check() {
       if (stopped || inFlight) return;
