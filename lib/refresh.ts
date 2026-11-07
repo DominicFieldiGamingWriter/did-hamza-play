@@ -1432,6 +1432,11 @@ async function getUpcomingSelectionStatus(
   playerId: number,
   fallbackStatus: any
 ) {
+  // FotMob event IDs are not BSD event IDs; do not query BSD lineups with them.
+  if (fixture?.fixture_source === "fotmob") {
+    return fallbackStatus;
+  }
+
   const minutesUntilKickoff = minutesToKickoff(fixture);
   const fixtureId = Number(fixture?.id ?? fixture?.event_id);
   if (
@@ -2217,10 +2222,10 @@ function mergeUpcomingFixtures(
   clubFixtures: any[],
   nationalFixtures: any[]
 ): any[] {
-  return [
+  return dedupeFixturesByTeamsAndKickoff([
     ...clubFixtures,
     ...nationalFixtures
-  ]
+  ])
     .filter(
       (fixture) =>
         fixture &&
@@ -2570,6 +2575,57 @@ async function getNationalTeamEventDiagnostics(
 }
 
 
+
+function normaliseFixtureTeamNameForDedupe(value: any): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function upcomingFixtureDeduplicationKey(fixture: any): string {
+  const homeName = normaliseFixtureTeamNameForDedupe(
+    fixture?.home_team?.name ??
+    fixture?.home?.name ??
+    fixture?.home_team_name ??
+    fixture?.home_name
+  );
+  const awayName = normaliseFixtureTeamNameForDedupe(
+    fixture?.away_team?.name ??
+    fixture?.away?.name ??
+    fixture?.away_team_name ??
+    fixture?.away_name
+  );
+  const timestamp = fixtureTimestamp(fixture);
+
+  if (homeName && awayName && timestamp > 0) {
+    const teams = [homeName, awayName].sort();
+    return teams[0] + "|" + teams[1] + "|" + String(Math.round(timestamp / 60000));
+  }
+
+  const id = fixture?.id ?? fixture?.event_id ?? fixture?.fixture_id;
+  return id !== null && id !== undefined && String(id).trim()
+    ? "id:" + String(id)
+    : "";
+}
+
+function dedupeFixturesByTeamsAndKickoff(fixtures: any[]): any[] {
+  const seen = new Set<string>();
+
+  return (Array.isArray(fixtures) ? fixtures : []).filter((fixture) => {
+    const key = upcomingFixtureDeduplicationKey(fixture);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 async function getFotMobNationalTeamFixtures(
   teamName: string,
   trackedTeamId: number
@@ -2824,8 +2880,10 @@ export async function refreshPlayerPage() {
       ? nationalFixturesById.next
       : nationalFixturesByName.next;
 
+  // Query FotMob on every refresh to supplement partial BSD results,
+  // not only act as an all-or-nothing fallback.
   const nationalTeamFotMobResult =
-    nationalTeam?.name && nationalBsdUpcoming.length === 0
+    nationalTeam?.name
       ? await getFotMobNationalTeamFixtures(
           nationalTeam.name,
           nationalTeamId
@@ -2833,11 +2891,20 @@ export async function refreshPlayerPage() {
       : {
           fixtures: [],
           diagnostics: {
-            skipped: nationalTeam?.name
-              ? "BSD already returned upcoming national-team fixtures."
-              : "No national team was resolved."
+            skipped: "No national team was resolved."
           }
         };
+
+  // BSD entries come first, so duplicate fixtures retain the BSD event ID.
+  const nationalUpcomingCombined = dedupeFixturesByTeamsAndKickoff([
+    ...nationalBsdUpcoming,
+    ...nationalTeamFotMobResult.fixtures
+  ]);
+  const nationalFotMobAddedCount = Math.max(
+    0,
+    nationalUpcomingCombined.length -
+      dedupeFixturesByTeamsAndKickoff(nationalBsdUpcoming).length
+  );
 
   const nationalFixtures = {
     live:
@@ -2847,9 +2914,7 @@ export async function refreshPlayerPage() {
       nationalFixturesById.last ??
       nationalFixturesByName.last,
     next:
-      nationalBsdUpcoming.length > 0
-        ? nationalBsdUpcoming
-        : nationalTeamFotMobResult.fixtures
+      nationalUpcomingCombined
   };
 
   const nationalTeamEventDiagnostics = nationalTeam?.name
@@ -2864,7 +2929,7 @@ export async function refreshPlayerPage() {
       };
 
   Object.assign(nationalTeamEventDiagnostics, {
-    fotmob_fallback: nationalTeamFotMobResult.diagnostics,
+    fotmob_supplement: nationalTeamFotMobResult.diagnostics,
     application_lookup: {
       team_id_lookup_attempted: nationalTeamId > 0,
       team_id_upcoming_count: nationalFixturesById.next.length,
@@ -2873,18 +2938,19 @@ export async function refreshPlayerPage() {
         (nationalTeamId <= 0 || nationalFixturesById.next.length === 0)
       ),
       team_name_upcoming_count: nationalFixturesByName.next.length,
-      fotmob_fallback_attempted: nationalTeam?.name
-        ? nationalBsdUpcoming.length === 0
-        : false,
+      fotmob_supplement_attempted: Boolean(nationalTeam?.name),
       fotmob_upcoming_count: nationalTeamFotMobResult.fixtures.length,
+      fotmob_added_count: nationalFotMobAddedCount,
       selected_upcoming_source:
-        nationalFixturesById.next.length > 0
-          ? "team_id"
-          : nationalFixturesByName.next.length > 0
-            ? "team_name"
-            : nationalTeamFotMobResult.fixtures.length > 0
-              ? "fotmob"
-              : "none"
+        nationalBsdUpcoming.length > 0 && nationalFotMobAddedCount > 0
+          ? "bsd+fotmob"
+          : nationalFixturesById.next.length > 0
+            ? "team_id"
+            : nationalFixturesByName.next.length > 0
+              ? "team_name"
+              : nationalTeamFotMobResult.fixtures.length > 0
+                ? "fotmob"
+                : "none"
     }
   });
 
@@ -3036,7 +3102,7 @@ export async function refreshPlayerPage() {
       )
     ];
 
-  const nationalUpcomingFromBsd =
+  const nationalUpcomingFromProviders =
     [
       ...(
         Array.isArray(
@@ -3055,7 +3121,7 @@ export async function refreshPlayerPage() {
     ];
 
   const nationalUpcoming =
-    nationalUpcomingFromBsd;
+    dedupeFixturesByTeamsAndKickoff(nationalUpcomingFromProviders);
 
   const mergedUpcoming =
     mergeUpcomingFixtures(
@@ -3233,12 +3299,13 @@ export async function refreshPlayerPage() {
       null,
 
     national_fixture_source:
-      nationalFixturesById.next.length > 0 ||
-      nationalFixturesByName.next.length > 0
-        ? "bsd"
-        : nationalTeamFotMobResult.fixtures.length > 0
-          ? "fotmob"
-          : "none",
+      nationalBsdUpcoming.length > 0 && nationalFotMobAddedCount > 0
+        ? "bsd+fotmob"
+        : nationalBsdUpcoming.length > 0
+          ? "bsd"
+          : nationalTeamFotMobResult.fixtures.length > 0
+            ? "fotmob"
+            : "none",
 
     latest_match_type:
       latestFinished.teamType,
