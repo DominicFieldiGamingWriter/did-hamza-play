@@ -19,9 +19,14 @@ export async function GET(
       ? authorization.slice(7)
       : "";
 
+  const acceptedSecrets = [
+    expectedSecret,
+    process.env.SUPABASE_CRON_SECRET
+  ].filter((secret): secret is string => Boolean(secret));
+
   if (
-    !expectedSecret ||
-    suppliedSecret !== expectedSecret
+    acceptedSecrets.length === 0 ||
+    !acceptedSecrets.includes(suppliedSecret)
   ) {
     return NextResponse.json(
       {
