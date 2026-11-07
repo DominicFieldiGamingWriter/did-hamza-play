@@ -2309,6 +2309,251 @@ function hasConfirmedFinalResult(fixture: any): boolean {
   const awayScore = awayRaw === null || awayRaw === undefined || awayRaw === "" ? NaN : Number(awayRaw);
   return ["finished", "complete", "completed", "fulltime"].includes(status) && Number.isFinite(homeScore) && homeScore >= 0 && Number.isFinite(awayScore) && awayScore >= 0;
 }
+function normaliseDiagnosticTeamName(value: any): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
+}
+
+function diagnosticFixtureTeamName(fixture: any, side: "home" | "away"): string {
+  const candidates = [
+    fixture?.[side],
+    fixture?.[`${side}_team`],
+    fixture?.[`${side}Team`],
+    fixture?.teams?.[side],
+    fixture?.participants?.[side]
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+
+    const name =
+      candidate?.name ??
+      candidate?.team_name ??
+      candidate?.full_name ??
+      candidate?.short_name;
+
+    if (typeof name === "string" && name.trim()) {
+      return name.trim();
+    }
+  }
+
+  const fallback =
+    fixture?.[`${side}_team_name`] ??
+    fixture?.[`${side}_name`] ??
+    "";
+
+  return typeof fallback === "string" ? fallback.trim() : "";
+}
+
+function diagnosticFixtureDate(fixture: any): string | null {
+  const value =
+    fixture?.time?.kickoff_at ??
+    fixture?.time?.start_time ??
+    fixture?.kickoff_at ??
+    fixture?.kickoff ??
+    fixture?.event_date ??
+    fixture?.date ??
+    fixture?.start_time ??
+    null;
+
+  return value === null || value === undefined
+    ? null
+    : String(value);
+}
+
+function diagnosticFixtureSummary(fixture: any) {
+  return {
+    id: fixture?.id ?? fixture?.event_id ?? null,
+    date: diagnosticFixtureDate(fixture),
+    status: fixture?.status ?? fixture?.time?.status ?? null,
+    home: diagnosticFixtureTeamName(fixture, "home"),
+    away: diagnosticFixtureTeamName(fixture, "away"),
+    home_id:
+      fixture?.home?.id ??
+      fixture?.home_team?.id ??
+      fixture?.home_team_id ??
+      null,
+    away_id:
+      fixture?.away?.id ??
+      fixture?.away_team?.id ??
+      fixture?.away_team_id ??
+      null
+  };
+}
+
+async function getNationalTeamEventDiagnostics(
+  teamName: string,
+  teamId: number
+) {
+  const checkedAt = new Date().toISOString();
+  const apiKey = process.env.BSD_API_KEY;
+
+  if (!apiKey) {
+    return {
+      checked_at: checkedAt,
+      team: { id: teamId || null, name: teamName },
+      error: "BSD_API_KEY is not configured."
+    };
+  }
+
+  const queries: Array<{
+    key: string;
+    params: Record<string, string | number>;
+  }> = [
+    {
+      key: "by_name_upcoming",
+      params: {
+        team_name: teamName,
+        status: "upcoming",
+        limit: 100
+      }
+    },
+    {
+      key: "by_name_all_statuses",
+      params: {
+        team_name: teamName,
+        limit: 100
+      }
+    }
+  ];
+
+  if (teamId > 0) {
+    queries.unshift({
+      key: "by_id_upcoming",
+      params: {
+        team_id: teamId,
+        status: "upcoming",
+        limit: 100
+      }
+    });
+  }
+
+  const queryResults = await Promise.all(
+    queries.map(async ({ key, params }) => {
+      const url = new URL("https://sports.bzzoiro.com/api/v2/events/");
+
+      for (const [param, value] of Object.entries(params)) {
+        url.searchParams.set(param, String(value));
+      }
+
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Token ${apiKey}`,
+            Accept: "application/json"
+          },
+          cache: "no-store"
+        });
+
+        const body = await response.text();
+
+        if (!response.ok) {
+          return {
+            query: key,
+            params,
+            http_status: response.status,
+            error: body.slice(0, 500)
+          };
+        }
+
+        let data: any;
+
+        try {
+          data = JSON.parse(body);
+        } catch {
+          return {
+            query: key,
+            params,
+            http_status: response.status,
+            parse_error: "The response was not valid JSON.",
+            response_excerpt: body.slice(0, 500)
+          };
+        }
+
+        const events = responseArray(data);
+        const target = normaliseDiagnosticTeamName(teamName);
+
+        const exactMatches = events.filter((fixture) => {
+          const home = normaliseDiagnosticTeamName(
+            diagnosticFixtureTeamName(fixture, "home")
+          );
+          const away = normaliseDiagnosticTeamName(
+            diagnosticFixtureTeamName(fixture, "away")
+          );
+
+          return home === target || away === target;
+        });
+
+        const partialMatches = events.filter((fixture) => {
+          const home = normaliseDiagnosticTeamName(
+            diagnosticFixtureTeamName(fixture, "home")
+          );
+          const away = normaliseDiagnosticTeamName(
+            diagnosticFixtureTeamName(fixture, "away")
+          );
+
+          return (
+            (home && home.includes(target)) ||
+            (away && away.includes(target))
+          );
+        });
+
+        const futureExactMatches = exactMatches.filter((fixture) => {
+          const date = diagnosticFixtureDate(fixture);
+          const timestamp = date ? new Date(date).getTime() : NaN;
+
+          return Number.isFinite(timestamp) && timestamp > Date.now();
+        });
+
+        return {
+          query: key,
+          params,
+          http_status: response.status,
+          response_shape: Array.isArray(data)
+            ? "array"
+            : typeof data,
+          response_keys:
+            data && typeof data === "object" && !Array.isArray(data)
+              ? Object.keys(data).slice(0, 20)
+              : [],
+          response_count: events.length,
+          exact_team_match_count: exactMatches.length,
+          partial_team_match_count: partialMatches.length,
+          future_exact_team_match_count: futureExactMatches.length,
+          exact_matches_sample: exactMatches
+            .slice(0, 12)
+            .map(diagnosticFixtureSummary),
+          partial_matches_sample: partialMatches
+            .slice(0, 12)
+            .map(diagnosticFixtureSummary),
+          first_returned_sample: events
+            .slice(0, 8)
+            .map(diagnosticFixtureSummary)
+        };
+      } catch (error) {
+        return {
+          query: key,
+          params,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      }
+    })
+  );
+
+  return {
+    checked_at: checkedAt,
+    team: {
+      id: teamId || null,
+      name: teamName
+    },
+    queries: queryResults
+  };
+}
+
 export async function refreshPlayerPage() {
   const supabase = getSupabaseAdmin();
   const { data: existingPageState, error: existingPageStateError } = await supabase.from("player_page").select("player_status").eq("id", 1).maybeSingle();
@@ -2423,6 +2668,35 @@ export async function refreshPlayerPage() {
         ? nationalFixturesById.next
         : nationalFixturesByName.next
   };
+
+  const nationalTeamEventDiagnostics = nationalTeam?.name
+    ? await getNationalTeamEventDiagnostics(
+        nationalTeam.name,
+        nationalTeamId
+      )
+    : {
+        checked_at: new Date().toISOString(),
+        team: null,
+        skipped: "No national team was resolved."
+      };
+
+  Object.assign(nationalTeamEventDiagnostics, {
+    application_lookup: {
+      team_id_lookup_attempted: nationalTeamId > 0,
+      team_id_upcoming_count: nationalFixturesById.next.length,
+      team_name_lookup_attempted: Boolean(
+        nationalTeam?.name &&
+        (nationalTeamId <= 0 || nationalFixturesById.next.length === 0)
+      ),
+      team_name_upcoming_count: nationalFixturesByName.next.length,
+      selected_upcoming_source:
+        nationalFixturesById.next.length > 0
+          ? "team_id"
+          : nationalFixturesByName.next.length > 0
+            ? "team_name"
+            : "none"
+    }
+  });
 
   const squadPlayer =
     squad.find(
@@ -2732,7 +3006,10 @@ export async function refreshPlayerPage() {
         nextStatus,
 
       post_match_refresh:
-        postMatchRefresh
+        postMatchRefresh,
+
+      national_team_lookup:
+        nationalTeamEventDiagnostics
     },
 
     updated_at:
