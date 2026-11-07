@@ -1386,9 +1386,7 @@ export default async function Home() {
               </div>
 
               <h2 className="match-title">
-                {fixtureName(
-                  lastFixture
-                )}
+                {teamName(lastFixture, "home")} {latestHomeScore ?? "—"} - {latestAwayScore ?? "—"} {teamName(lastFixture, "away")}
               </h2>
 
               {latestDate && (
@@ -1406,14 +1404,6 @@ export default async function Home() {
               )}
 
               <div className="result-panel">
-                <div className="score">
-                  {latestHomeScore ??
-                    "—"}
-                  –
-                  {latestAwayScore ??
-                    "—"}
-                </div>
-
                 <div className="event-list">
                   <div className="event-line">
                     <div className="event-label">
