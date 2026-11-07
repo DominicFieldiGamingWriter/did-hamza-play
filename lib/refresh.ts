@@ -4,6 +4,7 @@ import {
   getTeamById,
   getTeamSquad,
   getTeamFixtures,
+  getTeamFixturesByName,
   getLineups,
   getFixturePlayerStats,
   getFixtureIncidents
@@ -1545,7 +1546,8 @@ function getTeamInfo(
 
 function normaliseFixture(
   fixture: any,
-  teamId: number
+  teamId: number,
+  teamName?: string
 ) {
   const home =
     fixture?.home ??
@@ -1631,11 +1633,22 @@ function normaliseFixture(
     fixture?.start_time ??
     null;
 
+  const targetTeamName =
+    String(teamName ?? "")
+      .trim()
+      .toLowerCase();
+
   const isHome =
-    homeId === teamId;
+    teamId > 0
+      ? homeId === teamId
+      : Boolean(targetTeamName) &&
+        String(homeName).trim().toLowerCase() === targetTeamName;
 
   const isAway =
-    awayId === teamId;
+    teamId > 0
+      ? awayId === teamId
+      : Boolean(targetTeamName) &&
+        String(awayName).trim().toLowerCase() === targetTeamName;
 
   return {
     ...fixture,
@@ -2164,122 +2177,41 @@ function tagFixture(
     return null;
   }
 
+  const trackedTeamId =
+    Number(trackedTeam.id) || 0;
+
+  const trackedTeamName =
+    trackedTeam.name ?? "Unknown";
+
   const normalised =
     normaliseFixture(
       fixture,
-      Number(trackedTeam.id)
+      trackedTeamId,
+      trackedTeamName
     );
+
+  const normalisedTrackedTeamId =
+    trackedTeamId > 0
+      ? trackedTeamId
+      : String(normalised.home_team.name).trim().toLowerCase() ===
+          String(trackedTeamName).trim().toLowerCase()
+        ? normalised.home_team.id
+        : String(normalised.away_team.name).trim().toLowerCase() ===
+            String(trackedTeamName).trim().toLowerCase()
+          ? normalised.away_team.id
+          : 0;
 
   return {
     ...normalised,
     tracked_team_id:
-      Number(trackedTeam.id),
+      normalisedTrackedTeamId,
     tracked_team_name:
-      trackedTeam.name ??
-      "Unknown",
+      trackedTeamName,
     tracked_team_type:
       teamType
   };
 }
 
-
-const BANGLADESH_FALLBACK_FIXTURES = [
-  {
-    id: "bd-asean-2026-09-25",
-    date: "2026-09-25T09:00:00+00:00",
-    event_date: "2026-09-25T09:00:00+00:00",
-    status: "finished",
-    period: "FT",
-    home_team: { id: 0, name: "Bangladesh" },
-    away_team: { id: 0, name: "Malaysia" },
-    home_score: 0,
-    away_score: 3,
-    opponent_name: "Malaysia",
-    opponent_id: null,
-    stage_name: "FIFA ASEAN Cup 2026",
-    round_label: "Group A",
-    league_name: "FIFA ASEAN Cup 2026",
-    is_fallback_fixture: true,
-    incidents: [
-      { type: "goal", minute: 18, player_name: "Arif Aiman", player_id: null, assist_name: "", assist_id: null, is_home: false, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 38, player_name: "Arif Aiman", player_id: null, assist_name: "", assist_id: null, is_home: false, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 53, player_name: "Bergson", player_id: null, assist_name: "", assist_id: null, is_home: false, goal_type: "regular", is_own_goal: false },
-      { type: "period", minute: 90 }
-    ]
-  },
-  {
-    id: "bd-asean-2026-09-28",
-    date: "2026-09-28T09:00:00+00:00",
-    event_date: "2026-09-28T09:00:00+00:00",
-    status: "finished",
-    period: "FT",
-    home_team: { id: 0, name: "Singapore" },
-    away_team: { id: 0, name: "Bangladesh" },
-    home_score: 1,
-    away_score: 0,
-    opponent_name: "Singapore",
-    opponent_id: null,
-    stage_name: "FIFA ASEAN Cup 2026",
-    round_label: "Group A",
-    league_name: "FIFA ASEAN Cup 2026",
-    is_fallback_fixture: true,
-    incidents: [
-      { type: "goal", minute: 35, player_name: "Harhys Stewart", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "period", minute: 90 }
-    ]
-  },
-  {
-    id: "bd-asean-2026-10-01",
-    date: "2026-10-01T12:30:00+00:00",
-    event_date: "2026-10-01T12:30:00+00:00",
-    status: "finished",
-    period: "FT",
-    home_team: { id: 0, name: "Indonesia" },
-    away_team: { id: 0, name: "Bangladesh" },
-    home_score: 9,
-    away_score: 2,
-    opponent_name: "Indonesia",
-    opponent_id: null,
-    stage_name: "FIFA ASEAN Cup 2026",
-    round_label: "Group A",
-    league_name: "FIFA ASEAN Cup 2026",
-    is_fallback_fixture: true,
-    incidents: [
-      { type: "goal", minute: 11, player_name: "Mitchell Baker", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 20, player_name: "Mitchell Baker", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 32, player_name: "Rizky Ridho", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 36, player_name: "Shahriar Emon", player_id: null, assist_name: "", assist_id: null, is_home: false, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 37, player_name: "Mitchell Baker", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 42, player_name: "Mitchell Baker", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 45, player_name: "Justin Hubner", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 90, player_name: "Luke Vickery", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 90, player_name: "Farhaan Ali Wahid", player_id: null, assist_name: "", assist_id: null, is_home: false, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 90, player_name: "Kevin Diks", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "goal", minute: 90, player_name: "Mitchell Baker", player_id: null, assist_name: "", assist_id: null, is_home: true, goal_type: "regular", is_own_goal: false },
-      { type: "period", minute: 90 }
-    ]
-  }
-];
-
-function fallbackNationalFixturesIfNeeded(
-  fixtures: any[],
-  nationalTeam: any
-): any[] {
-  if (fixtures.length > 0 || !nationalTeam?.name) {
-    return fixtures;
-  }
-
-  return BANGLADESH_FALLBACK_FIXTURES.map(
-    (fixture) => ({
-      ...fixture,
-      tracked_team_id: Number(nationalTeam.id ?? 0),
-      tracked_team_name:
-        nationalTeam.name ??
-        "Bangladesh",
-      tracked_team_type: "national"
-    })
-  );
-}
 
 function mergeUpcomingFixtures(
   clubFixtures: any[],
@@ -2433,11 +2365,20 @@ export async function refreshPlayerPage() {
       player
     );
 
+  const nationalTeamId =
+    Number(nationalTeam?.id) || 0;
+
+  const emptyFixtures = {
+    live: null,
+    last: null,
+    next: []
+  };
+
   const [
     squad,
     clubFixtures,
     nationalSquad,
-    nationalFixtures
+    nationalFixturesById
   ] = await Promise.all([
     getTeamSquad(
       team.id
@@ -2445,25 +2386,43 @@ export async function refreshPlayerPage() {
     getTeamFixtures(
       team.id
     ),
-    nationalTeam?.id
-      ? getTeamSquad(
-          Number(
-            nationalTeam.id
-          )
-        )
+    nationalTeamId > 0
+      ? getTeamSquad(nationalTeamId)
       : Promise.resolve([]),
-    nationalTeam?.id
-      ? getTeamFixtures(
-          Number(
-            nationalTeam.id
-          )
-        )
-      : Promise.resolve({
-          live: null,
-          last: null,
-          next: []
-        })
+    nationalTeamId > 0
+      ? getTeamFixtures(nationalTeamId)
+      : Promise.resolve(emptyFixtures)
   ]);
+
+  /*
+   * Prefer the existing team-ID fixture lookup.
+   * If no national-team ID is available, or that
+   * lookup returns no upcoming fixtures, search
+   * the events feed by the national-team name.
+   */
+  const nationalFixturesByName =
+    nationalTeam?.name &&
+    (
+      nationalTeamId <= 0 ||
+      nationalFixturesById.next.length === 0
+    )
+      ? await getTeamFixturesByName(
+          nationalTeam.name
+        )
+      : emptyFixtures;
+
+  const nationalFixtures = {
+    live:
+      nationalFixturesById.live ??
+      nationalFixturesByName.live,
+    last:
+      nationalFixturesById.last ??
+      nationalFixturesByName.last,
+    next:
+      nationalFixturesById.next.length > 0
+        ? nationalFixturesById.next
+        : nationalFixturesByName.next
+  };
 
   const squadPlayer =
     squad.find(
@@ -2632,10 +2591,7 @@ export async function refreshPlayerPage() {
     ];
 
   const nationalUpcoming =
-    fallbackNationalFixturesIfNeeded(
-      nationalUpcomingFromBsd,
-      nationalTeam
-    );
+    nationalUpcomingFromBsd;
 
   const mergedUpcoming =
     mergeUpcomingFixtures(
@@ -2812,9 +2768,7 @@ export async function refreshPlayerPage() {
     national_fixture_source:
       nationalUpcomingFromBsd.length > 0
         ? "bsd"
-        : nationalUpcoming.length > 0
-          ? "fallback"
-          : "none",
+        : "none",
 
     latest_match_type:
       latestFinished.teamType,

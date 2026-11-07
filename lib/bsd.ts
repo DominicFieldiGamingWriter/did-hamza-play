@@ -744,6 +744,30 @@ function fixtureBelongsToTeam(
   );
 }
 
+function normaliseTeamName(value: any): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
+}
+
+function fixtureBelongsToTeamName(
+  fixture: any,
+  teamName: string
+): boolean {
+  const targetName =
+    normaliseTeamName(teamName);
+
+  return (
+    normaliseTeamName(
+      getFixtureTeamName(fixture, "home")
+    ) === targetName ||
+    normaliseTeamName(
+      getFixtureTeamName(fixture, "away")
+    ) === targetName
+  );
+}
+
 function isFreshLiveFixture(
   fixture: any
 ): boolean {
@@ -779,8 +803,9 @@ function isFreshLiveFixture(
   );
 }
 
-export async function getTeamFixtures(
-  teamId: number
+async function getTeamFixturesForTeam(
+  teamFilter: Record<string, string | number>,
+  teamMatches: (fixture: any) => boolean
 ) {
   const [
     finishedData,
@@ -790,10 +815,8 @@ export async function getTeamFixtures(
     bsdGet<any>(
       "/events/",
       {
-        team_id:
-          teamId,
-        status:
-          "finished",
+        ...teamFilter,
+        status: "finished",
         limit: 100
       }
     ),
@@ -808,10 +831,8 @@ export async function getTeamFixtures(
     bsdGet<any>(
       "/events/",
       {
-        team_id:
-          teamId,
-        status:
-          "notstarted",
+        ...teamFilter,
+        status: "upcoming",
         limit: 100
       }
     )
@@ -820,50 +841,34 @@ export async function getTeamFixtures(
   let finished =
     responseArray(
       finishedData
-    );
+    ).filter(teamMatches);
 
   let live =
     responseArray(
       liveData
     ).filter(
       (fixture) =>
-        fixtureBelongsToTeam(
-          fixture,
-          teamId
-        ) &&
-        isCurrentlyLive(
-          fixture
-        ) &&
-        isFreshLiveFixture(
-          fixture
-        )
+        teamMatches(fixture) &&
+        isCurrentlyLive(fixture) &&
+        isFreshLiveFixture(fixture)
     );
 
   let upcoming =
     responseArray(
       upcomingData
-    );
+    ).filter(teamMatches);
 
   /*
    * Keep a team-scoped fallback for feeds
-   * where `/events/live/` is temporarily empty
-   * or does not include a match carrying a
-   * granular in-play status.
-   *
-   * The same explicit-status and freshness
-   * checks apply here, so a historical event
-   * cannot become CURRENTLY PLAYING merely
-   * because BSD labels it non-terminal/live.
+   * where /events/live/ is temporarily empty
+   * or does not include a granular in-play status.
    */
-  if (
-    live.length === 0
-  ) {
+  if (live.length === 0) {
     const allEventsData =
       await bsdGet<any>(
         "/events/",
         {
-          team_id:
-            teamId,
+          ...teamFilter,
           limit: 100
         }
       );
@@ -876,30 +881,23 @@ export async function getTeamFixtures(
     live =
       allEvents.filter(
         (fixture) =>
-          fixtureBelongsToTeam(
-            fixture,
-            teamId
-          ) &&
-          isCurrentlyLive(
-            fixture
-          ) &&
-          isFreshLiveFixture(
-            fixture
-          )
+          teamMatches(fixture) &&
+          isCurrentlyLive(fixture) &&
+          isFreshLiveFixture(fixture)
       );
   }
 
-  if (
-    upcoming.length === 0
-  ) {
+  /*
+   * Some provider responses omit the upcoming
+   * status filter. Retry without it, then apply
+   * the date check below ourselves.
+   */
+  if (upcoming.length === 0) {
     const fallback =
       await bsdGet<any>(
         "/events/",
         {
-          team_id:
-            teamId,
-          status:
-            "upcoming",
+          ...teamFilter,
           limit: 100
         }
       );
@@ -907,7 +905,7 @@ export async function getTeamFixtures(
     upcoming =
       responseArray(
         fallback
-      );
+      ).filter(teamMatches);
   }
 
   const now =
@@ -917,74 +915,48 @@ export async function getTeamFixtures(
     finished
       .filter(
         (fixture) =>
-          fixtureTimestamp(
-            fixture
-          ) > 0 &&
-          fixtureTimestamp(
-            fixture
-          ) <= now
+          fixtureTimestamp(fixture) > 0 &&
+          fixtureTimestamp(fixture) <= now
       )
       .sort(
         (a, b) =>
-          fixtureTimestamp(
-            b
-          ) -
-          fixtureTimestamp(
-            a
-          )
+          fixtureTimestamp(b) -
+          fixtureTimestamp(a)
       );
 
   live =
     live
       .filter(
         (fixture) =>
-          isCurrentlyLive(
-            fixture
-          ) &&
-          isFreshLiveFixture(
-            fixture
-          )
+          isCurrentlyLive(fixture) &&
+          isFreshLiveFixture(fixture)
       )
       .sort(
         (a, b) =>
-          fixtureTimestamp(
-            a
-          ) -
-          fixtureTimestamp(
-            b
-          )
+          fixtureTimestamp(a) -
+          fixtureTimestamp(b)
       );
 
   upcoming =
     upcoming
       .filter(
         (fixture) =>
-          fixtureTimestamp(
-            fixture
-          ) > now
+          fixtureTimestamp(fixture) > now
       )
       .sort(
         (a, b) =>
-          fixtureTimestamp(
-            a
-          ) -
-          fixtureTimestamp(
-            b
-          )
+          fixtureTimestamp(a) -
+          fixtureTimestamp(b)
       );
 
   const resolvedLive =
     live[0]
-      ? await resolveFixture(
-          live[0]
-        )
+      ? await resolveFixture(live[0])
       : null;
 
   const last =
     finished[0]
-      ? await resolveFixture(
-          finished[0]
-        )
+      ? await resolveFixture(finished[0])
       : null;
 
   const next =
@@ -993,20 +965,45 @@ export async function getTeamFixtures(
         .slice(0, 6)
         .map(
           (fixture) =>
-            resolveFixture(
-              fixture
-            )
+            resolveFixture(fixture)
         )
     );
 
   return {
-    live:
-      resolvedLive,
-
+    live: resolvedLive,
     last,
-
     next
   };
+}
+
+export async function getTeamFixtures(
+  teamId: number
+) {
+  if (!Number.isFinite(teamId) || teamId <= 0) {
+    throw new Error("A valid team ID is required.");
+  }
+
+  return getTeamFixturesForTeam(
+    { team_id: teamId },
+    (fixture) =>
+      fixtureBelongsToTeam(fixture, teamId)
+  );
+}
+
+export async function getTeamFixturesByName(
+  teamName: string
+) {
+  const name = teamName.trim();
+
+  if (!name) {
+    throw new Error("A team name is required for fixture lookup.");
+  }
+
+  return getTeamFixturesForTeam(
+    { team_name: name },
+    (fixture) =>
+      fixtureBelongsToTeamName(fixture, name)
+  );
 }
 
 export async function getLineups(
