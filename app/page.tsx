@@ -1139,6 +1139,22 @@ export default async function Home() {
       lastFixture
     );
 
+  const homeGoals = events.goals.filter(
+    (goal: any) => goal?.is_home === true
+  );
+
+  const awayGoals = events.goals.filter(
+    (goal: any) => goal?.is_home === false
+  );
+
+  const homeAssists = events.assists.filter(
+    (goal: any) => goal?.is_home === true
+  );
+
+  const awayAssists = events.assists.filter(
+    (goal: any) => goal?.is_home === false
+  );
+
   const hamzaPlayerId =
     Number(
       data.player_id
@@ -1401,45 +1417,63 @@ export default async function Home() {
                 <div className="event-list">
                   <div className="event-line">
                     <div className="event-label">
-                      GOALSCORERS
+                      HOME GOALSCORERS
                     </div>
 
                     <div className="event-value">
-                      {events.goals.length ===
-                      0
+                      {homeGoals.length === 0
                         ? "None"
-                        : events.goals
-                            .map(
-                              (
-                                goal: any
-                              ) =>
-                                formatGoal(goal)
-                            )
-                            .join(
-                              " · "
-                            )}
+                        : homeGoals
+                            .map((goal: any) => formatGoal(goal))
+                            .join(" · ")}
                     </div>
                   </div>
 
                   <div className="event-line">
                     <div className="event-label">
-                      ASSISTS
+                      AWAY GOALSCORERS
                     </div>
 
                     <div className="event-value">
-                      {events.assists.length ===
-                      0
+                      {awayGoals.length === 0
                         ? "None"
-                        : events.assists
+                        : awayGoals
+                            .map((goal: any) => formatGoal(goal))
+                            .join(" · ")}
+                    </div>
+                  </div>
+
+                  <div className="event-line">
+                    <div className="event-label">
+                      HOME ASSISTS
+                    </div>
+
+                    <div className="event-value">
+                      {homeAssists.length === 0
+                        ? "None"
+                        : homeAssists
                             .map(
-                              (
-                                goal: any
-                              ) =>
+                              (goal: any) =>
                                 `${surname(goal.assist_name)} ${formatMinute(goal.minute)}`
                             )
-                            .join(
-                              " · "
-                            )}
+                            .join(" · ")}
+                    </div>
+                  </div>
+
+                  <div className="event-line">
+                    <div className="event-label">
+                      AWAY ASSISTS
+                    </div>
+
+                    <div className="event-value">
+                      {awayAssists.length === 0
+                        ? "None"
+                        : awayAssists
+                            .map(
+                              (goal: any) =>
+                                `${surname(goal.assist_name)} ${formatMinute(goal.minute)}`
+                            )
+                            .join(" · ")}
                     </div>
                   </div>
 
