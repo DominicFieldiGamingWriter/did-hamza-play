@@ -2390,6 +2390,11 @@ async function getNationalTeamEventDiagnostics(
   teamId: number
 ) {
   const checkedAt = new Date().toISOString();
+  const now = Date.now();
+  const dateFrom = new Date(now).toISOString().slice(0, 10);
+  const dateTo = new Date(now + 365 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const apiKey = process.env.BSD_API_KEY;
 
   if (!apiKey) {
@@ -2408,6 +2413,8 @@ async function getNationalTeamEventDiagnostics(
       key: "by_name_upcoming",
       params: {
         team_name: teamName,
+        date_from: dateFrom,
+        date_to: dateTo,
         status: "upcoming",
         limit: 100
       }
@@ -2416,6 +2423,8 @@ async function getNationalTeamEventDiagnostics(
       key: "by_name_all_statuses",
       params: {
         team_name: teamName,
+        date_from: dateFrom,
+        date_to: dateTo,
         limit: 100
       }
     }
@@ -2426,6 +2435,8 @@ async function getNationalTeamEventDiagnostics(
       key: "by_id_upcoming",
       params: {
         team_id: teamId,
+        date_from: dateFrom,
+        date_to: dateTo,
         status: "upcoming",
         limit: 100
       }
@@ -2546,6 +2557,10 @@ async function getNationalTeamEventDiagnostics(
 
   return {
     checked_at: checkedAt,
+    date_window: {
+      date_from: dateFrom,
+      date_to: dateTo
+    },
     team: {
       id: teamId || null,
       name: teamName

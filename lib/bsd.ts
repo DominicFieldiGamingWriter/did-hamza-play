@@ -843,6 +843,21 @@ async function getTeamFixturesForTeam(
   teamFilter: Record<string, string | number>,
   teamMatches: (fixture: any) => boolean
 ) {
+  const now = Date.now();
+  const todayUtc = new Date(now).toISOString().slice(0, 10);
+  const finishedFrom = new Date(now - 3 * 365 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const upcomingTo = new Date(now + 365 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const liveFrom = new Date(now - 7 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const liveTo = new Date(now + 7 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
   const isNamedLookup =
     typeof teamFilter.team_name === "string";
 
@@ -860,6 +875,8 @@ async function getTeamFixturesForTeam(
         "/events/",
         {
           ...teamFilter,
+          date_from: finishedFrom,
+          date_to: todayUtc,
           status: "finished",
           limit: 100
         }
@@ -876,6 +893,8 @@ async function getTeamFixturesForTeam(
         "/events/",
         {
           ...teamFilter,
+          date_from: todayUtc,
+          date_to: upcomingTo,
           status: "upcoming",
           limit: 100
         }
@@ -925,6 +944,8 @@ async function getTeamFixturesForTeam(
         "/events/",
         {
           ...teamFilter,
+          date_from: liveFrom,
+          date_to: liveTo,
           limit: 100
         }
       );
@@ -965,6 +986,8 @@ async function getTeamFixturesForTeam(
         "/events/",
         {
           ...teamFilter,
+          date_from: todayUtc,
+          date_to: upcomingTo,
           limit: 100
         }
       );
