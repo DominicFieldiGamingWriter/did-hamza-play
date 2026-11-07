@@ -803,60 +803,116 @@ function isFreshLiveFixture(
   );
 }
 
+function fixtureDiagnosticSummary(fixture: any) {
+  return {
+    id: fixture?.id ?? fixture?.event_id ?? null,
+    date: fixtureDate(fixture),
+    status: fixture?.status ?? fixture?.time?.status ?? null,
+    home: getFixtureTeamName(fixture, "home"),
+    away: getFixtureTeamName(fixture, "away"),
+    home_id: getTeamId(fixture, "home"),
+    away_id: getTeamId(fixture, "away")
+  };
+}
+
+function responseDiagnosticSummary(data: any) {
+  if (Array.isArray(data)) {
+    return {
+      shape: "array",
+      count: data.length
+    };
+  }
+
+  if (!data || typeof data !== "object") {
+    return {
+      shape: typeof data,
+      count: 0
+    };
+  }
+
+  return {
+    shape: "object",
+    keys: Object.keys(data).slice(0, 20),
+    count: responseArray(data).length,
+    total: data.count ?? data.total ?? data.total_count ?? null,
+    has_next_page: Boolean(data.next)
+  };
+}
+
 async function getTeamFixturesForTeam(
   teamFilter: Record<string, string | number>,
   teamMatches: (fixture: any) => boolean
 ) {
-  const [
-    finishedData,
-    liveData,
-    upcomingData
-  ] = await Promise.all([
-    bsdGet<any>(
-      "/events/",
-      {
-        ...teamFilter,
-        status: "finished",
-        limit: 100
-      }
-    ),
+  const isNamedLookup =
+    typeof teamFilter.team_name === "string";
 
-    bsdGet<any>(
-      "/events/live/",
-      {
-        limit: 200
-      }
-    ),
+  let finishedData: any;
+  let liveData: any;
+  let upcomingData: any;
 
-    bsdGet<any>(
-      "/events/",
-      {
-        ...teamFilter,
-        status: "upcoming",
-        limit: 100
-      }
-    )
-  ]);
-
-  let finished =
-    responseArray(
-      finishedData
-    ).filter(teamMatches);
-
-  let live =
-    responseArray(
-      liveData
-    ).filter(
-      (fixture) =>
-        teamMatches(fixture) &&
-        isCurrentlyLive(fixture) &&
-        isFreshLiveFixture(fixture)
-    );
-
-  let upcoming =
-    responseArray(
+  try {
+    [
+      finishedData,
+      liveData,
       upcomingData
-    ).filter(teamMatches);
+    ] = await Promise.all([
+      bsdGet<any>(
+        "/events/",
+        {
+          ...teamFilter,
+          status: "finished",
+          limit: 100
+        }
+      ),
+
+      bsdGet<any>(
+        "/events/live/",
+        {
+          limit: 200
+        }
+      ),
+
+      bsdGet<any>(
+        "/events/",
+        {
+          ...teamFilter,
+          status: "upcoming",
+          limit: 100
+        }
+      )
+    ]);
+  } catch (error) {
+    if (isNamedLookup) {
+      console.error(
+        "BSD_NATIONAL_FIXTURE_LOOKUP_ERROR",
+        JSON.stringify({
+          team_filter: teamFilter,
+          stage: "initial_requests",
+          error: error instanceof Error ? error.message : String(error)
+        })
+      );
+    }
+
+    throw error;
+  }
+
+  const finishedRaw = responseArray(finishedData);
+  const liveRaw = responseArray(liveData);
+  const upcomingRaw = responseArray(upcomingData);
+
+  let finished = finishedRaw.filter(teamMatches);
+
+  let live = liveRaw.filter(
+    (fixture) =>
+      teamMatches(fixture) &&
+      isCurrentlyLive(fixture) &&
+      isFreshLiveFixture(fixture)
+  );
+
+  let upcoming = upcomingRaw.filter(teamMatches);
+
+  let liveFallbackCount: number | null = null;
+  let upcomingFallbackRaw: any[] | null = null;
 
   /*
    * Keep a team-scoped fallback for feeds
@@ -864,8 +920,8 @@ async function getTeamFixturesForTeam(
    * or does not include a granular in-play status.
    */
   if (live.length === 0) {
-    const allEventsData =
-      await bsdGet<any>(
+    try {
+      const allEventsData = await bsdGet<any>(
         "/events/",
         {
           ...teamFilter,
@@ -873,18 +929,29 @@ async function getTeamFixturesForTeam(
         }
       );
 
-    const allEvents =
-      responseArray(
-        allEventsData
-      );
+      const allEvents = responseArray(allEventsData);
+      liveFallbackCount = allEvents.length;
 
-    live =
-      allEvents.filter(
+      live = allEvents.filter(
         (fixture) =>
           teamMatches(fixture) &&
           isCurrentlyLive(fixture) &&
           isFreshLiveFixture(fixture)
       );
+    } catch (error) {
+      if (isNamedLookup) {
+        console.error(
+          "BSD_NATIONAL_FIXTURE_LOOKUP_ERROR",
+          JSON.stringify({
+            team_filter: teamFilter,
+            stage: "live_fallback",
+            error: error instanceof Error ? error.message : String(error)
+          })
+        );
+      }
+
+      throw error;
+    }
   }
 
   /*
@@ -893,8 +960,8 @@ async function getTeamFixturesForTeam(
    * the date check below ourselves.
    */
   if (upcoming.length === 0) {
-    const fallback =
-      await bsdGet<any>(
+    try {
+      const fallback = await bsdGet<any>(
         "/events/",
         {
           ...teamFilter,
@@ -902,52 +969,94 @@ async function getTeamFixturesForTeam(
         }
       );
 
-    upcoming =
-      responseArray(
-        fallback
-      ).filter(teamMatches);
+      upcomingFallbackRaw = responseArray(fallback);
+      upcoming = upcomingFallbackRaw.filter(teamMatches);
+    } catch (error) {
+      if (isNamedLookup) {
+        console.error(
+          "BSD_NATIONAL_FIXTURE_LOOKUP_ERROR",
+          JSON.stringify({
+            team_filter: teamFilter,
+            stage: "upcoming_fallback",
+            error: error instanceof Error ? error.message : String(error)
+          })
+        );
+      }
+
+      throw error;
+    }
   }
 
-  const now =
-    Date.now();
+  const now = Date.now();
+  const matchedUpcomingBeforeDateFilter = upcoming.length;
+  const matchedUpcomingWithDates = upcoming.filter(
+    (fixture) => fixtureTimestamp(fixture) > 0
+  ).length;
 
-  finished =
-    finished
-      .filter(
-        (fixture) =>
-          fixtureTimestamp(fixture) > 0 &&
-          fixtureTimestamp(fixture) <= now
-      )
-      .sort(
-        (a, b) =>
-          fixtureTimestamp(b) -
-          fixtureTimestamp(a)
-      );
+  finished = finished
+    .filter(
+      (fixture) =>
+        fixtureTimestamp(fixture) > 0 &&
+        fixtureTimestamp(fixture) <= now
+    )
+    .sort(
+      (a, b) =>
+        fixtureTimestamp(b) -
+        fixtureTimestamp(a)
+    );
 
-  live =
-    live
-      .filter(
-        (fixture) =>
-          isCurrentlyLive(fixture) &&
-          isFreshLiveFixture(fixture)
-      )
-      .sort(
-        (a, b) =>
-          fixtureTimestamp(a) -
-          fixtureTimestamp(b)
-      );
+  live = live
+    .filter(
+      (fixture) =>
+        isCurrentlyLive(fixture) &&
+        isFreshLiveFixture(fixture)
+    )
+    .sort(
+      (a, b) =>
+        fixtureTimestamp(a) -
+        fixtureTimestamp(b)
+    );
 
-  upcoming =
-    upcoming
-      .filter(
-        (fixture) =>
-          fixtureTimestamp(fixture) > now
-      )
-      .sort(
-        (a, b) =>
-          fixtureTimestamp(a) -
-          fixtureTimestamp(b)
-      );
+  upcoming = upcoming
+    .filter(
+      (fixture) =>
+        fixtureTimestamp(fixture) > now
+    )
+    .sort(
+      (a, b) =>
+        fixtureTimestamp(a) -
+        fixtureTimestamp(b)
+    );
+
+  if (isNamedLookup) {
+    console.info(
+      "BSD_NATIONAL_FIXTURE_DIAGNOSTIC",
+      JSON.stringify({
+        team_filter: teamFilter,
+        finished_response: responseDiagnosticSummary(finishedData),
+        live_response: responseDiagnosticSummary(liveData),
+        live_fallback_response_count: liveFallbackCount,
+        upcoming_status_response: responseDiagnosticSummary(upcomingData),
+        upcoming_status_match_count: upcomingRaw.filter(teamMatches).length,
+        upcoming_fallback_used: upcomingFallbackRaw !== null,
+        upcoming_fallback_response_count: upcomingFallbackRaw?.length ?? null,
+        upcoming_fallback_match_count:
+          upcomingFallbackRaw?.filter(teamMatches).length ?? null,
+        matched_upcoming_before_date_filter: matchedUpcomingBeforeDateFilter,
+        matched_upcoming_with_valid_dates: matchedUpcomingWithDates,
+        matched_upcoming_after_date_filter: upcoming.length,
+        status_response_sample: upcomingRaw
+          .slice(0, 10)
+          .map(fixtureDiagnosticSummary),
+        fallback_response_sample: upcomingFallbackRaw
+          ?.slice(0, 10)
+          .map(fixtureDiagnosticSummary) ?? null,
+        matched_future_sample: upcoming
+          .slice(0, 10)
+          .map(fixtureDiagnosticSummary)
+      })
+    );
+  }
 
   const resolvedLive =
     live[0]
@@ -998,6 +1107,11 @@ export async function getTeamFixturesByName(
   if (!name) {
     throw new Error("A team name is required for fixture lookup.");
   }
+
+  console.info(
+    "BSD_NATIONAL_FIXTURE_LOOKUP_START",
+    JSON.stringify({ team_name: name })
+  );
 
   return getTeamFixturesForTeam(
     { team_name: name },
