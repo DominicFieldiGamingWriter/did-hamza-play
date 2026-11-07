@@ -2569,6 +2569,154 @@ async function getNationalTeamEventDiagnostics(
   };
 }
 
+
+async function getFotMobNationalTeamFixtures(
+  teamName: string,
+  trackedTeamId: number
+): Promise<{ fixtures: any[]; diagnostics: Record<string, any> }> {
+  const checkedAt = new Date().toISOString();
+  const targetName = normaliseDiagnosticTeamName(teamName);
+
+  try {
+    const searchUrl = new URL("https://www.fotmob.com/api/data/search/suggest");
+    searchUrl.searchParams.set("term", teamName);
+    const searchResponse = await fetch(searchUrl, {
+      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+      cache: "no-store"
+    });
+
+    if (!searchResponse.ok) {
+      throw new Error("FotMob team search returned HTTP " + searchResponse.status + ".");
+    }
+
+    const searchData: any = await searchResponse.json();
+    const suggestions = Array.isArray(searchData)
+      ? searchData.flatMap((group: any) => Array.isArray(group?.suggestions) ? group.suggestions : [])
+      : [];
+    const team = suggestions.find((candidate: any) =>
+      candidate?.type === "team" &&
+      normaliseDiagnosticTeamName(candidate?.name) === targetName
+    );
+    const fotmobTeamId = Number(team?.id);
+
+    if (!Number.isFinite(fotmobTeamId) || fotmobTeamId <= 0) {
+      return {
+        fixtures: [],
+        diagnostics: {
+          checked_at: checkedAt,
+          provider: "FotMob",
+          searched_team: teamName,
+          exact_team_found: false,
+          fixture_count: 0
+        }
+      };
+    }
+
+    const teamUrl = new URL("https://www.fotmob.com/api/data/teams");
+    teamUrl.searchParams.set("id", String(fotmobTeamId));
+    const teamResponse = await fetch(teamUrl, {
+      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
+      cache: "no-store"
+    });
+
+    if (!teamResponse.ok) {
+      throw new Error("FotMob team fixtures returned HTTP " + teamResponse.status + ".");
+    }
+
+    const teamData: any = await teamResponse.json();
+    const allFixtures = teamData?.fixtures?.allFixtures;
+    const fixtureList = Array.isArray(allFixtures?.fixtures) ? allFixtures.fixtures : [];
+    const nextMatch = allFixtures?.nextMatch ?? null;
+    const uniqueFixtures = new Map<string, any>();
+
+    for (const fixture of [...fixtureList, ...(nextMatch ? [nextMatch] : [])]) {
+      const key = String(
+        fixture?.id ??
+        fixture?.pageUrl ??
+        (String(fixture?.status?.utcTime ?? "") + "|" +
+          String(fixture?.home?.name ?? "") + "|" +
+          String(fixture?.away?.name ?? ""))
+      );
+      if (key) uniqueFixtures.set(key, fixture);
+    }
+
+    const now = Date.now();
+    const futureFixtures = [...uniqueFixtures.values()]
+      .filter((fixture: any) => {
+        const homeName = normaliseDiagnosticTeamName(fixture?.home?.name);
+        const awayName = normaliseDiagnosticTeamName(fixture?.away?.name);
+        const date = fixture?.status?.utcTime;
+        const timestamp = date ? new Date(date).getTime() : NaN;
+
+        return (
+          (homeName === targetName || awayName === targetName) &&
+          Number.isFinite(timestamp) &&
+          timestamp > now &&
+          fixture?.status?.cancelled !== true &&
+          fixture?.notStarted !== false
+        );
+      })
+      .sort((a: any, b: any) =>
+        new Date(a.status.utcTime).getTime() - new Date(b.status.utcTime).getTime()
+      );
+
+    const normalisedFixtures = futureFixtures.map((fixture: any) => {
+      const homeName = String(fixture?.home?.name ?? "").trim();
+      const awayName = String(fixture?.away?.name ?? "").trim();
+      const homeIsTracked = normaliseDiagnosticTeamName(homeName) === targetName;
+      const awayIsTracked = normaliseDiagnosticTeamName(awayName) === targetName;
+
+      return {
+        ...fixture,
+        date: fixture.status?.utcTime ?? null,
+        home: {
+          id: homeIsTracked ? (trackedTeamId || Number(fixture?.home?.id) || 0) : (Number(fixture?.home?.id) || 0),
+          name: homeName
+        },
+        away: {
+          id: awayIsTracked ? (trackedTeamId || Number(fixture?.away?.id) || 0) : (Number(fixture?.away?.id) || 0),
+          name: awayName
+        },
+        home_score: fixture?.home?.score ?? null,
+        away_score: fixture?.away?.score ?? null,
+        status: fixture?.status?.finished === true ? "finished" : "upcoming",
+        fixture_source: "fotmob"
+      };
+    });
+
+    return {
+      fixtures: normalisedFixtures,
+      diagnostics: {
+        checked_at: checkedAt,
+        provider: "FotMob",
+        searched_team: teamName,
+        resolved_team: team?.name ?? null,
+        resolved_team_id: fotmobTeamId,
+        team_details_id: teamData?.details?.id ?? null,
+        fixture_list_count: fixtureList.length,
+        next_match_present: Boolean(nextMatch),
+        future_exact_team_fixture_count: normalisedFixtures.length,
+        future_fixture_sample: normalisedFixtures.slice(0, 6).map((fixture: any) => ({
+          id: fixture.id ?? null,
+          date: fixture.date,
+          home: fixture.home?.name,
+          away: fixture.away?.name
+        }))
+      }
+    };
+  } catch (error) {
+    return {
+      fixtures: [],
+      diagnostics: {
+        checked_at: checkedAt,
+        provider: "FotMob",
+        searched_team: teamName,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    };
+  }
+}
+
 export async function refreshPlayerPage() {
   const supabase = getSupabaseAdmin();
   const { data: existingPageState, error: existingPageStateError } = await supabase.from("player_page").select("player_status").eq("id", 1).maybeSingle();
@@ -2671,6 +2819,26 @@ export async function refreshPlayerPage() {
         )
       : emptyFixtures;
 
+  const nationalUpcomingFromBsd =
+    nationalFixturesById.next.length > 0
+      ? nationalFixturesById.next
+      : nationalFixturesByName.next;
+
+  const nationalTeamFotMobResult =
+    nationalTeam?.name && nationalUpcomingFromBsd.length === 0
+      ? await getFotMobNationalTeamFixtures(
+          nationalTeam.name,
+          nationalTeamId
+        )
+      : {
+          fixtures: [],
+          diagnostics: {
+            skipped: nationalTeam?.name
+              ? "BSD already returned upcoming national-team fixtures."
+              : "No national team was resolved."
+          }
+        };
+
   const nationalFixtures = {
     live:
       nationalFixturesById.live ??
@@ -2679,9 +2847,9 @@ export async function refreshPlayerPage() {
       nationalFixturesById.last ??
       nationalFixturesByName.last,
     next:
-      nationalFixturesById.next.length > 0
-        ? nationalFixturesById.next
-        : nationalFixturesByName.next
+      nationalUpcomingFromBsd.length > 0
+        ? nationalUpcomingFromBsd
+        : nationalTeamFotMobResult.fixtures
   };
 
   const nationalTeamEventDiagnostics = nationalTeam?.name
@@ -2696,6 +2864,7 @@ export async function refreshPlayerPage() {
       };
 
   Object.assign(nationalTeamEventDiagnostics, {
+    fotmob_fallback: nationalTeamFotMobResult.diagnostics,
     application_lookup: {
       team_id_lookup_attempted: nationalTeamId > 0,
       team_id_upcoming_count: nationalFixturesById.next.length,
@@ -2704,12 +2873,18 @@ export async function refreshPlayerPage() {
         (nationalTeamId <= 0 || nationalFixturesById.next.length === 0)
       ),
       team_name_upcoming_count: nationalFixturesByName.next.length,
+      fotmob_fallback_attempted: nationalTeam?.name
+        ? nationalUpcomingFromBsd.length === 0
+        : false,
+      fotmob_upcoming_count: nationalTeamFotMobResult.fixtures.length,
       selected_upcoming_source:
         nationalFixturesById.next.length > 0
           ? "team_id"
           : nationalFixturesByName.next.length > 0
             ? "team_name"
-            : "none"
+            : nationalTeamFotMobResult.fixtures.length > 0
+              ? "fotmob"
+              : "none"
     }
   });
 
