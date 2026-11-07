@@ -2819,13 +2819,13 @@ export async function refreshPlayerPage() {
         )
       : emptyFixtures;
 
-  const nationalUpcomingFromBsd =
+  const nationalBsdUpcoming =
     nationalFixturesById.next.length > 0
       ? nationalFixturesById.next
       : nationalFixturesByName.next;
 
   const nationalTeamFotMobResult =
-    nationalTeam?.name && nationalUpcomingFromBsd.length === 0
+    nationalTeam?.name && nationalBsdUpcoming.length === 0
       ? await getFotMobNationalTeamFixtures(
           nationalTeam.name,
           nationalTeamId
@@ -2847,8 +2847,8 @@ export async function refreshPlayerPage() {
       nationalFixturesById.last ??
       nationalFixturesByName.last,
     next:
-      nationalUpcomingFromBsd.length > 0
-        ? nationalUpcomingFromBsd
+      nationalBsdUpcoming.length > 0
+        ? nationalBsdUpcoming
         : nationalTeamFotMobResult.fixtures
   };
 
@@ -2874,7 +2874,7 @@ export async function refreshPlayerPage() {
       ),
       team_name_upcoming_count: nationalFixturesByName.next.length,
       fotmob_fallback_attempted: nationalTeam?.name
-        ? nationalUpcomingFromBsd.length === 0
+        ? nationalBsdUpcoming.length === 0
         : false,
       fotmob_upcoming_count: nationalTeamFotMobResult.fixtures.length,
       selected_upcoming_source:
@@ -3233,9 +3233,12 @@ export async function refreshPlayerPage() {
       null,
 
     national_fixture_source:
-      nationalUpcomingFromBsd.length > 0
+      nationalFixturesById.next.length > 0 ||
+      nationalFixturesByName.next.length > 0
         ? "bsd"
-        : "none",
+        : nationalTeamFotMobResult.fixtures.length > 0
+          ? "fotmob"
+          : "none",
 
     latest_match_type:
       latestFinished.teamType,
