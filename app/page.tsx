@@ -1289,6 +1289,33 @@ export default async function Home() {
       ?.status ??
     null;
 
+  const liveCurrentStatus =
+    liveFixture
+      ?.player_status
+      ?.current_status ??
+    "unknown";
+
+  const liveCurrentStatusMinute =
+    liveFixture
+      ?.player_status
+      ?.current_status_minute;
+
+  const liveCurrentStatusLabels: Record<string, string> = {
+    started: "STARTED",
+    subbed_on: "SUBBED ON",
+    subbed_off: "SUBBED OFF",
+    sent_off: "SENT OFF",
+    not_playing: "NOT PLAYING",
+    unknown: "STATUS UNCONFIRMED"
+  };
+
+  const liveCurrentStatusText =
+    `${liveCurrentStatusLabels[liveCurrentStatus] ?? "STATUS UNCONFIRMED"}${
+      Number.isFinite(Number(liveCurrentStatusMinute))
+        ? ` · ${liveCurrentStatusMinute}'`
+        : ""
+    }`;
+
   const liveAnswer =
     liveStatus ===
     "playing"
@@ -1664,6 +1691,13 @@ export default async function Home() {
 
                   <div className="live-status">
                     {awaitingFullTimeResult ? "CHECKING RESULT" : "LIVE"}
+                  </div>
+                  <div
+                    className="live-player-status"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {liveCurrentStatusText}
                   </div>
                 </div>
 

@@ -1739,6 +1739,9 @@ async function buildLivePlayerStatus(
         ? lineupResult.value
         : null;
 
+    const lineups =
+      lineupData?.lineups ?? [];
+
     const incidents =
       incidentResult.status === "fulfilled"
         ? responseArray(
@@ -1753,105 +1756,207 @@ async function buildLivePlayerStatus(
           )
         : [];
 
-    /*
-     * Use the same playerPlayed() decision path as the
-     * completed-match logic. It recognises starters,
-     * substitutes, substitution incidents and player
-     * records returned by the lineup/stats payload.
-     */
     const appearance =
       playerPlayed(
         playerId,
         playerName,
-        lineupData?.lineups ?? [],
+        lineups,
         playerStats,
         incidents
       );
 
-    if (
-      appearance.played ===
-      true
+    const lineupRole =
+      lineupRoleFromValue(
+        lineups,
+        playerId
+      );
+
+    const substitutions =
+      incidents.filter(
+        (incident: any) =>
+          getIncidentType(incident) === "substitution"
+      );
+
+    const subbedOnIncident =
+      substitutions.find(
+        (incident: any) =>
+          resolveIncidentPlayerId(
+            incident,
+            "player_in"
+          ) === playerId
+      ) ?? null;
+
+    const subbedOffIncident =
+      substitutions.find(
+        (incident: any) =>
+          resolveIncidentPlayerId(
+            incident,
+            "player_out"
+          ) === playerId
+      ) ?? null;
+
+    const normalisePlayerName = (value: any) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{M}/gu, "")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+
+    const playerNameKey =
+      normalisePlayerName(playerName);
+
+    const playerSurname =
+      playerNameKey.split(" ").filter(Boolean).pop() ?? "";
+
+    const redCardIncident =
+      incidents.find((incident: any) => {
+        if (!isRedCardIncident(incident)) {
+          return false;
+        }
+
+        const incidentPlayerId =
+          resolveIncidentPlayerId(
+            incident,
+            "player"
+          );
+
+        const incidentPlayerName =
+          incident?.player_name ??
+          incident?.player?.name ??
+          incident?.player?.player_name ??
+          (typeof incident?.player === "string" ? incident.player : "");
+
+        const incidentNameKey =
+          normalisePlayerName(incidentPlayerName);
+
+        const incidentSurname =
+          incidentNameKey.split(" ").filter(Boolean).pop() ?? "";
+
+        const samePlayerById =
+          incidentPlayerId === playerId;
+
+        const samePlayerByName =
+          playerNameKey !== "" &&
+          incidentNameKey !== "" &&
+          (
+            incidentNameKey === playerNameKey ||
+            incidentSurname === playerSurname
+          );
+
+        return samePlayerById || samePlayerByName;
+      }) ?? null;
+
+    let currentStatus: string = "unknown";
+    let currentStatusMinute: number | null = null;
+
+    if (redCardIncident) {
+      currentStatus = "sent_off";
+      currentStatusMinute = getMinute(redCardIncident);
+    } else if (subbedOffIncident) {
+      currentStatus = "subbed_off";
+      currentStatusMinute = getMinute(subbedOffIncident);
+    } else if (subbedOnIncident) {
+      currentStatus = "subbed_on";
+      currentStatusMinute = getMinute(subbedOnIncident);
+    } else if (lineupRole === "starting") {
+      currentStatus = "started";
+    } else if (
+      lineupRole === "substitute" ||
+      appearance.type === "unused_substitute"
     ) {
+      currentStatus = "not_playing";
+    } else if (
+      lineupData?.status === "confirmed"
+    ) {
+      currentStatus = hasPlayer(
+        lineups.length > 0 ? lineups : lineupData,
+        playerId
+      )
+        ? "unknown"
+        : "not_playing";
+    }
+
+    const hasAppeared =
+      appearance.played === true ||
+      lineupRole === "starting" ||
+      Boolean(subbedOnIncident) ||
+      Boolean(subbedOffIncident) ||
+      Boolean(redCardIncident);
+
+    const lineupStatus =
+      lineupData?.status ??
+      "unavailable";
+
+    if (hasAppeared) {
       return {
-        status:
-          "playing",
-        role:
-          "playing",
-        lineup_status:
-          lineupData?.status ??
-          "unavailable"
+        status: "playing",
+        role: "playing",
+        current_status: currentStatus,
+        current_status_minute: currentStatusMinute,
+        lineup_status: lineupStatus
       };
     }
 
     if (
-      appearance.type ===
-      "unused_substitute"
+      appearance.type === "unused_substitute"
     ) {
       return {
-        status:
-          "substitute",
-        role:
-          "substitute",
-        lineup_status:
-          lineupData?.status ??
-          "unavailable"
+        status: "substitute",
+        role: "substitute",
+        current_status: currentStatus,
+        current_status_minute: currentStatusMinute,
+        lineup_status: lineupStatus
       };
     }
 
     if (
-      lineupData?.status ===
-        "confirmed" &&
+      lineupData?.status === "confirmed" &&
       hasPlayer(
-        lineupData?.lineups ??
-          lineupData,
+        lineups.length > 0 ? lineups : lineupData,
         playerId
       )
     ) {
       return {
-        status:
-          "unknown",
-        role:
-          "unknown",
-        lineup_status:
-          "confirmed"
+        status: "unknown",
+        role: "unknown",
+        current_status: currentStatus,
+        current_status_minute: currentStatusMinute,
+        lineup_status: "confirmed"
       };
     }
 
     if (
-      lineupData?.status ===
-      "confirmed"
+      lineupData?.status === "confirmed"
     ) {
       return {
-        status:
-          "not_playing",
-        role:
-          "not_selected",
-        lineup_status:
-          "confirmed"
+        status: "not_playing",
+        role: "not_selected",
+        current_status: "not_playing",
+        current_status_minute: null,
+        lineup_status: "confirmed"
       };
     }
 
     return {
-      status:
-        "unknown",
-      role:
-        "unknown",
-      lineup_status:
-        lineupData?.status ??
-        "unavailable"
+      status: "unknown",
+      role: "unknown",
+      current_status: currentStatus,
+      current_status_minute: currentStatusMinute,
+      lineup_status: lineupStatus
     };
   } catch {
     return {
-      status:
-        "unknown",
-      role:
-        "unknown",
-      lineup_status:
-        "unavailable"
+      status: "unknown",
+      role: "unknown",
+      current_status: "unknown",
+      current_status_minute: null,
+      lineup_status: "unavailable"
     };
   }
 }
-
 
 
 function playerTeamId(
