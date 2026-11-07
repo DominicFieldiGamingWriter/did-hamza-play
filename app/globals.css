@@ -322,7 +322,7 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
 
         .result-panel {
           margin-top: 25px;
-          padding-top: 24px;
+          padding-top: 0;
           border-top:
             1px solid
             #dfe4ea;
@@ -336,7 +336,7 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
         }
 
         .event-list {
-          margin-top: 20px;
+          margin-top: 0;
         }
 
         .event-line {
