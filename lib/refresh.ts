@@ -13,6 +13,7 @@ import {
 import {
   getSupabaseAdmin
 } from "./supabase";
+import { assertBsdApiCircuitClosed } from "./bsd-circuit-breaker";
 import { resolveTeamSheetStatus } from "./status";
 
 function responseArray(
@@ -2879,6 +2880,7 @@ async function getFotMobNationalTeamFixtures(
 }
 
 export async function refreshPlayerPage() {
+  await assertBsdApiCircuitClosed();
   const supabase = getSupabaseAdmin();
   const { data: existingPageState, error: existingPageStateError } = await supabase.from("player_page").select("player_status").eq("id", 1).maybeSingle();
   if (existingPageStateError) throw new Error(`Could not read existing page state: ${existingPageStateError.message}`);

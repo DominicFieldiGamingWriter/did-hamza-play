@@ -1,3 +1,4 @@
+import { BsdApiCircuitOpenError } from "../../../lib/bsd-circuit-breaker";
 import { NextResponse } from "next/server";
 import { refreshPlayerPage } from "../../../lib/refresh";
 
@@ -86,6 +87,19 @@ export async function GET(
         buildSha
     });
   } catch (error) {
+    if (error instanceof BsdApiCircuitOpenError) {
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "bsd_rate_limited",
+        retry_at: error.retryAt,
+        provider_code: error.providerCode,
+        build_sha: buildSha
+      }, {
+        headers: { "Cache-Control": "no-store, max-age=0" }
+      });
+    }
+
     console.error(
       "Refresh failed:",
       error
