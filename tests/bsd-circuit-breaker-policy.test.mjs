@@ -16,7 +16,7 @@ test("Retry-After seconds are honoured", () => {
     NOW
   );
 
-  assert.equal(rertyAt, "2026-11-10T18:32:00.000Z");
+  assert.equal(retryAt, "2026-11-10T18:32:00.000Z");
 });
 
 test("Retry-After HTTP dates are honoured", () => {
