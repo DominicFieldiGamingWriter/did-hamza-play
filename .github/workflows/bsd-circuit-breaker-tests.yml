@@ -1,0 +1,22 @@
+name: BSD circuit breaker policy tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "app/api/refresh/**"
+      - "tests/**"
+      - "supabase/**"
+      - ".github/workflows/bsd-circuit-breaker-tests.yml"
+
+jobs:
+  policy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run BSD rate-limit policy tests
+        run: node --experimental-strip-types --test tests/bsd-circuit-breaker-policy.test.mjs

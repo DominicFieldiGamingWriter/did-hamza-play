@@ -1,3 +1,5 @@
+import { BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
+
 const BASE_URL =
   "https://sports.bzzoiro.com/api/v2";
 
@@ -53,8 +55,14 @@ async function bsdGet<T>(
     });
 
   if (!response.ok) {
+    const responseBody = await response.text();
+
+    if (response.status === 429) {
+      throw await recordBsdApiRateLimit(response.headers, responseBody);
+    }
+
     throw new Error(
-      `BSD API ${response.status}: ${await response.text()}`
+      "BSD API " + response.status + ": " + responseBody
     );
   }
 
@@ -417,7 +425,8 @@ export async function getTeamById(
     return responseObject(
       data
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof BsdApiCircuitOpenError) throw error;
     return null;
   }
 }
@@ -441,7 +450,8 @@ async function getEventById(
     return responseObject(
       data
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof BsdApiCircuitOpenError) throw error;
     return null;
   }
 }
