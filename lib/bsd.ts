@@ -1,4 +1,4 @@
-import { BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
+import { assertBsdApiCircuitClosed, BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
 
 const BASE_URL =
   "https://sports.bzzoiro.com/api/v2";
@@ -23,6 +23,8 @@ async function bsdGet<T>(
     string | number | undefined
   > = {}
 ): Promise<T> {
+  await assertBsdApiCircuitClosed();
+
   const url = new URL(
     `${BASE_URL}${path}`
   );
