@@ -652,6 +652,46 @@ export async function getTeamSquad(
   );
 }
 
+
+const CONFIRMED_INVALID_BSD_EVENT_IDS = new Set([214204]);
+function firstTeamFixtureRejectionReason(fixture: any): string | null {
+  const eventId = Number(fixture?.id ?? fixture?.event_id ?? fixture?.fixture_id);
+  if (CONFIRMED_INVALID_BSD_EVENT_IDS.has(eventId)) return "confirmed_invalid_provider_event";
+  const youthPattern = /(?:^|\b)(?:u\s?\d{2}|under\s?\d{2}|youth|academy|reserve|development|dev squad|b team|ii team|second team|third team|premier league 2|professional development league)(?:\b|$)/i;
+  for (const teamName of [getFixtureTeamName(fixture, "home"), getFixtureTeamName(fixture, "away")]) {
+    if (teamName !== "Unknown" && youthPattern.test(teamName)) return "youth_or_reserve_team_name";
+  }
+  const metadataText: string[] = [];
+  const visited = new Set<any>();
+  const collect = (value: any, depth = 0) => {
+    if (!value || depth > 4 || visited.has(value)) return;
+    if (typeof value === "string") { metadataText.push(value); return; }
+    if (Array.isArray(value)) { for (const item of value.slice(0, 20)) collect(item, depth + 1); return; }
+    if (typeof value !== "object") return;
+    visited.add(value);
+    for (const [key, child] of Object.entries(value)) {
+      if (/(league|competition|tournament|stage|category|division|group|round|format|team)/i.test(key)) collect(child, depth + 1);
+      else if (child && typeof child === "object" && depth < 2) collect(child, depth + 1);
+    }
+  };
+  collect(fixture);
+  return youthPattern.test(metadataText.join(" ")) ? "youth_or_reserve_competition_metadata" : null;
+}
+function isEligibleFirstTeamFixture(fixture: any): boolean {
+  const reason = firstTeamFixtureRejectionReason(fixture);
+  if (reason) {
+    console.warn("BSD_FIXTURE_REJECTED", JSON.stringify({
+      id: fixture?.id ?? fixture?.event_id ?? null,
+      reason,
+      competition: fixture?.league?.name ?? fixture?.competition?.name ?? fixture?.league_name ?? fixture?.competition_name ?? null,
+      home: getFixtureTeamName(fixture, "home"),
+      away: getFixtureTeamName(fixture, "away")
+    }));
+    return false;
+  }
+  return true;
+}
+
 function isTerminalStatus(
   fixture: any
 ): boolean {
@@ -931,16 +971,18 @@ async function getTeamFixturesForTeam(
   const liveRaw = responseArray(liveData);
   const upcomingRaw = responseArray(upcomingData);
 
-  let finished = finishedRaw.filter(teamMatches);
+  const firstTeamMatches = (fixture: any) => isEligibleFirstTeamFixture(fixture) && teamMatches(fixture);
+
+  let finished = finishedRaw.filter(firstTeamMatches);
 
   let live = liveRaw.filter(
     (fixture) =>
-      teamMatches(fixture) &&
+      firstTeamMatches(fixture) &&
       isCurrentlyLive(fixture) &&
       isFreshLiveFixture(fixture)
   );
 
-  let upcoming = upcomingRaw.filter(teamMatches);
+  let upcoming = upcomingRaw.filter(firstTeamMatches);
 
   let liveFallbackCount: number | null = null;
   let upcomingFallbackRaw: any[] | null = null;
@@ -967,7 +1009,7 @@ async function getTeamFixturesForTeam(
 
       live = allEvents.filter(
         (fixture) =>
-          teamMatches(fixture) &&
+          firstTeamMatches(fixture) &&
           isCurrentlyLive(fixture) &&
           isFreshLiveFixture(fixture)
       );
@@ -1005,7 +1047,7 @@ async function getTeamFixturesForTeam(
       );
 
       upcomingFallbackRaw = responseArray(fallback);
-      upcoming = upcomingFallbackRaw.filter(teamMatches);
+      upcoming = upcomingFallbackRaw.filter(firstTeamMatches);
     } catch (error) {
       if (isNamedLookup) {
         console.error(
@@ -1072,11 +1114,11 @@ async function getTeamFixturesForTeam(
         live_response: responseDiagnosticSummary(liveData),
         live_fallback_response_count: liveFallbackCount,
         upcoming_status_response: responseDiagnosticSummary(upcomingData),
-        upcoming_status_match_count: upcomingRaw.filter(teamMatches).length,
+        upcoming_status_match_count: upcomingRaw.filter(firstTeamMatches).length,
         upcoming_fallback_used: upcomingFallbackRaw !== null,
         upcoming_fallback_response_count: upcomingFallbackRaw?.length ?? null,
         upcoming_fallback_match_count:
-          upcomingFallbackRaw?.filter(teamMatches).length ?? null,
+          upcomingFallbackRaw?.filter(firstTeamMatches).length ?? null,
         matched_upcoming_before_date_filter: matchedUpcomingBeforeDateFilter,
         matched_upcoming_with_valid_dates: matchedUpcomingWithDates,
         matched_upcoming_after_date_filter: upcoming.length,

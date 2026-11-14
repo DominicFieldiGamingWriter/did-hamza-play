@@ -2987,31 +2987,20 @@ export async function refreshPlayerPage() {
       ? nationalFixturesById.next
       : nationalFixturesByName.next;
 
-  // Query FotMob on every refresh to supplement partial BSD results,
-  // not only act as an all-or-nothing fallback.
+  const useFotMobEmergencyFallback = nationalBsdUpcoming.length === 0;
   const nationalTeamFotMobResult =
-    nationalTeam?.name
-      ? await getFotMobNationalTeamFixtures(
-          nationalTeam.name,
-          nationalTeamId
-        )
+    useFotMobEmergencyFallback && nationalTeam?.name
+      ? await getFotMobNationalTeamFixtures(nationalTeam.name, nationalTeamId)
       : {
           fixtures: [],
           diagnostics: {
-            skipped: "No national team was resolved."
+            skipped: !nationalTeam?.name ? "No national team was resolved." : "BSD supplied eligible upcoming fixtures; FotMob fallback not needed."
           }
         };
-
-  // BSD entries come first, so duplicate fixtures retain the BSD event ID.
-  const nationalUpcomingCombined = dedupeFixturesByTeamsAndKickoff([
-    ...nationalBsdUpcoming,
-    ...nationalTeamFotMobResult.fixtures
-  ]);
-  const nationalFotMobAddedCount = Math.max(
-    0,
-    nationalUpcomingCombined.length -
-      dedupeFixturesByTeamsAndKickoff(nationalBsdUpcoming).length
+  const nationalUpcomingCombined = dedupeFixturesByTeamsAndKickoff(
+    nationalBsdUpcoming.length > 0 ? nationalBsdUpcoming : nationalTeamFotMobResult.fixtures
   );
+  const nationalFotMobAddedCount = nationalBsdUpcoming.length === 0 ? nationalUpcomingCombined.length : 0;
 
   const nationalFixtures = {
     live:
@@ -3036,7 +3025,7 @@ export async function refreshPlayerPage() {
       };
 
   Object.assign(nationalTeamEventDiagnostics, {
-    fotmob_supplement: nationalTeamFotMobResult.diagnostics,
+    fotmob_emergency_fallback: nationalTeamFotMobResult.diagnostics,
     application_lookup: {
       team_id_lookup_attempted: nationalTeamId > 0,
       team_id_upcoming_count: nationalFixturesById.next.length,
@@ -3045,12 +3034,12 @@ export async function refreshPlayerPage() {
         (nationalTeamId <= 0 || nationalFixturesById.next.length === 0)
       ),
       team_name_upcoming_count: nationalFixturesByName.next.length,
-      fotmob_supplement_attempted: Boolean(nationalTeam?.name),
+      fotmob_fallback_attempted: Boolean(nationalTeam?.name),
       fotmob_upcoming_count: nationalTeamFotMobResult.fixtures.length,
-      fotmob_added_count: nationalFotMobAddedCount,
+      fotmob_fallback_used_count: nationalFotMobAddedCount,
       selected_upcoming_source:
         nationalBsdUpcoming.length > 0 && nationalFotMobAddedCount > 0
-          ? "bsd+fotmob"
+          ? "bsd"
           : nationalFixturesById.next.length > 0
             ? "team_id"
             : nationalFixturesByName.next.length > 0
@@ -3407,7 +3396,7 @@ export async function refreshPlayerPage() {
 
     national_fixture_source:
       nationalBsdUpcoming.length > 0 && nationalFotMobAddedCount > 0
-        ? "bsd+fotmob"
+        ? "bsd"
         : nationalBsdUpcoming.length > 0
           ? "bsd"
           : nationalTeamFotMobResult.fixtures.length > 0
