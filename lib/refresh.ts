@@ -2879,6 +2879,53 @@ async function getFotMobNationalTeamFixtures(
   }
 }
 
+
+function getVerifiedNationalResultFallback(
+  player: any,
+  nationalTeam: any
+) {
+  const playerId = playerIdForFallback(player);
+  const nationalTeamName = String(nationalTeam?.name ?? "").trim().toLowerCase();
+
+  // Temporary, source-verified emergency record. BSD's current Bangladesh
+  // fixture feed has not supplied this senior SAFF result. Prefer BSD as soon
+  // as it returns the same fixture or a newer completed international.
+  if (playerId !== 6135 || nationalTeamName !== "bangladesh") {
+    return null;
+  }
+
+  return {
+    id: "verified-saff-bangladesh-pakistan-2026-11-14",
+    date: "2026-11-14T02:30:00.000Z",
+    event_date: "2026-11-14T02:30:00.000Z",
+    home: { id: Number(nationalTeam?.id) || 672, name: "Bangladesh" },
+    away: { id: 0, name: "Pakistan" },
+    home_team: { id: Number(nationalTeam?.id) || 672, name: "Bangladesh" },
+    away_team: { id: 0, name: "Pakistan" },
+    home_score: 0,
+    away_score: 1,
+    status: "finished",
+    league_name: "SAFF Championship",
+    round_label: "Semi-finals",
+    tracked_team_type: "national",
+    fixture_source: "official_saff_match_report_fallback",
+    source_url: "https://saffederation.org/wp-content/uploads/2026/11/8-MATCH_REPORT-8-BANGLADESH-vs-PAKISTAN.pdf",
+    is_fallback_fixture: true,
+    incidents: [
+      { type: "substitution", minute: 62, is_home: true, player_in: { name: "Mohammad Ibrahim" }, player_out: { name: "Shuki Itofusa" } },
+      { type: "substitution", minute: 62, is_home: false, player_in: { name: "Najeeb Ullah" }, player_out: { name: "Mckeal Aroon Abdullah" } },
+      { type: "substitution", minute: 74, is_home: false, player_in: { name: "Mohammad Hayyaan Khattak" }, player_out: { name: "Ali Uzair Mahmood" } },
+      { type: "substitution", minute: 76, is_home: true, player_in: { name: "Bishwanath Ghosh" }, player_out: { name: "Md Rahmat Mia" } },
+      { type: "goal", minute: 86, is_home: false, player: { name: "Abdul Samad Shahzad" }, assist: { name: "Mohammad Hayyaan Khattak" } },
+      { type: "substitution", minute: 90, is_home: true, player_in: { name: "Fahamedul Islam" }, player_out: { name: "Zayyan Ahmed" }, added_time: 4 },
+      { type: "substitution", minute: 90, is_home: true, player_in: { name: "Md Foysal Ahmed Fahim" }, player_out: { name: "Farhaan Ali Wahid" }, added_time: 4 },
+      { type: "substitution", minute: 90, is_home: true, player_in: { name: "Jamal Bhuiyan" }, player_out: { name: "Syed Quazem Kirmanee Shah" }, added_time: 4 },
+      { type: "period", minute: 90 }
+    ]
+  };
+}
+
+
 export async function refreshPlayerPage() {
   await assertBsdApiCircuitClosed();
   const supabase = getSupabaseAdmin();
@@ -2982,6 +3029,21 @@ export async function refreshPlayerPage() {
         )
       : emptyFixtures;
 
+  const nationalBsdLast =
+    nationalFixturesById.last ??
+    nationalFixturesByName.last;
+
+  const verifiedNationalResultFallback =
+    getVerifiedNationalResultFallback(player, nationalTeam);
+
+  // Keep BSD authoritative when it has this result or anything newer.
+  const nationalLatestLast =
+    verifiedNationalResultFallback &&
+    fixtureTimestamp(verifiedNationalResultFallback) >
+      fixtureTimestamp(nationalBsdLast)
+      ? verifiedNationalResultFallback
+      : nationalBsdLast;
+
   const nationalBsdUpcoming =
     nationalFixturesById.next.length > 0
       ? nationalFixturesById.next
@@ -3006,9 +3068,7 @@ export async function refreshPlayerPage() {
     live:
       nationalFixturesById.live ??
       nationalFixturesByName.live,
-    last:
-      nationalFixturesById.last ??
-      nationalFixturesByName.last,
+    last: nationalLatestLast,
     next:
       nationalUpcomingCombined
   };
@@ -3026,6 +3086,11 @@ export async function refreshPlayerPage() {
 
   Object.assign(nationalTeamEventDiagnostics, {
     fotmob_emergency_fallback: nationalTeamFotMobResult.diagnostics,
+    verified_historical_result_fallback: {
+      used: nationalLatestLast === verifiedNationalResultFallback,
+      fixture_id: verifiedNationalResultFallback?.id ?? null,
+      source_url: verifiedNationalResultFallback?.source_url ?? null
+    },
     application_lookup: {
       team_id_lookup_attempted: nationalTeamId > 0,
       team_id_upcoming_count: nationalFixturesById.next.length,
