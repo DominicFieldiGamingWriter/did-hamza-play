@@ -68,7 +68,7 @@ function providerCodeFromBody(body: string): string | null {
 function normaliseBsdEndpoint(path: string): string {
   return path
     .split("?")[0]
-    .replace(/\\/\\d+(?=\\/|$)/g, "/:id")
+    .replace(/\/\d+(?=\/|$)/g, "/:id")
     .replace(/\\/+$/, "") || "/";
 }
 
