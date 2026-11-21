@@ -1,0 +1,101 @@
+/* Scoped maintenance page styling */
+.page {
+  --accent: #F42A41;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(255,255,255,.08), transparent 32%),
+    linear-gradient(145deg, #0d1727 0%, #14233a 100%);
+  color: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.page.ben { --accent: #D52B1E; }
+.shell {
+  width: min(100%, 620px);
+  text-align: center;
+}
+.card {
+  padding: clamp(30px, 6vw, 58px);
+  background: rgba(255,255,255,.97);
+  color: #111a29;
+  border: 1px solid rgba(255,255,255,.26);
+  border-radius: 28px;
+  box-shadow: 0 24px 70px rgba(0,0,0,.28);
+}
+.brand {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 900;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+.brandAccent { color: var(--accent); }
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 30px;
+  padding: 9px 13px;
+  border-radius: 999px;
+  background: #f1f3f6;
+  color: #536174;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.iconWrap {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  margin: 34px auto 22px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--accent) 10%, white);
+  color: var(--accent);
+}
+.heading {
+  max-width: 470px;
+  margin: 0 auto;
+  font-size: clamp(34px, 7vw, 48px);
+  line-height: 1.02;
+  font-weight: 900;
+  letter-spacing: -.055em;
+}
+.description {
+  max-width: 430px;
+  margin: 19px auto 0;
+  color: #586579;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.note {
+  margin: 30px 0 0;
+  color: #8b95a4;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.footer {
+  margin-top: 22px;
+  color: rgba(255,255,255,.58);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: .05em;
+}
+@media (max-width: 480px) {
+  .page { padding: 20px 14px; }
+  .card { border-radius: 22px; }
+  .description { font-size: 15px; }
+}
