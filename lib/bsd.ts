@@ -1,7 +1,6 @@
 import { assertBsdApiCircuitClosed, BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
 
 import { trackBsdApiRequest } from "./bsd-usage";
-import { assertBsdApiCircuitClosed, BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
 
 const BASE_URL =
   "https://sports.bzzoiro.com/api/v2";
