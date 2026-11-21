@@ -1928,19 +1928,15 @@ async function buildLivePlayerStatus(
           ? "subbed_on"
           : "not_playing";
     } else if (lineupData?.status === "confirmed") {
-      // BSD reports unused substitutes with zero minutes. With a confirmed
-      // teamsheet, positive minutes and no substitution incident, the player
-      // is treated as a starter when the lineup-role parser cannot resolve
-      // the provider's row shape.
-      currentStatus =
-        minutesPlayed !== null && minutesPlayed > 0
-          ? "started"
-          : hasPlayer(
-              lineups.length > 0 ? lineups : lineupData,
-              playerId
-            )
-          ? "unknown"
-          : "not_playing";
+      // Known substitutes are handled above. When the confirmed teamsheet
+      // contains the player but BSD's row shape does not expose a role, use
+      // their presence in the confirmed XI data as the starter fallback.
+      currentStatus = hasPlayer(
+        lineups.length > 0 ? lineups : lineupData,
+        playerId
+      )
+        ? "started"
+        : "not_playing";
     }
 
     const hasAppeared =
