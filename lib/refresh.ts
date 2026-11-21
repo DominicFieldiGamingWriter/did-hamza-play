@@ -525,9 +525,20 @@ function playerPlayed(
         ) === playerId
     );
 
+  const minutes =
+    playerStatsMinutes(
+      playerId,
+      playerStats
+    );
+
   if (
     subbedOn ||
-    lineupRole === "starting"
+    lineupRole === "starting" ||
+    (
+      lineupRole === "substitute" &&
+      minutes !== null &&
+      minutes > 0
+    )
   ) {
     return {
       played: true,
@@ -545,12 +556,6 @@ function playerPlayed(
       label: "Did not play"
     };
   }
-
-  const minutes =
-    playerStatsMinutes(
-      playerId,
-      playerStats
-    );
 
   if (
     minutes !== null &&
@@ -1901,6 +1906,7 @@ async function buildLivePlayerStatus(
 
     let currentStatus: string = "unknown";
     let currentStatusMinute: number | null = null;
+    const minutesPlayed = playerStatsMinutes(playerId, playerStats);
 
     if (redCardIncident) {
       currentStatus = "sent_off";
@@ -1917,16 +1923,24 @@ async function buildLivePlayerStatus(
       lineupRole === "substitute" ||
       appearance.type === "unused_substitute"
     ) {
-      currentStatus = "not_playing";
-    } else if (
-      lineupData?.status === "confirmed"
-    ) {
-      currentStatus = hasPlayer(
-        lineups.length > 0 ? lineups : lineupData,
-        playerId
-      )
-        ? "unknown"
-        : "not_playing";
+      currentStatus =
+        minutesPlayed !== null && minutesPlayed > 0
+          ? "subbed_on"
+          : "not_playing";
+    } else if (lineupData?.status === "confirmed") {
+      // BSD reports unused substitutes with zero minutes. With a confirmed
+      // teamsheet, positive minutes and no substitution incident, the player
+      // is treated as a starter when the lineup-role parser cannot resolve
+      // the provider's row shape.
+      currentStatus =
+        minutesPlayed !== null && minutesPlayed > 0
+          ? "started"
+          : hasPlayer(
+              lineups.length > 0 ? lineups : lineupData,
+              playerId
+            )
+          ? "unknown"
+          : "not_playing";
     }
 
     const hasAppeared =
