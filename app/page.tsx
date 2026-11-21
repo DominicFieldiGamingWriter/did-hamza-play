@@ -1311,7 +1311,8 @@ export default async function Home() {
 
   const liveCurrentStatusText =
     `${liveCurrentStatusLabels[liveCurrentStatus] ?? "STATUS UNCONFIRMED"}${
-      Number.isFinite(Number(liveCurrentStatusMinute))
+      typeof liveCurrentStatusMinute === "number" &&
+      Number.isFinite(liveCurrentStatusMinute)
         ? ` · ${liveCurrentStatusMinute}'`
         : ""
     }`;

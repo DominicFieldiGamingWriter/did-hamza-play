@@ -144,9 +144,28 @@ function playerMatchesId(
   value: any,
   playerId: number
 ): boolean {
-  return (
-    getId(value) ===
-    playerId
+  if (
+    typeof value === "number" ||
+    (typeof value === "string" && value.trim())
+  ) {
+    return getId(value) === playerId;
+  }
+
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  // A lineup row can have its own record id as well as a player_id.
+  // Check every player identifier rather than stopping at the first id.
+  const candidates = [
+    value.id,
+    value.player_id,
+    value.player?.id,
+    value.player?.player_id
+  ];
+
+  return candidates.some(
+    (candidate) => getId(candidate) === playerId
   );
 }
 
@@ -154,10 +173,21 @@ function findPlayerRecord(
   value: any,
   playerId: number
 ): any | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  // Some BSD lineup arrays contain bare player IDs rather than objects.
   if (
-    !value ||
-    typeof value !== "object"
+    typeof value === "number" ||
+    typeof value === "string"
   ) {
+    return playerMatchesId(value, playerId)
+      ? { id: playerId }
+      : null;
+  }
+
+  if (typeof value !== "object") {
     return null;
   }
 
@@ -293,10 +323,21 @@ function lineupRoleFromValue(
     }
 
     if (typeof node !== "object") {
+      // BSD may represent a confirmed XI/bench entry as a bare numeric ID.
+      if (
+        (typeof node === "number" || typeof node === "string") &&
+        getId(node) === playerId
+      ) {
+        if (currentContext === "starting") {
+          foundStarting = true;
+        } else if (currentContext === "substitute") {
+          foundSubstitute = true;
+        }
+      }
       return;
     }
 
-    if (getId(node) === playerId) {
+    if (playerMatchesId(node, playerId)) {
       const explicitRole =
         String(
           node.role ??
@@ -564,6 +605,14 @@ function getMinute(
   for (
     const candidate of candidates
   ) {
+    if (
+      candidate === null ||
+      candidate === undefined ||
+      candidate === ""
+    ) {
+      continue;
+    }
+
     const minute =
       Number(candidate);
 
