@@ -13,7 +13,7 @@ const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "strict" as const,
-  path: "/admin",
+  path: "/",
   maxAge: USAGE_SESSION_SECONDS
 };
 
