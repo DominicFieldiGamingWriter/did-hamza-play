@@ -208,29 +208,63 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
         }
 
         .live-card-inner {
-          display: grid;
-          grid-template-columns:
-            minmax(0, 1fr)
-            minmax(220px, 300px);
-          gap: 30px;
+          display: block;
+        }
+
+        .live-status {
+          display: inline-block;
+          margin: 0 0 16px;
+          padding: 10px 15px;
+          border-radius: 999px;
+          background: #ffffff;
+          color: #00824f;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+
+        .live-match-row {
+          display: flex;
           align-items: center;
+          justify-content: space-between;
+          gap: 24px;
         }
 
         .live-title {
-          margin: 10px 0 0;
+          flex: 1 1 auto;
+          min-width: 0;
+          margin: 0;
           color: #ffffff;
-          font-size: clamp(
-            30px,
-            4.4vw,
-            45px
-          );
-          line-height: 1;
+          font-size: clamp(30px, 4.4vw, 45px);
+          line-height: 1.05;
           font-weight: 900;
           letter-spacing: -1.5px;
         }
 
+        .live-score {
+          flex: 0 0 auto;
+          text-align: right;
+          color: #ffffff;
+          font-size: 58px;
+          line-height: 0.9;
+          font-weight: 900;
+          letter-spacing: -2px;
+        }
+
+        .live-player-status {
+          display: block;
+          margin-top: 20px;
+          color: #c2cfdf;
+          font-size: 14px;
+          font-weight: 800;
+          letter-spacing: 0.2px;
+          line-height: 1.4;
+          text-transform: none;
+        }
+
         .live-date {
-          margin-top: 13px;
+          margin-top: 23px;
           color: #aab8cb;
           font-size: 15px;
         }
@@ -244,41 +278,6 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
           font-size: 15px;
           font-weight: 800;
         }
-
-        .live-score {
-          text-align: right;
-          color: #ffffff;
-          font-size: 58px;
-          line-height: 0.9;
-          font-weight: 900;
-          letter-spacing: -2px;
-        }
-
-        .live-status {
-          margin-top: 16px;
-          display: inline-block;
-          padding: 10px 15px;
-          border-radius: 999px;
-          background: #ffffff;
-          color: #00824f;
-          font-size: 11px;
-          font-weight: 900;
-          letter-spacing: 1px;
-          text-transform: uppercase;
-        }
-
-
-        .live-player-status {
-          display: block;
-          margin-top: 10px;
-          color: #c2cfdf;
-          font-size: 12px;
-          font-weight: 800;
-          letter-spacing: 0.8px;
-          line-height: 1.4;
-          text-transform: uppercase;
-        }
-
         .section-card {
           margin-top: 30px;
           background: #ffffff;
@@ -934,12 +933,15 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
           }
 
           .live-card-inner {
-            grid-template-columns: 1fr;
-            gap: 24px;
+            display: block;
+          }
+
+          .live-match-row {
+            gap: 16px;
           }
 
           .live-score {
-            text-align: left;
+            text-align: right;
           }
 
           .recent-grid {
@@ -1014,6 +1016,29 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
             height: 58px;
             padding: 0 18px;
             font-size: 30px;
+          }
+
+          .live-match-row {
+            gap: 12px;
+          }
+
+          .live-title {
+            font-size: clamp(21px, 5.8vw, 29px);
+            letter-spacing: -0.8px;
+          }
+
+          .live-score {
+            font-size: 40px;
+            text-align: right;
+          }
+
+          .live-player-status {
+            font-size: 13px;
+          }
+
+          .live-times {
+            gap: 12px;
+            font-size: 13px;
           }
 
           .detail-stats {

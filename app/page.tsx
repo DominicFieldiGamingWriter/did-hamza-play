@@ -1317,6 +1317,8 @@ export default async function Home() {
         : ""
     }`;
 
+  const livePlayerStatusText =
+    `Hamza's match status: ${liveCurrentStatusText}`;
   const liveAnswer =
     liveStatus ===
     "playing"
@@ -1664,51 +1666,48 @@ export default async function Home() {
 
             <div className="live-card">
               <div className="live-card-inner">
-                <div>
-                  <div className="section-label">
-                    {awaitingFullTimeResult ? "MATCH RESULT" : "LIVE MATCH"}
-                  </div>
+                <div className="live-status">
+                  {awaitingFullTimeResult ? "CHECKING RESULT" : "LIVE"}
+                </div>
 
+                <div className="live-match-row">
                   <h3 className="live-title">
                     {fixtureName(
                       liveFixture
                     )}
                   </h3>
 
-                  {liveDate && (
-                    <>
-                      <div className="live-date">
-                        {formatDate(
-                          liveDate
-                        )}
-                      </div>
+                  <div className="live-score">
+                    {liveHomeScore ??
+                      "—"}
+                    –
+                    {liveAwayScore ??
+                      "—"}
+                  </div>
+                </div>
 
-                      {fixtureTimes(
-                        liveFixture,
-                        "live-times"
+                <div
+                  className="live-player-status"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {livePlayerStatusText}
+                </div>
+
+                {liveDate && (
+                  <>
+                    <div className="live-date">
+                      {formatDate(
+                        liveDate
                       )}
-                    </>
-                  )}
+                    </div>
 
-                  <div className="live-status">
-                    {awaitingFullTimeResult ? "CHECKING RESULT" : "LIVE"}
-                  </div>
-                  <div
-                    className="live-player-status"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    {liveCurrentStatusText}
-                  </div>
-                </div>
-
-                <div className="live-score">
-                  {liveHomeScore ??
-                    "—"}
-                  –
-                  {liveAwayScore ??
-                    "—"}
-                </div>
+                    {fixtureTimes(
+                      liveFixture,
+                      "live-times"
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </section>
