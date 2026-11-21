@@ -4,6 +4,9 @@ import { NextResponse, type NextRequest } from "next/server";
 const MAINTENANCE_CONFIG_KEY = "hamzaMaintenance";
 
 function shouldBypassMaintenance(pathname: string) {
+  const lastSegment = pathname.split("/").pop() ?? "";
+  const isPublicFile = lastSegment.includes(".");
+
   return (
     pathname === "/maintenance" ||
     pathname === "/api" ||
@@ -14,7 +17,7 @@ function shouldBypassMaintenance(pathname: string) {
     pathname === "/favicon.ico" ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml" ||
-    /\\.[^/]+$/.test(pathname)
+    isPublicFile
   );
 }
 
