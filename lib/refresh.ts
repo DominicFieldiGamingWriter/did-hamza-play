@@ -1950,13 +1950,69 @@ async function buildLivePlayerStatus(
       lineupData?.status ??
       "unavailable";
 
+
+    const matchesTrackedPlayer = (
+      candidateId: number | null,
+      candidateValue: any
+    ) => {
+      if (candidateId === playerId) {
+        return true;
+      }
+
+      const candidateName = normalisePlayerName(
+        getName(candidateValue) || candidateValue
+      );
+
+      return Boolean(
+        playerNameKey &&
+        candidateName &&
+        candidateName === playerNameKey
+      );
+    };
+
+    const goalIncidents = incidents.filter((incident: any) =>
+      getIncidentType(incident).includes("goal")
+    );
+
+    const goalMinutes = goalIncidents
+      .filter((incident: any) =>
+        matchesTrackedPlayer(
+          resolveIncidentPlayerId(incident, "player"),
+          incident?.player ?? incident?.player_name
+        )
+      )
+      .map((incident: any) => getMinute(incident))
+      .filter((minute: number | null): minute is number => minute !== null)
+      .sort((a: number, b: number) => a - b);
+
+    const assistMinutes = goalIncidents
+      .filter((incident: any) =>
+        matchesTrackedPlayer(
+          getAssistId(incident),
+          incident?.assist ??
+            incident?.assistant ??
+            incident?.assist_name ??
+            incident?.assistant_name
+        )
+      )
+      .map((incident: any) => getMinute(incident))
+      .filter((minute: number | null): minute is number => minute !== null)
+      .sort((a: number, b: number) => a - b);
+
+    const livePlayerEvents = {
+      goal_minutes: goalMinutes,
+      assist_minutes: assistMinutes,
+      incidents_available: incidentResult.status === "fulfilled"
+    };
+
     if (hasAppeared) {
       return {
         status: "playing",
         role: "playing",
         current_status: currentStatus,
         current_status_minute: currentStatusMinute,
-        lineup_status: lineupStatus
+        lineup_status: lineupStatus,
+        ...livePlayerEvents
       };
     }
 
@@ -1968,7 +2024,8 @@ async function buildLivePlayerStatus(
         role: "substitute",
         current_status: currentStatus,
         current_status_minute: currentStatusMinute,
-        lineup_status: lineupStatus
+        lineup_status: lineupStatus,
+        ...livePlayerEvents
       };
     }
 
@@ -1984,7 +2041,8 @@ async function buildLivePlayerStatus(
         role: "unknown",
         current_status: currentStatus,
         current_status_minute: currentStatusMinute,
-        lineup_status: "confirmed"
+        lineup_status: "confirmed",
+        ...livePlayerEvents
       };
     }
 
@@ -1996,7 +2054,8 @@ async function buildLivePlayerStatus(
         role: "not_selected",
         current_status: "not_playing",
         current_status_minute: null,
-        lineup_status: "confirmed"
+        lineup_status: "confirmed",
+        ...livePlayerEvents
       };
     }
 
@@ -2005,7 +2064,8 @@ async function buildLivePlayerStatus(
       role: "unknown",
       current_status: currentStatus,
       current_status_minute: currentStatusMinute,
-      lineup_status: lineupStatus
+      lineup_status: lineupStatus,
+        ...livePlayerEvents
     };
   } catch {
     return {
@@ -2013,7 +2073,10 @@ async function buildLivePlayerStatus(
       role: "unknown",
       current_status: "unknown",
       current_status_minute: null,
-      lineup_status: "unavailable"
+      lineup_status: "unavailable",
+      goal_minutes: [],
+      assist_minutes: [],
+      incidents_available: false
     };
   }
 }

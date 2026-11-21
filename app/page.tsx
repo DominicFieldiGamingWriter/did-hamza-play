@@ -1319,27 +1319,6 @@ export default async function Home() {
 
   const livePlayerStatusText =
     `Hamza's match status: ${liveCurrentStatusText}`;
-  const liveAnswer =
-    liveStatus ===
-    "playing"
-      ? "YES"
-      : liveStatus ===
-        "substitute"
-      ? "SUB"
-      : liveStatus ===
-        "not_playing"
-      ? "NO"
-      : null;
-
-  const liveAnswerClass =
-    liveStatus ===
-    "playing"
-      ? "answer yes live-answer"
-      : liveStatus ===
-        "substitute"
-      ? "answer sub live-answer"
-      : "answer no live-answer";
-
   const liveDate =
     dateValue(
       liveFixture
@@ -1653,23 +1632,13 @@ export default async function Home() {
                 {awaitingFullTimeResult ? "AWAITING FULL-TIME RESULT" : "CURRENTLY PLAYING"}
               </h2>
 
-              {liveAnswer && (
-                <div
-                  className={
-                    liveAnswerClass
-                  }
-                >
-                  {liveAnswer}
-                </div>
-              )}
+              <div className="answer live-answer live-pill">
+                LIVE
+              </div>
             </div>
 
             <div className="live-card">
               <div className="live-card-inner">
-                <div className="live-status">
-                  {awaitingFullTimeResult ? "CHECKING RESULT" : "LIVE"}
-                </div>
-
                 <div className="live-match-row">
                   <h3 className="live-title">
                     {fixtureName(
@@ -1694,10 +1663,27 @@ export default async function Home() {
                   {livePlayerStatusText}
                 </div>
 
+                <div className="live-player-events">
+                  <span>
+                    Goals: {liveFixture?.player_status?.incidents_available === true
+                      ? (liveFixture?.player_status?.goal_minutes?.length
+                          ? liveFixture.player_status.goal_minutes.map((minute: number) => `${minute}'`).join(", ")
+                          : "None")
+                      : "Unavailable"}
+                  </span>
+                  <span>
+                    Assists: {liveFixture?.player_status?.incidents_available === true
+                      ? (liveFixture?.player_status?.assist_minutes?.length
+                          ? liveFixture.player_status.assist_minutes.map((minute: number) => `${minute}'`).join(", ")
+                          : "None")
+                      : "Unavailable"}
+                  </span>
+                </div>
+
                 {liveDate && (
                   <>
                     <div className="live-date">
-                      {formatDate(
+                      Kicked Off: {formatDate(
                         liveDate
                       )}
                     </div>

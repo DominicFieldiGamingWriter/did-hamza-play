@@ -252,15 +252,30 @@ footer { text-align: center; padding-top: 28px; line-height: 1.6; }
           letter-spacing: -2px;
         }
 
-        .live-player-status {
-          display: block;
-          margin-top: 20px;
+        .live-player-status,
+        .live-player-events {
           color: #c2cfdf;
-          font-size: 14px;
+          font-size: 16px;
           font-weight: 800;
           letter-spacing: 0.2px;
           line-height: 1.4;
           text-transform: none;
+        }
+
+        .live-player-status {
+          display: block;
+          margin-top: 20px;
+        }
+
+        .live-player-events {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px 26px;
+          margin-top: 6px;
+        }
+
+        .live-pill {
+          color: #00824f;
         }
 
         .live-date {
