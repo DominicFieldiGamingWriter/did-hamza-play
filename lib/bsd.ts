@@ -1,5 +1,8 @@
 import { assertBsdApiCircuitClosed, BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
 
+import { trackBsdApiRequest } from "./bsd-usage";
+import { assertBsdApiCircuitClosed, BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
+
 const BASE_URL =
   "https://sports.bzzoiro.com/api/v2";
 
@@ -14,6 +17,59 @@ function getKey() {
   }
 
   return key;
+}
+
+function headerNumber(headers: Headers, names: string[]): number | null {
+  for (const name of names) {
+    const raw = headers.get(name);
+    if (raw === null) continue;
+    const value = Number(raw);
+    if (Number.isSafeInteger(value) && value >= 0) return value;
+  }
+  return null;
+}
+
+function headerResetAt(headers: Headers): string | null {
+  const raw = headers.get("ratelimit-reset") ??
+    headers.get("rate-limit-reset") ??
+    headers.get("x-ratelimit-reset");
+  if (!raw) return null;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) {
+    const milliseconds = numeric > 1_000_000_000
+      ? numeric * 1000
+      : Date.now() + numeric * 1000;
+    const date = new Date(milliseconds);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function providerCodeFromBody(body: string): string | null {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body);
+    const candidates = [
+      parsed?.provider_code,
+      parsed?.providerCode,
+      parsed?.code,
+      parsed?.error_code,
+      parsed?.error?.code,
+      parsed?.error?.provider_code
+    ];
+    const found = candidates.find((value) => typeof value === "string" && value.trim());
+    return typeof found === "string" ? found.slice(0, 100) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normaliseBsdEndpoint(path: string): string {
+  return path
+    .split("?")[0]
+    .replace(/\\/\\d+(?=\\/|$)/g, "/:id")
+    .replace(/\\/+$/, "") || "/";
 }
 
 async function bsdGet<T>(
@@ -45,19 +101,59 @@ async function bsdGet<T>(
     }
   }
 
-  const response =
-    await fetch(url, {
+  const startedAt = Date.now();
+  const requestedAt = new Date(startedAt).toISOString();
+  const endpoint = normaliseBsdEndpoint(path);
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
       headers: {
-        Authorization:
-          `Token ${getKey()}`,
-        Accept:
-          "application/json"
+        Authorization: `Token ${getKey()}`,
+        Accept: "application/json"
       },
       cache: "no-store"
     });
+  } catch (error) {
+    trackBsdApiRequest({
+      requested_at: requestedAt,
+      endpoint,
+      http_status: null,
+      latency_ms: Date.now() - startedAt,
+      outcome: "network_error",
+      provider_code: "network_error",
+      rate_limit_limit: null,
+      rate_limit_remaining: null,
+      rate_limit_reset_at: null
+    });
+    throw error;
+  }
+
+  const rateLimitLimit = headerNumber(response.headers, [
+    "ratelimit-limit",
+    "rate-limit-limit",
+    "x-ratelimit-limit"
+  ]);
+  const rateLimitRemaining = headerNumber(response.headers, [
+    "ratelimit-remaining",
+    "rate-limit-remaining",
+    "x-ratelimit-remaining"
+  ]);
+  const rateLimitResetAt = headerResetAt(response.headers);
 
   if (!response.ok) {
     const responseBody = await response.text();
+    trackBsdApiRequest({
+      requested_at: requestedAt,
+      endpoint,
+      http_status: response.status,
+      latency_ms: Date.now() - startedAt,
+      outcome: "http_error",
+      provider_code: providerCodeFromBody(responseBody),
+      rate_limit_limit: rateLimitLimit,
+      rate_limit_remaining: rateLimitRemaining,
+      rate_limit_reset_at: rateLimitResetAt
+    });
 
     if (response.status === 429) {
       throw await recordBsdApiRateLimit(response.headers, responseBody);
@@ -67,6 +163,18 @@ async function bsdGet<T>(
       "BSD API " + response.status + ": " + responseBody
     );
   }
+
+  trackBsdApiRequest({
+    requested_at: requestedAt,
+    endpoint,
+    http_status: response.status,
+    latency_ms: Date.now() - startedAt,
+    outcome: "success",
+    provider_code: null,
+    rate_limit_limit: rateLimitLimit,
+    rate_limit_remaining: rateLimitRemaining,
+    rate_limit_reset_at: rateLimitResetAt
+  });
 
   return response.json() as Promise<T>;
 }

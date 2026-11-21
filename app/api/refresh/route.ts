@@ -1,6 +1,7 @@
 import { BsdApiCircuitOpenError } from "../../../lib/bsd-circuit-breaker";
 import { NextResponse } from "next/server";
 import { refreshPlayerPage } from "../../../lib/refresh";
+import { trackBsdRefreshRun } from "../../../lib/bsd-usage";
 
 export async function GET(
   request: Request
@@ -52,9 +53,19 @@ export async function GET(
     });
   }
 
+  const refreshStartedAt = Date.now();
+
   try {
     const result =
       await refreshPlayerPage();
+
+    trackBsdRefreshRun({
+      started_at: new Date(refreshStartedAt).toISOString(),
+      finished_at: new Date().toISOString(),
+      duration_ms: Date.now() - refreshStartedAt,
+      result: "success",
+      provider_code: null
+    });
 
     return NextResponse.json({
       ok: true,
@@ -88,6 +99,13 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof BsdApiCircuitOpenError) {
+      trackBsdRefreshRun({
+        started_at: new Date(refreshStartedAt).toISOString(),
+        finished_at: new Date().toISOString(),
+        duration_ms: Date.now() - refreshStartedAt,
+        result: "skipped_rate_limited",
+        provider_code: error.providerCode ?? null
+      });
       return NextResponse.json({
         ok: true,
         skipped: true,
@@ -99,6 +117,14 @@ export async function GET(
         headers: { "Cache-Control": "no-store, max-age=0" }
       });
     }
+
+    trackBsdRefreshRun({
+      started_at: new Date(refreshStartedAt).toISOString(),
+      finished_at: new Date().toISOString(),
+      duration_ms: Date.now() - refreshStartedAt,
+      result: "error",
+      provider_code: null
+    });
 
     console.error(
       "Refresh failed:",
