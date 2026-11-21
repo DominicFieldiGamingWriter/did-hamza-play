@@ -182,7 +182,7 @@ export default function UsageDashboard({ initialAuthenticated }: { initialAuthen
               <article className={styles.metric}>
                 <div className={styles.metricLabel}>Successful requests</div>
                 <div className={styles.metricValue}>{number(today?.success)}</div>
-                <div className={styles.metricHint}>{number(today?.http_errors + today?.network_errors)} HTTP or network errors</div>
+                <div className={styles.metricHint}>{number((today?.http_errors ?? 0) + (today?.network_errors ?? 0))} HTTP or network errors</div>
               </article>
             </section>
 

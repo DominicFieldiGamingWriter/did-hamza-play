@@ -32,13 +32,18 @@ function scheduleUsageWrite(payload: UsagePayload) {
     after(async () => {
       try {
         if (SITE === "hamza") {
-          const table = payload.kind === "api_request"
-            ? "bsd_api_usage_events"
-            : "bsd_api_refresh_runs";
-          const { error } = await getSupabaseAdmin()
-            .from(table)
-            .insert(payload.record);
-          if (error) throw error;
+          const admin = getSupabaseAdmin();
+          if (payload.kind === "api_request") {
+            const { error } = await admin
+              .from("bsd_api_usage_events")
+              .insert(payload.record);
+            if (error) throw error;
+          } else {
+            const { error } = await admin
+              .from("bsd_api_refresh_runs")
+              .insert(payload.record);
+            if (error) throw error;
+          }
           return;
         }
 
