@@ -69,9 +69,8 @@ function normaliseBsdEndpoint(path: string): string {
   return path
     .split("?")[0]
     .replace(/\/\d+(?=\/|$)/g, "/:id")
-    .replace(/\\/+$/, "") || "/";
+    .replace(/\/+$/, "") || "/";
 }
-
 async function bsdGet<T>(
   path: string,
   params: Record<
