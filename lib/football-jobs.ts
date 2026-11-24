@@ -206,7 +206,6 @@ export async function runFootballScheduler() {
     throw error;
   } finally {
     await release(key, failure);
-    await release(writerKey);
   }
 }
 export async function runLineupWorker() {
@@ -253,5 +252,8 @@ export async function runLineupWorker() {
     const saved = await savePage(snapshot, { player_status: { ...status, next_match: result } });
     if (saved) await refreshView();
     return { ok: true, action: saved ? "lineup_checked" : "write_conflict", fixture_id: eventId, status: result.status };
-  } finally { await release(key, failure); }
+  } finally {
+    await release(key, failure);
+    await release(writerKey);
+  }
 }
