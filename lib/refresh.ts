@@ -3244,7 +3244,10 @@ export async function refreshPlayerPage(
         : []
     }]
   };
-  const lineupData = syntheticLatestLineup;
+  const storedLineupData = storedLastSelection?.lineup_data && typeof storedLastSelection.lineup_data === "object"
+    ? storedLastSelection.lineup_data
+    : null;
+  const lineupData = storedLineupData ?? syntheticLatestLineup;
   const [playerStats, rawIncidents] = await Promise.all([
     latestLast.is_fallback_fixture
       ? Promise.resolve([{ id: playerId, minutes: 90 }])

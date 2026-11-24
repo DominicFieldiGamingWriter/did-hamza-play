@@ -214,6 +214,7 @@ export async function runLineupWorker() {
   const eventId = idOf(fixture), kickoff = kickoffOf(fixture)!;
   const minutes = (Date.parse(kickoff) - Date.now()) / 60000;
   if (minutes > 65 || minutes < -120) return { ok: true, action: "outside_lineup_window" };
+  if (Date.now() >= Date.parse(kickoff) + POST_START_MS) return { ok: true, action: "post_match_window_started" };
   const status = obj(snapshot.player_status), existing = obj(status.next_match);
   if (isDefinitive(existing, eventId)) return { ok: true, action: "already_confirmed", status: existing.status };
   if (!due(existing.lineup_checked_at, 115000)) return { ok: true, action: "lineup_check_not_due" };
@@ -222,16 +223,23 @@ export async function runLineupWorker() {
   let failure: string | null = null;
   try {
     let decision: any;
+    let lineupData: any = null;
     try {
-      const data = await withBsdUsageContext({ job_type: "lineup", fixture_id: eventId }, () => getLineups(eventId));
-      decision = resolveTeamSheetStatus(Number(snapshot.player_id), data);
+      lineupData = await withBsdUsageContext({ job_type: "lineup", fixture_id: eventId }, () => getLineups(eventId));
+      decision = resolveTeamSheetStatus(Number(snapshot.player_id), lineupData);
     } catch (error) {
       failure = error instanceof Error ? error.message.slice(0,300) : "Lineup request failed.";
       decision = resolveTeamSheetStatus(Number(snapshot.player_id), null);
       decision.reason = "The official lineup feed could not be reached. The scheduled checker will retry.";
     }
     const checkedAt = new Date().toISOString();
-    const result = { ...decision, lineup_fixture_id: eventId, lineup_checked_at: checkedAt, fixture_kickoff: kickoff };
+    const result = {
+      ...decision,
+      lineup_fixture_id: eventId,
+      lineup_checked_at: checkedAt,
+      fixture_kickoff: kickoff,
+      lineup_data: lineupData
+    };
     const saved = await savePage(snapshot, { player_status: { ...status, next_match: result } });
     if (saved) await refreshView();
     return { ok: true, action: saved ? "lineup_checked" : "write_conflict", fixture_id: eventId, status: result.status };
