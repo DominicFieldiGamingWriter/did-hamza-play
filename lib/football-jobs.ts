@@ -204,7 +204,10 @@ export async function runFootballScheduler() {
   } catch (error) {
     failure = error instanceof Error ? error.message.slice(0,300) : "Scheduler failed.";
     throw error;
-  } finally { await release(key, failure); }
+  } finally {
+    await release(key, failure);
+    await release(writerKey);
+  }
 }
 export async function runLineupWorker() {
   const snapshot = await readPage();
@@ -220,8 +223,13 @@ export async function runLineupWorker() {
   const status = obj(snapshot.player_status), existing = obj(status.next_match);
   if (isDefinitive(existing, eventId)) return { ok: true, action: "already_confirmed", status: existing.status };
   if (!due(existing.lineup_checked_at, 115000)) return { ok: true, action: "lineup_check_not_due" };
+  const writerKey = "player-page-writer";
+  if (!(await claim(writerKey, 270))) return { ok: true, skipped: true, reason: "page_writer_busy" };
   const key = "lineup-" + eventId;
-  if (!(await claim(key, 100))) return { ok: true, skipped: true, reason: "already_running" };
+  if (!(await claim(key, 100))) {
+    await release(writerKey);
+    return { ok: true, skipped: true, reason: "already_running" };
+  }
   let failure: string | null = null;
   try {
     let decision: any;
