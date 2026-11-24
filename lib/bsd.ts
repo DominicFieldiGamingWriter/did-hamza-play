@@ -1,3 +1,4 @@
+import { revalidateTag, unstable_cache } from "next/cache";
 import { assertBsdApiCircuitClosed, BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
 
 import { trackBsdApiRequest } from "./bsd-usage";
@@ -514,25 +515,53 @@ function getFixtureTeamName(
   return "Unknown";
 }
 
+
+const BSD_REFERENCE_CACHE_TTL_SECONDS = 3 * 24 * 60 * 60;
+
+function bsdPlayerReferenceCacheTag(playerId: number): string {
+  return `bsd-player-reference-${playerId}`;
+}
+
+function bsdTeamReferenceCacheTag(teamId: number): string {
+  return `bsd-team-reference-${teamId}`;
+}
+
+function isNonEmptyReferenceRecord(value: any): boolean {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0);
+}
+
+async function getCachedPlayerProfile(playerId: number) {
+  return unstable_cache(
+    async () => {
+      const player = responseObject(await bsdGet<any>(`/players/${playerId}/`));
+      if (!isNonEmptyReferenceRecord(player)) throw new Error(`BSD returned an empty player profile for ID ${playerId}.`);
+      return player;
+    },
+    ["bsd-player-profile-v1", String(playerId)],
+    { revalidate: BSD_REFERENCE_CACHE_TTL_SECONDS, tags: [bsdPlayerReferenceCacheTag(playerId)] }
+  )();
+}
+
+async function getCachedTeamDetails(teamId: number) {
+  return unstable_cache(
+    async () => {
+      const team = responseObject(await bsdGet<any>(`/teams/${teamId}/`));
+      if (!isNonEmptyReferenceRecord(team)) throw new Error(`BSD returned empty team details for ID ${teamId}.`);
+      return team;
+    },
+    ["bsd-team-details-v1", String(teamId)],
+    { revalidate: BSD_REFERENCE_CACHE_TTL_SECONDS, tags: [bsdTeamReferenceCacheTag(teamId)] }
+  )();
+}
+
 export async function getTeamById(
-  id: number
+  id: number,
+  options: { forceRefresh?: boolean } = {}
 ) {
-  if (
-    !Number.isFinite(id) ||
-    id <= 0
-  ) {
-    return null;
-  }
-
+  if (!Number.isFinite(id) || id <= 0) return null;
   try {
-    const data =
-      await bsdGet<any>(
-        `/teams/${id}/`
-      );
-
-    return responseObject(
-      data
-    );
+    if (options.forceRefresh) revalidateTag(bsdTeamReferenceCacheTag(id), { expire: 0 });
+    return await getCachedTeamDetails(id);
   } catch (error) {
     if (error instanceof BsdApiCircuitOpenError) throw error;
     return null;
@@ -699,16 +728,12 @@ async function resolveFixture(
 }
 
 export async function getPlayer(
-  playerId: number
+  playerId: number,
+  options: { forceRefresh?: boolean } = {}
 ) {
-  const data =
-    await bsdGet<any>(
-      `/players/${playerId}/`
-    );
-
-  return responseObject(
-    data
-  );
+  if (!Number.isFinite(playerId) || playerId <= 0) throw new Error("A valid BSD player ID is required.");
+  if (options.forceRefresh) revalidateTag(bsdPlayerReferenceCacheTag(playerId), { expire: 0 });
+  return getCachedPlayerProfile(playerId);
 }
 
 export async function findPlayer(

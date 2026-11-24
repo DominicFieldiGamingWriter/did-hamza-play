@@ -53,11 +53,12 @@ export async function GET(
     });
   }
 
+  const forceReferenceRefresh = new URL(request.url).searchParams.get("force_reference_refresh") === "1";
   const refreshStartedAt = Date.now();
 
   try {
     const result =
-      await refreshPlayerPage();
+      await refreshPlayerPage({ forceReferenceRefresh });
 
     trackBsdRefreshRun({
       started_at: new Date(refreshStartedAt).toISOString(),
@@ -95,7 +96,10 @@ export async function GET(
         result.sent_off_minute,
 
       build_sha:
-        buildSha
+        buildSha,
+
+      reference_cache_bypassed:
+        forceReferenceRefresh
     });
   } catch (error) {
     if (error instanceof BsdApiCircuitOpenError) {

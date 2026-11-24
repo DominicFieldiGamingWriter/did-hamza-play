@@ -2244,14 +2244,15 @@ function isNationalTeam(
 }
 
 async function resolvePlayerTeam(
-  player: any
+  player: any,
+  options: { forceRefresh?: boolean } = {}
 ) {
   const directId =
     playerTeamId(player);
 
   if (directId > 0) {
     const directTeam =
-      await getTeamById(directId);
+      await getTeamById(directId, options);
 
     if (directTeam?.id) {
       return directTeam;
@@ -2295,14 +2296,15 @@ function playerIdForFallback(
 }
 
 async function resolvePlayerNationalTeam(
-  player: any
+  player: any,
+  options: { forceRefresh?: boolean } = {}
 ) {
   const directId =
     playerNationalTeamId(player);
 
   if (directId > 0) {
     const directTeam =
-      await getTeamById(directId);
+      await getTeamById(directId, options);
 
     if (directTeam?.id) {
       return directTeam;
@@ -3048,13 +3050,23 @@ function getVerifiedNationalResultFallback(
 }
 
 
-export async function refreshPlayerPage() {
+export async function refreshPlayerPage(
+  options: { forceReferenceRefresh?: boolean } = {}
+) {
+  const forceReferenceRefresh = options.forceReferenceRefresh === true;
   await assertBsdApiCircuitClosed();
   const supabase = getSupabaseAdmin();
   const { data: existingPageState, error: existingPageStateError } = await supabase.from("player_page").select("player_status").eq("id", 1).maybeSingle();
   if (existingPageStateError) throw new Error(`Could not read existing page state: ${existingPageStateError.message}`);
   const existingPlayerStatus = existingPageState?.player_status && typeof existingPageState.player_status === "object" ? existingPageState.player_status : {};
   const existingPostMatchRefresh = existingPlayerStatus.post_match_refresh ?? null;
+  const cachedNationalTeamReference = existingPlayerStatus.national_team_reference &&
+    typeof existingPlayerStatus.national_team_reference === "object" &&
+    Number(existingPlayerStatus.national_team_reference.id) > 0 &&
+    typeof existingPlayerStatus.national_team_reference.name === "string" &&
+    existingPlayerStatus.national_team_reference.name.trim()
+      ? existingPlayerStatus.national_team_reference
+      : null;
   const playerName =
     process.env.PLAYER_NAME ||
     "Hamza Choudhury";
@@ -3067,7 +3079,8 @@ export async function refreshPlayerPage() {
 
   const player =
     await getPlayer(
-      playerId
+      playerId,
+      { forceRefresh: forceReferenceRefresh }
     );
 
   if (!player) {
@@ -3084,7 +3097,8 @@ export async function refreshPlayerPage() {
    */
   const team =
     await resolvePlayerTeam(
-      player
+      player,
+      { forceRefresh: forceReferenceRefresh }
     );
 
   if (!team?.id) {
@@ -3101,9 +3115,12 @@ export async function refreshPlayerPage() {
    * key and prefer a team marked as national.
    */
   const nationalTeam =
-    await resolvePlayerNationalTeam(
-      player
-    );
+    !forceReferenceRefresh && cachedNationalTeamReference
+      ? cachedNationalTeamReference
+      : (await resolvePlayerNationalTeam(
+          player,
+          { forceRefresh: forceReferenceRefresh }
+        )) ?? cachedNationalTeamReference;
 
   const nationalTeamId =
     Number(nationalTeam?.id) || 0;
@@ -3195,11 +3212,29 @@ export async function refreshPlayerPage() {
       nationalUpcomingCombined
   };
 
+  const cachedNationalDiagnostics = existingPlayerStatus.national_team_lookup;
+  const cachedNationalDiagnosticsAt = Date.parse(String(cachedNationalDiagnostics?.checked_at ?? ""));
+  const cachedNationalQueriesSucceeded =
+    Array.isArray(cachedNationalDiagnostics?.queries) &&
+    cachedNationalDiagnostics.queries.length > 0 &&
+    cachedNationalDiagnostics.queries.every((query: any) =>
+      Number(query?.http_status) >= 200 &&
+      Number(query?.http_status) < 300 &&
+      !query?.error &&
+      !query?.parse_error
+    );
+  const cachedNationalDiagnosticsFresh =
+    Number.isFinite(cachedNationalDiagnosticsAt) &&
+    cachedNationalDiagnosticsAt <= Date.now() &&
+    Date.now() - cachedNationalDiagnosticsAt < 6 * 60 * 60 * 1000 &&
+    Number(cachedNationalDiagnostics?.team?.id ?? 0) === nationalTeamId &&
+    String(cachedNationalDiagnostics?.team?.name ?? "").trim().toLowerCase() ===
+      String(nationalTeam?.name ?? "").trim().toLowerCase();
+
   const nationalTeamEventDiagnostics = nationalTeam?.name
-    ? await getNationalTeamEventDiagnostics(
-        nationalTeam.name,
-        nationalTeamId
-      )
+    ? !forceReferenceRefresh && cachedNationalQueriesSucceeded && cachedNationalDiagnosticsFresh
+      ? { ...cachedNationalDiagnostics, reused_from_cache: true }
+      : await getNationalTeamEventDiagnostics(nationalTeam.name, nationalTeamId)
     : {
         checked_at: new Date().toISOString(),
         team: null,
@@ -3547,6 +3582,14 @@ export async function refreshPlayerPage() {
       post_match_refresh:
         postMatchRefresh,
 
+      national_team_reference:
+        nationalTeam?.id
+          ? {
+              id: Number(nationalTeam.id),
+              name: String(nationalTeam.name ?? "").trim(),
+              logo: nationalTeam.logo ?? null
+            }
+          : cachedNationalTeamReference,
       national_team_lookup:
         nationalTeamEventDiagnostics
     },
