@@ -1,13 +1,10 @@
-name: Refresh football data
-
+name: Wait for production deployment
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
-
 jobs:
-  refresh:
+  wait-for-deployment:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for matching production deployment
@@ -29,12 +26,3 @@ jobs:
             sleep 10
           done
           echo "Timed out waiting for the matching production deployment." >&2
-          exit 1
-
-      - name: Refresh site data
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          curl --fail --show-error -X GET "${SITE_URL}/api/refresh" \
-            -H "Authorization: Bearer ${CRON_SECRET}"

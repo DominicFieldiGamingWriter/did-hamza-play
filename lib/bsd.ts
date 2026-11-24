@@ -1058,6 +1058,12 @@ function responseDiagnosticSummary(data: any) {
   };
 }
 
+const getCachedGlobalLiveEvents = unstable_cache(
+  async () => bsdGet<any>("/events/live/", { limit: 200 }),
+  ["bsd-global-live-events-v1"],
+  { revalidate: 60 }
+);
+
 async function getTeamFixturesForTeam(
   teamFilter: Record<string, string | number>,
   teamMatches: (fixture: any) => boolean
@@ -1101,12 +1107,7 @@ async function getTeamFixturesForTeam(
         }
       ),
 
-      bsdGet<any>(
-        "/events/live/",
-        {
-          limit: 200
-        }
-      ),
+      getCachedGlobalLiveEvents(),
 
       bsdGet<any>(
         "/events/",
@@ -1362,6 +1363,19 @@ export async function getTeamFixturesByName(
     (fixture) =>
       fixtureBelongsToTeamName(fixture, name)
   );
+}
+
+export async function getEvent(eventId: number) {
+  if (!Number.isSafeInteger(eventId) || eventId <= 0) return null;
+  return getEventById(eventId);
+}
+
+export async function getUpcomingFixturesForTeam(teamId: number) {
+  if (!Number.isSafeInteger(teamId) || teamId <= 0) throw new Error("A valid team ID is required.");
+  const dateFrom = new Date().toISOString().slice(0, 10);
+  const dateTo = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const data = await bsdGet<any>("/events/", { team_id: teamId, date_from: dateFrom, date_to: dateTo, status: "upcoming", limit: 100 });
+  return responseArray(data);
 }
 
 export async function getLineups(

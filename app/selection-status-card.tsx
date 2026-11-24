@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type SelectionStatus = {
   status?: string;
@@ -67,6 +67,8 @@ export default function SelectionStatusCard({
       ? PENDING_STATUS
       : initialStatus ?? FALLBACK_STATUS
   );
+  const statusRef = useRef(status);
+  useEffect(() => { statusRef.current = status; }, [status]);
 
   useEffect(() => {
     if (
@@ -83,7 +85,8 @@ export default function SelectionStatusCard({
 
     async function checkLineup() {
       const minutesUntilKickoff = (Date.parse(activeKickoff) - Date.now()) / 60000;
-      if (minutesUntilKickoff > 75 || minutesUntilKickoff < -120) return;
+      if (minutesUntilKickoff > 65 || minutesUntilKickoff < -120) return;
+      if (isDefinitiveForFixture(statusRef.current, activeFixtureId)) return;
 
       setStatus(current =>
         isDefinitiveForFixture(current, activeFixtureId)
@@ -120,7 +123,7 @@ export default function SelectionStatusCard({
     }
 
     void checkLineup();
-    const interval = window.setInterval(() => void checkLineup(), 60_000);
+    const interval = window.setInterval(() => void checkLineup(), 120_000);
     return () => {
       active = false;
       window.clearInterval(interval);

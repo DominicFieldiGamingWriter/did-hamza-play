@@ -5,7 +5,6 @@ import {
   getTeamSquad,
   getTeamFixtures,
   getTeamFixturesByName,
-  getLineups,
   getFixturePlayerStats,
   getFixtureIncidents,
   getBsdEventsForDiagnostics
@@ -15,7 +14,6 @@ import {
   getSupabaseAdmin
 } from "./supabase";
 import { assertBsdApiCircuitClosed } from "./bsd-circuit-breaker";
-import { resolveTeamSheetStatus } from "./status";
 
 function responseArray(
   data: any
@@ -819,7 +817,7 @@ function isOwnGoal(
   );
 }
 
-async function normaliseIncidents(
+export async function normaliseIncidents(
   incidents: any[]
 ) {
   const cache =
@@ -1483,42 +1481,9 @@ function minutesToKickoff(
   ) / 60000;
 }
 
-async function getUpcomingSelectionStatus(
-  fixture: any,
-  playerId: number,
-  fallbackStatus: any
-) {
-  // FotMob event IDs are not BSD event IDs; do not query BSD lineups with them.
-  if (fixture?.fixture_source === "fotmob") {
-    return fallbackStatus;
-  }
-
-  const minutesUntilKickoff = minutesToKickoff(fixture);
-  const fixtureId = Number(fixture?.id ?? fixture?.event_id);
-  if (
-    !Number.isFinite(fixtureId) || fixtureId <= 0 ||
-    minutesUntilKickoff === null ||
-    minutesUntilKickoff > 75 ||
-    minutesUntilKickoff < -120
-  ) {
-    return fallbackStatus;
-  }
-
-  const checkedAt = new Date().toISOString();
-  try {
-    const lineupData = await getLineups(fixtureId);
-    return {
-      ...resolveTeamSheetStatus(playerId, lineupData),
-      lineup_fixture_id: fixtureId,
-      lineup_checked_at: checkedAt
-    };
-  } catch {
-    return {
-      ...resolveTeamSheetStatus(playerId, null),
-      lineup_fixture_id: fixtureId,
-      lineup_checked_at: checkedAt
-    };
-  }
+async function getUpcomingSelectionStatus(_fixture: any, _playerId: number, fallbackStatus: any) {
+  // Team-sheet calls are owned by the scheduled lineup worker.
+  return fallbackStatus;
 }
 
 function getTeamInfo(
@@ -1754,10 +1719,11 @@ function normaliseFixture(
   };
 }
 
-async function buildLivePlayerStatus(
+export async function buildLivePlayerStatus(
   playerId: number,
   playerName: string,
-  live: any
+  live: any,
+  preloaded?: { incidents?: any[]; playerStats?: any[] }
 ) {
   if (
     !live?.id
@@ -1766,51 +1732,20 @@ async function buildLivePlayerStatus(
   }
 
   try {
-    const [
-      lineupResult,
-      incidentResult,
-      playerStatsResult
-    ] = await Promise.allSettled([
-      getLineups(
-        Number(
-          live.id
-        )
-      ),
-
-      getFixtureIncidents(
-        Number(
-          live.id
-        )
-      ),
-
-      getFixturePlayerStats(
-        Number(
-          live.id
-        )
-      )
-    ]);
-
-    const lineupData =
-      lineupResult.status === "fulfilled"
-        ? lineupResult.value
-        : null;
-
-    const lineups =
-      lineupData?.lineups ?? [];
-
-    const incidents =
-      incidentResult.status === "fulfilled"
-        ? responseArray(
-            incidentResult.value
-          )
-        : [];
-
-    const playerStats =
-      playerStatsResult.status === "fulfilled"
-        ? responseArray(
-            playerStatsResult.value
-          )
-        : [];
+    let incidents: any[] = [];
+    let playerStats: any[] = [];
+    const lineups: any[] = [];
+    if (preloaded) {
+      incidents = Array.isArray(preloaded.incidents) ? preloaded.incidents : [];
+      playerStats = Array.isArray(preloaded.playerStats) ? preloaded.playerStats : [];
+    } else {
+      const [incidentResult, playerStatsResult] = await Promise.allSettled([
+        getFixtureIncidents(Number(live.id)),
+        getFixturePlayerStats(Number(live.id))
+      ]);
+      incidents = incidentResult.status === "fulfilled" ? responseArray(incidentResult.value) : [];
+      playerStats = playerStatsResult.status === "fulfilled" ? responseArray(playerStatsResult.value) : [];
+    }
 
     const appearance =
       playerPlayed(
@@ -3417,12 +3352,11 @@ export async function refreshPlayerPage(
       nextSquadPlayer
     );
 
-  const nextStatus =
-    await getUpcomingSelectionStatus(
-      nextFixture,
-      playerId,
-      availabilityStatus
-    );
+  const existingNextStatus = existingPlayerStatus.next_match && typeof existingPlayerStatus.next_match === "object" ? existingPlayerStatus.next_match : null;
+  const nextFixtureId = Number(nextFixture?.id ?? nextFixture?.event_id);
+  const previousCheck = typeof existingNextStatus?.lineup_checked_at === "string" ? Date.parse(existingNextStatus.lineup_checked_at) : NaN;
+  const reuseStoredStatus = Number(existingNextStatus?.lineup_fixture_id) === nextFixtureId && Number.isFinite(previousCheck) && Date.now() - previousCheck < 6 * 60 * 60 * 1000;
+  const nextStatus = reuseStoredStatus ? existingNextStatus : await getUpcomingSelectionStatus(nextFixture, playerId, availabilityStatus);
 
   const liveChoice =
     chooseLiveFixture(
@@ -3478,7 +3412,10 @@ export async function refreshPlayerPage(
     const finishedTrackedFixture = Number(normalisedLast?.id ?? normalisedLast?.event_id) === Number(existingPostMatchRefresh.fixture_id) && hasConfirmedFinalResult(normalisedLast);
     postMatchRefresh = finishedTrackedFixture ? { ...existingPostMatchRefresh, active: false, completed: true, completed_at: monitorNow, fixture: null } : existingPostMatchRefresh;
   }
+  const fullRefreshAt = new Date().toISOString();
   const payload = {
+    last_full_refresh_at: fullRefreshAt,
+    last_fixture_discovery_at: fullRefreshAt,
     id:
       1,
 
