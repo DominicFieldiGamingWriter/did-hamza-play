@@ -106,9 +106,8 @@ export default function UsageDashboard({ initialAuthenticated }: { initialAuthen
   }
 
   const today = summary?.today;
-  const limit = today?.provider_limit ?? summary?.quota_reference ?? 7500;
-  const hasReportedRemaining = today?.provider_remaining !== null && today?.provider_remaining !== undefined;
-  const remaining = hasReportedRemaining ? today?.provider_remaining ?? 0 : Math.max(0, limit - (today?.requests ?? 0));
+  const limit = summary?.quota_reference ?? 7500;
+  const remaining = Math.max(0, limit - (today?.requests ?? 0));
   const percentage = limit > 0 ? Math.min(100, ((today?.requests ?? 0) / limit) * 100) : 0;
   const maxHour = useMemo(() => Math.max(1, ...(summary?.hourly.map((h) => h.requests) ?? [1])), [summary]);
   const maxEndpoint = useMemo(() => Math.max(1, ...(today?.top_endpoints.map((e) => e.requests) ?? [1])), [today]);
@@ -167,12 +166,12 @@ export default function UsageDashboard({ initialAuthenticated }: { initialAuthen
                 <div className={styles.metricValue}>{number(today?.requests)}</div>
                 <div className={styles.metricHint}>Outbound BSD requests recorded across both sites; cached lookups are excluded</div>
                 <div className={styles.progress}><div className={styles.progressFill} style={{ width: percentage + "%" }} /></div>
-                <div className={styles.metricHint}>{percentage.toFixed(1)}% of {number(limit)} {today?.provider_limit ? "provider-reported limit" : "reference allowance"}</div>
+                <div className={styles.metricHint}>{percentage.toFixed(1)}% of {number(limit)} daily reference allowance</div>
               </article>
               <article className={styles.metric}>
-                <div className={styles.metricLabel}>{hasReportedRemaining ? "Provider remaining" : "Estimated remaining"}</div>
+                <div className={styles.metricLabel}>Estimated remaining</div>
                 <div className={styles.metricValue}>{number(remaining)}</div>
-                <div className={styles.metricHint}>{hasReportedRemaining ? "Latest remaining-quota header from a tracked outbound BSD response" : "Reference allowance less logged requests; not a provider-confirmed figure"}</div>
+                <div className={styles.metricHint}>7,500/day reference less tracked outbound requests; not a provider-confirmed balance</div>
               </article>
               <article className={styles.metric}>
                 <div className={styles.metricLabel}>Rate-limit responses</div>
@@ -262,7 +261,7 @@ export default function UsageDashboard({ initialAuthenticated }: { initialAuthen
             <section className={styles.section}>
               <div className={styles.sectionHeader}><h2 className={styles.sectionTitle}>Recent BSD requests</h2><span className={styles.small}>Latest 30 tracked outbound requests</span></div>
               <div className={styles.tableWrap}>
-                <table className={styles.table}><thead><tr><th>Time (UTC)</th><th>Site</th><th>Endpoint</th><th>HTTP</th><th>Duration</th><th>Outcome</th><th>Quota left</th></tr></thead>
+                <table className={styles.table}><thead><tr><th>Time (UTC)</th><th>Site</th><th>Endpoint</th><th>HTTP</th><th>Duration</th><th>Outcome</th><th>Rate-limit header</th></tr></thead>
                   <tbody>{summary.recent_requests.map((event, index) => <tr key={event.requested_at + event.site + event.endpoint + index}>
                     <td>{time(event.requested_at)}</td><td>{event.site}</td><td>{event.endpoint}</td><td>{event.http_status ?? "No response"}</td><td>{number(event.latency_ms)} ms</td>
                     <td><span className={styles.pill + " " + statusClass(event.outcome)}>{event.outcome.replaceAll("_", " ")}</span></td><td>{event.rate_limit_remaining === null ? "—" : number(event.rate_limit_remaining)}</td>
