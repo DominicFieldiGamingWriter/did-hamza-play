@@ -163,16 +163,16 @@ export default function UsageDashboard({ initialAuthenticated }: { initialAuthen
           <>
             <section className={styles.grid}>
               <article className={styles.metric}>
-                <div className={styles.metricLabel}>Requests today · UTC</div>
+                <div className={styles.metricLabel}>BSD requests today · UTC</div>
                 <div className={styles.metricValue}>{number(today?.requests)}</div>
-                <div className={styles.metricHint}>Recorded outbound BSD HTTP requests across both sites</div>
+                <div className={styles.metricHint}>Outbound BSD requests recorded across both sites; cached lookups are excluded</div>
                 <div className={styles.progress}><div className={styles.progressFill} style={{ width: percentage + "%" }} /></div>
                 <div className={styles.metricHint}>{percentage.toFixed(1)}% of {number(limit)} {today?.provider_limit ? "provider-reported limit" : "reference allowance"}</div>
               </article>
               <article className={styles.metric}>
                 <div className={styles.metricLabel}>{hasReportedRemaining ? "Provider remaining" : "Estimated remaining"}</div>
                 <div className={styles.metricValue}>{number(remaining)}</div>
-                <div className={styles.metricHint}>{hasReportedRemaining ? "Latest remaining-quota header returned by BSD" : "Reference allowance less logged requests; not a provider-confirmed figure"}</div>
+                <div className={styles.metricHint}>{hasReportedRemaining ? "Latest remaining-quota header from a tracked outbound BSD response" : "Reference allowance less logged requests; not a provider-confirmed figure"}</div>
               </article>
               <article className={styles.metric}>
                 <div className={styles.metricLabel}>Rate-limit responses</div>
@@ -260,7 +260,7 @@ export default function UsageDashboard({ initialAuthenticated }: { initialAuthen
             </section>
 
             <section className={styles.section}>
-              <div className={styles.sectionHeader}><h2 className={styles.sectionTitle}>Recent BSD requests</h2><span className={styles.small}>Latest 30 events</span></div>
+              <div className={styles.sectionHeader}><h2 className={styles.sectionTitle}>Recent BSD requests</h2><span className={styles.small}>Latest 30 tracked outbound requests</span></div>
               <div className={styles.tableWrap}>
                 <table className={styles.table}><thead><tr><th>Time (UTC)</th><th>Site</th><th>Endpoint</th><th>HTTP</th><th>Duration</th><th>Outcome</th><th>Quota left</th></tr></thead>
                   <tbody>{summary.recent_requests.map((event, index) => <tr key={event.requested_at + event.site + event.endpoint + index}>

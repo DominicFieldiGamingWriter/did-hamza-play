@@ -7,7 +7,8 @@ import {
   getTeamFixturesByName,
   getLineups,
   getFixturePlayerStats,
-  getFixtureIncidents
+  getFixtureIncidents,
+  getBsdEventsForDiagnostics
 } from "./bsd";
 
 import {
@@ -2630,15 +2631,6 @@ async function getNationalTeamEventDiagnostics(
   const dateTo = new Date(now + 365 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
-  const apiKey = process.env.BSD_API_KEY;
-
-  if (!apiKey) {
-    return {
-      checked_at: checkedAt,
-      team: { id: teamId || null, name: teamName },
-      error: "BSD_API_KEY is not configured."
-    };
-  }
 
   const queries: Array<{
     key: string;
@@ -2680,46 +2672,8 @@ async function getNationalTeamEventDiagnostics(
 
   const queryResults = await Promise.all(
     queries.map(async ({ key, params }) => {
-      const url = new URL("https://sports.bzzoiro.com/api/v2/events/");
-
-      for (const [param, value] of Object.entries(params)) {
-        url.searchParams.set(param, String(value));
-      }
-
       try {
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Token ${apiKey}`,
-            Accept: "application/json"
-          },
-          cache: "no-store"
-        });
-
-        const body = await response.text();
-
-        if (!response.ok) {
-          return {
-            query: key,
-            params,
-            http_status: response.status,
-            error: body.slice(0, 500)
-          };
-        }
-
-        let data: any;
-
-        try {
-          data = JSON.parse(body);
-        } catch {
-          return {
-            query: key,
-            params,
-            http_status: response.status,
-            parse_error: "The response was not valid JSON.",
-            response_excerpt: body.slice(0, 500)
-          };
-        }
-
+        const data = await getBsdEventsForDiagnostics(params);
         const events = responseArray(data);
         const target = normaliseDiagnosticTeamName(teamName);
 
@@ -2758,10 +2712,8 @@ async function getNationalTeamEventDiagnostics(
         return {
           query: key,
           params,
-          http_status: response.status,
-          response_shape: Array.isArray(data)
-            ? "array"
-            : typeof data,
+          http_status: 200,
+          response_shape: Array.isArray(data) ? "array" : typeof data,
           response_keys:
             data && typeof data === "object" && !Array.isArray(data)
               ? Object.keys(data).slice(0, 20)
@@ -2781,10 +2733,14 @@ async function getNationalTeamEventDiagnostics(
             .map(diagnosticFixtureSummary)
         };
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const statusMatch = /^BSD API (\d{3}):/.exec(message);
+
         return {
           query: key,
           params,
-          error: error instanceof Error ? error.message : String(error)
+          http_status: statusMatch ? Number(statusMatch[1]) : null,
+          error: (statusMatch ? message.replace(/^BSD API \d{3}:\s*/, "") : message).slice(0, 500)
         };
       }
     })
@@ -2803,7 +2759,6 @@ async function getNationalTeamEventDiagnostics(
     queries: queryResults
   };
 }
-
 
 
 function normaliseFixtureTeamNameForDedupe(value: any): string {

@@ -1,4 +1,4 @@
-import { revalidateTag } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { assertBsdApiCircuitClosed, BsdApiCircuitOpenError, recordBsdApiRateLimit } from "./bsd-circuit-breaker";
 
 import { trackBsdApiRequest } from "./bsd-usage";
@@ -76,28 +76,18 @@ async function bsdGet<T>(
   params: Record<
     string,
     string | number | undefined
-  > = {},
-  cacheOptions: { revalidateSeconds?: number; tags?: string[] } = {}
+  > = {}
 ): Promise<T> {
   await assertBsdApiCircuitClosed();
 
-  const url = new URL(
-    `${BASE_URL}${path}`
-  );
+  // Resolve configuration before the network-attempt timer so missing credentials
+  // are not misreported as provider requests.
+  const apiKey = getKey();
+  const url = new URL(`${BASE_URL}${path}`);
 
-  for (
-    const [key, value] of Object.entries(
-      params
-    )
-  ) {
-    if (
-      value !== undefined &&
-      value !== ""
-    ) {
-      url.searchParams.set(
-        key,
-        String(value)
-      );
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") {
+      url.searchParams.set(key, String(value));
     }
   }
 
@@ -109,18 +99,10 @@ async function bsdGet<T>(
   try {
     response = await fetch(url, {
       headers: {
-        Authorization: `Token ${getKey()}`,
+        Authorization: `Token ${apiKey}`,
         Accept: "application/json"
       },
-      cache: cacheOptions.revalidateSeconds ? "force-cache" : "no-store",
-      ...(cacheOptions.revalidateSeconds
-        ? {
-            next: {
-              revalidate: cacheOptions.revalidateSeconds,
-              tags: cacheOptions.tags ?? []
-            }
-          }
-        : {})
+      cache: "no-store"
     });
   } catch (error) {
     trackBsdApiRequest({
@@ -150,9 +132,6 @@ async function bsdGet<T>(
   const rateLimitResetAt = headerResetAt(response.headers);
 
   if (!response.ok) {
-    if (cacheOptions.tags?.length) {
-      for (const tag of cacheOptions.tags) revalidateTag(tag, { expire: 0 });
-    }
     const responseBody = await response.text();
     trackBsdApiRequest({
       requested_at: requestedAt,
@@ -170,9 +149,7 @@ async function bsdGet<T>(
       throw await recordBsdApiRateLimit(response.headers, responseBody);
     }
 
-    throw new Error(
-      "BSD API " + response.status + ": " + responseBody
-    );
+    throw new Error("BSD API " + response.status + ": " + responseBody);
   }
 
   trackBsdApiRequest({
@@ -187,14 +164,7 @@ async function bsdGet<T>(
     rate_limit_reset_at: rateLimitResetAt
   });
 
-  try {
-    return await response.json() as T;
-  } catch (error) {
-    if (cacheOptions.tags?.length) {
-      for (const tag of cacheOptions.tags) revalidateTag(tag, { expire: 0 });
-    }
-    throw error;
-  }
+  return await response.json() as T;
 }
 
 function responseArray(
@@ -550,43 +520,49 @@ function isNonEmptyReferenceRecord(value: any): boolean {
 }
 
 async function getPlayerProfileFromBsd(playerId: number) {
-  const player = responseObject(
-    await bsdGet<any>(
-      `/players/${playerId}/`,
-      {},
-      {
-        revalidateSeconds: BSD_REFERENCE_CACHE_TTL_SECONDS,
-        tags: [bsdPlayerReferenceCacheTag(playerId)]
+  const getCachedPlayerProfile = unstable_cache(
+    async () => {
+      const player = responseObject(
+        await bsdGet<any>(`/players/${playerId}/`)
+      );
+
+      if (!isNonEmptyReferenceRecord(player)) {
+        throw new Error(`BSD returned an empty player profile for ID ${playerId}.`);
       }
-    )
+
+      return player;
+    },
+    ["bsd-player-profile-v2", String(playerId)],
+    {
+      revalidate: BSD_REFERENCE_CACHE_TTL_SECONDS,
+      tags: [bsdPlayerReferenceCacheTag(playerId)]
+    }
   );
 
-  if (!isNonEmptyReferenceRecord(player)) {
-    revalidateTag(bsdPlayerReferenceCacheTag(playerId), { expire: 0 });
-    throw new Error(`BSD returned an empty player profile for ID ${playerId}.`);
-  }
-
-  return player;
+  return getCachedPlayerProfile();
 }
 
 async function getTeamDetailsFromBsd(teamId: number) {
-  const team = responseObject(
-    await bsdGet<any>(
-      `/teams/${teamId}/`,
-      {},
-      {
-        revalidateSeconds: BSD_REFERENCE_CACHE_TTL_SECONDS,
-        tags: [bsdTeamReferenceCacheTag(teamId)]
+  const getCachedTeamDetails = unstable_cache(
+    async () => {
+      const team = responseObject(
+        await bsdGet<any>(`/teams/${teamId}/`)
+      );
+
+      if (!isNonEmptyReferenceRecord(team)) {
+        throw new Error(`BSD returned empty team details for ID ${teamId}.`);
       }
-    )
+
+      return team;
+    },
+    ["bsd-team-details-v2", String(teamId)],
+    {
+      revalidate: BSD_REFERENCE_CACHE_TTL_SECONDS,
+      tags: [bsdTeamReferenceCacheTag(teamId)]
+    }
   );
 
-  if (!isNonEmptyReferenceRecord(team)) {
-    revalidateTag(bsdTeamReferenceCacheTag(teamId), { expire: 0 });
-    return null;
-  }
-
-  return team;
+  return getCachedTeamDetails();
 }
 
 export async function getTeamById(
@@ -602,6 +578,27 @@ export async function getTeamById(
     if (error instanceof BsdApiCircuitOpenError) throw error;
     return null;
   }
+}
+
+export async function getEventOdds(fixtureId: number) {
+  if (!Number.isSafeInteger(fixtureId) || fixtureId <= 0) return null;
+
+  const getCachedOdds = unstable_cache(
+    async () => bsdGet<any>(`/events/${fixtureId}/odds/`),
+    ["bsd-event-odds-v1", String(fixtureId)],
+    {
+      revalidate: 60,
+      tags: [`odds-${fixtureId}`]
+    }
+  );
+
+  return getCachedOdds();
+}
+
+export async function getBsdEventsForDiagnostics(
+  params: Record<string, string | number>
+) {
+  return bsdGet<any>("/events/", params);
 }
 
 async function getEventById(

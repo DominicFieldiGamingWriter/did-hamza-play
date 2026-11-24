@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 };
 import { unstable_cache } from "next/cache";
 import { getSupabaseAdmin } from "../lib/supabase";
+import { getEventOdds } from "../lib/bsd";
 
 
 const getCachedPlayerPage = unstable_cache(
@@ -901,66 +902,26 @@ function hasComplete1X2(
 async function getConsensusMatchOdds(
   fixture: any
 ) {
-  const fixtureId =
-    Number(fixture?.id);
+  const fixtureId = Number(fixture?.id);
 
-  const apiKey =
-    process.env.BSD_API_KEY;
-
-  if (
-    !Number.isFinite(fixtureId) ||
-    fixtureId <= 0 ||
-    !apiKey
-  ) {
+  if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
     return null;
   }
 
   try {
-    const headers = {
-      Authorization: `Token ${apiKey}`
-    };
-
-    const summaryResponse =
-      await fetch(
-        `https://sports.bzzoiro.com/api/v2/events/${fixtureId}/odds/`,
-        {
-          headers,
-          cache: "force-cache",
-          next: {
-            revalidate: 60,
-            tags: [`odds-${fixtureId}`]
-          }
-        }
-      );
-
-    if (!summaryResponse.ok) {
-      console.error(
-        "Consensus odds summary request failed:",
-        summaryResponse.status
-      );
-      return null;
-    }
-
-    const summaryPayload =
-      await summaryResponse.json();
+    const summaryPayload = await getEventOdds(fixtureId);
+    if (!summaryPayload) return null;
 
     return {
       fixtureId,
-      oneXTwo:
-        getConsensus1X2(
-          summaryPayload
-        ),
+      oneXTwo: getConsensus1X2(summaryPayload),
       updatedAt:
         summaryPayload?.last_update_at ??
         summaryPayload?.updated_at ??
         null
     };
   } catch (error) {
-    console.error(
-      "Consensus odds request failed:",
-      error
-    );
-
+    console.error("Consensus odds request failed:", error);
     return null;
   }
 }
