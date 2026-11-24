@@ -1735,15 +1735,19 @@ export async function buildLivePlayerStatus(
     let incidents: any[] = [];
     let playerStats: any[] = [];
     const lineups: any[] = [];
+    const lineupData: any = { status: "unavailable", lineups: [] };
+    let incidentsAvailable = false;
     if (preloaded) {
       incidents = Array.isArray(preloaded.incidents) ? preloaded.incidents : [];
+      incidentsAvailable = true;
       playerStats = Array.isArray(preloaded.playerStats) ? preloaded.playerStats : [];
     } else {
       const [incidentResult, playerStatsResult] = await Promise.allSettled([
         getFixtureIncidents(Number(live.id)),
         getFixturePlayerStats(Number(live.id))
       ]);
-      incidents = incidentResult.status === "fulfilled" ? responseArray(incidentResult.value) : [];
+      incidents = incidentsAvailable ? responseArray(incidentResult.value) : [];
+      incidentsAvailable = incidentsAvailable;
       playerStats = playerStatsResult.status === "fulfilled" ? responseArray(playerStatsResult.value) : [];
     }
 
@@ -1938,7 +1942,7 @@ export async function buildLivePlayerStatus(
     const livePlayerEvents = {
       goal_minutes: goalMinutes,
       assist_minutes: assistMinutes,
-      incidents_available: incidentResult.status === "fulfilled"
+      incidents_available: incidentsAvailable
     };
 
     if (hasAppeared) {
@@ -3218,25 +3222,37 @@ export async function refreshPlayerPage(
       ? nationalSquadPlayer
       : squadPlayer;
 
-  const [
-    lineupData,
-    playerStats,
-    rawIncidents
-  ] =
-    await Promise.all([
-      latestLast.is_fallback_fixture
-        ? Promise.resolve({
-            status: "confirmed",
-            lineups: [{ id: playerId, is_starter: true }]
-          })
-        : getLineups(latestLast.id),
-      latestLast.is_fallback_fixture
-        ? Promise.resolve([{ id: playerId, minutes: 90 }])
-        : getFixturePlayerStats(latestLast.id),
-      latestLast.is_fallback_fixture
-        ? Promise.resolve(latestLast.incidents ?? [])
-        : getFixtureIncidents(latestLast.id)
-    ]);
+  const storedLastSelection =
+    existingPlayerStatus.next_match && typeof existingPlayerStatus.next_match === "object" &&
+    Number(existingPlayerStatus.next_match.lineup_fixture_id) === Number(latestLast.id)
+      ? existingPlayerStatus.next_match
+      : null;
+  const storedLastSelectionStatus = String(storedLastSelection?.status ?? storedLastSelection?.type ?? "");
+  const latestSelectionIsConfirmed = [
+    "confirmed_start",
+    "confirmed_bench",
+    "confirmed_not_in_squad"
+  ].includes(storedLastSelectionStatus);
+  const syntheticLatestLineup = {
+    status: latestSelectionIsConfirmed || latestLast.is_fallback_fixture ? "confirmed" : "unavailable",
+    lineups: [{
+      starting_xi: storedLastSelectionStatus === "confirmed_start" || latestLast.is_fallback_fixture
+        ? [{ id: playerId, player: { id: playerId }, is_starter: true }]
+        : [],
+      substitutes: storedLastSelectionStatus === "confirmed_bench"
+        ? [{ id: playerId, player: { id: playerId }, is_substitute: true }]
+        : []
+    }]
+  };
+  const lineupData = syntheticLatestLineup;
+  const [playerStats, rawIncidents] = await Promise.all([
+    latestLast.is_fallback_fixture
+      ? Promise.resolve([{ id: playerId, minutes: 90 }])
+      : getFixturePlayerStats(latestLast.id),
+    latestLast.is_fallback_fixture
+      ? Promise.resolve(latestLast.incidents ?? [])
+      : getFixtureIncidents(latestLast.id)
+  ]);
 
   const incidents =
     await normaliseIncidents(
