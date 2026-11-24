@@ -105,7 +105,7 @@ async function bsdGet<T>(
       cache: "no-store"
     });
   } catch (error) {
-    trackBsdApiRequest({
+    await trackBsdApiRequest({
       requested_at: requestedAt,
       endpoint,
       http_status: null,
@@ -133,7 +133,7 @@ async function bsdGet<T>(
 
   if (!response.ok) {
     const responseBody = await response.text();
-    trackBsdApiRequest({
+    await trackBsdApiRequest({
       requested_at: requestedAt,
       endpoint,
       http_status: response.status,
@@ -152,7 +152,7 @@ async function bsdGet<T>(
     throw new Error("BSD API " + response.status + ": " + responseBody);
   }
 
-  trackBsdApiRequest({
+  await trackBsdApiRequest({
     requested_at: requestedAt,
     endpoint,
     http_status: response.status,

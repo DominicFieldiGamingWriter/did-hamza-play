@@ -77,11 +77,16 @@ function scheduleUsageWrite(payload: UsagePayload) {
   }
 }
 
-export function trackBsdApiRequest(record: ApiUsageRecord) {
-  scheduleUsageWrite({
-    kind: "api_request",
-    record: { ...record, site: SITE }
-  });
+export async function trackBsdApiRequest(record: ApiUsageRecord) {
+  try {
+    const admin = getSupabaseAdmin();
+    const { error } = await admin
+      .from("bsd_api_usage_events")
+      .insert({ ...record, site: SITE });
+    if (error) throw error;
+  } catch (error) {
+    console.error("BSD_USAGE_WRITE_FAILED", error);
+  }
 }
 
 export function trackBsdRefreshRun(record: RefreshUsageRecord) {
