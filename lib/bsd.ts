@@ -1371,11 +1371,29 @@ export async function getEvent(eventId: number) {
 }
 
 export async function getUpcomingFixturesForTeam(teamId: number) {
-  if (!Number.isSafeInteger(teamId) || teamId <= 0) throw new Error("A valid team ID is required.");
-  const dateFrom = new Date().toISOString().slice(0, 10);
-  const dateTo = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const data = await bsdGet<any>("/events/", { team_id: teamId, date_from: dateFrom, date_to: dateTo, status: "upcoming", limit: 100 });
-  return responseArray(data);
+  if (!Number.isSafeInteger(teamId) || teamId <= 0) {
+    throw new Error("A valid team ID is required.");
+  }
+  const nowMs = Date.now();
+  const dateFrom = new Date(nowMs).toISOString().slice(0, 10);
+  const dateTo = new Date(nowMs + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const filterFirstTeam = (fixtures: any[]) => fixtures
+    .filter(isEligibleFirstTeamFixture)
+    .filter((fixture: any) => fixtureBelongsToTeam(fixture, teamId));
+  const primary = await bsdGet<any>("/events/", {
+    team_id: teamId, date_from: dateFrom, date_to: dateTo, status: "upcoming", limit: 100
+  });
+  let upcoming = filterFirstTeam(responseArray(primary));
+  if (upcoming.length === 0) {
+    const fallback = await bsdGet<any>("/events/", {
+      team_id: teamId, date_from: dateFrom, date_to: dateTo, limit: 100
+    });
+    upcoming = filterFirstTeam(responseArray(fallback));
+  }
+  upcoming = upcoming
+    .filter((fixture: any) => fixtureTimestamp(fixture) > nowMs)
+    .sort((a: any, b: any) => fixtureTimestamp(a) - fixtureTimestamp(b));
+  return Promise.all(upcoming.slice(0, 6).map((fixture: any) => resolveFixture(fixture)));
 }
 
 export async function getLineups(
