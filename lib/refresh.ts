@@ -1746,8 +1746,8 @@ export async function buildLivePlayerStatus(
         getFixtureIncidents(Number(live.id)),
         getFixturePlayerStats(Number(live.id))
       ]);
-      incidents = incidentsAvailable ? responseArray(incidentResult.value) : [];
-      incidentsAvailable = incidentsAvailable;
+      incidents = incidentResult.status === "fulfilled" ? responseArray(incidentResult.value) : [];
+      incidentsAvailable = incidentResult.status === "fulfilled";
       playerStats = playerStatsResult.status === "fulfilled" ? responseArray(playerStatsResult.value) : [];
     }
 
