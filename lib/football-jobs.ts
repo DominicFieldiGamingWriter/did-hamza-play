@@ -174,16 +174,17 @@ export async function runFootballScheduler() {
       const candidate = started[0];
       if (candidate) {
         const candidateId = idOf(candidate), candidateKickoff = kickoffOf(candidate)!;
-        if (now >= Date.parse(candidateKickoff) + POST_START_MS && due(monitor.last_checked_at, POST_RETRY_MS - 5000)) {
-          const event = await withBsdUsageContext({ job_type: "post_match_status", fixture_id: candidateId }, () => getEvent(candidateId));
-          if (event && (isFinal(event,candidateId) || isLive(event))) return { ok: true, ...(await postMatchCheck(snapshot,candidate,candidateId,candidateKickoff,event)) };
-        } else {
-          const event = await withBsdUsageContext({ job_type: "live_fixture_detection", fixture_id: candidateId }, () => getEvent(candidateId));
+        const postMatchWindow = now >= Date.parse(candidateKickoff) + POST_START_MS;
+        if (!postMatchWindow || due(monitor.last_checked_at, POST_RETRY_MS - 5000)) {
+          const event = await withBsdUsageContext(
+            { job_type: postMatchWindow ? "post_match_status" : "live_fixture_detection", fixture_id: candidateId },
+            () => getEvent(candidateId)
+          );
+          if (event && postMatchWindow) return { ok: true, ...(await postMatchCheck(snapshot,candidate,candidateId,candidateKickoff,event)) };
           if (event && (isLive(event) || isFinal(event,candidateId))) return { ok: true, ...(await updateLive(snapshot,candidate,candidateId,candidateKickoff,event)) };
         }
       }
     }
-    if (due(snapshot.last_fixture_discovery_at, DISCOVERY_MS)) return { ok: true, ...(await discoverFixtures(snapshot)) };
     if (due(snapshot.last_full_refresh_at, IDLE_REFRESH_MS)) {
       const fixtures = Array.isArray(snapshot.next_fixtures) ? snapshot.next_fixtures : [];
       const lineupWindow = fixtures.some((f: any) => {
@@ -198,6 +199,7 @@ export async function runFootballScheduler() {
         return { ok: true, action: "idle_full_refresh" };
       }
     }
+    if (due(snapshot.last_fixture_discovery_at, DISCOVERY_MS)) return { ok: true, ...(await discoverFixtures(snapshot)) };
     return { ok: true, action: "nothing_due" };
   } catch (error) {
     failure = error instanceof Error ? error.message.slice(0,300) : "Scheduler failed.";
