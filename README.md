@@ -176,3 +176,10 @@ Before launching publicly, consider:
 - Add Open Graph/social preview images.
 - Add monitoring/error alerts.
 - Expand the database so the same code can support multiple players.
+
+
+## Live lineup updates
+
+Near kick-off, the browser subscribes to a restricted Supabase Realtime status table. It receives only the fields displayed in the team-sheet card and does not poll a Vercel route.
+
+For local development, configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` alongside the server-side Supabase credentials.

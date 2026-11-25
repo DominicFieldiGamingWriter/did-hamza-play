@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "../lib/supabase-browser";
 
 type SelectionStatus = {
   status?: string;
@@ -38,7 +40,7 @@ const PENDING_STATUS: SelectionStatus = {
   tone: "warning",
   label: "Waiting for official team sheet",
   pillLabel: "Awaiting lineup",
-  reason: "The official lineup feed has not confirmed the team sheet yet. This page will keep checking."
+  reason: "The official lineup feed has not confirmed the team sheet yet. This status updates automatically when new information is received."
 };
 
 const DEFINITIVE_STATUSES = new Set([
@@ -68,7 +70,10 @@ export default function SelectionStatusCard({
       : initialStatus ?? FALLBACK_STATUS
   );
   const statusRef = useRef(status);
-  useEffect(() => { statusRef.current = status; }, [status]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     if (
@@ -77,56 +82,157 @@ export default function SelectionStatusCard({
       !Number.isFinite(Date.parse(kickoff))
     ) return;
 
-    // Explicit local types keep the async polling callback safely non-null.
-    const activeFixtureId: number = fixtureId;
-    const activeKickoff: string = kickoff;
+    const activeFixtureId = fixtureId;
+    const activeKickoff = kickoff;
+    let disposed = false;
+    let startTimer: number | undefined;
+    let endTimer: number | undefined;
+    let channel: RealtimeChannel | null = null;
 
-    let active = true;
+    const supabase = getSupabaseBrowserClient();
 
-    async function checkLineup() {
-      const minutesUntilKickoff = (Date.parse(activeKickoff) - Date.now()) / 60000;
-      if (minutesUntilKickoff > 65 || minutesUntilKickoff < -120) return;
-      if (isDefinitiveForFixture(statusRef.current, activeFixtureId)) return;
+    function setPending(reason?: string) {
+      setStatus(current =>
+        isDefinitiveForFixture(current, activeFixtureId)
+          ? current
+          : { ...PENDING_STATUS, reason: reason ?? PENDING_STATUS.reason }
+      );
+    }
+
+    function applyStatus(value: unknown) {
+      const nextStatus =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? value as SelectionStatus
+          : null;
+
+      if (!nextStatus || Number(nextStatus.lineup_fixture_id) !== activeFixtureId) {
+        setPending();
+        return;
+      }
 
       setStatus(current =>
         isDefinitiveForFixture(current, activeFixtureId)
           ? current
-          : { ...PENDING_STATUS, reason: minutesUntilKickoff < 0
-              ? "Kick-off has passed, but the confirmed lineup has not been retrieved yet. Checking again."
-              : PENDING_STATUS.reason }
+          : nextStatus
       );
+    }
 
-      try {
-        const response = await fetch(
-          `/api/lineup-status?event_id=${encodeURIComponent(String(activeFixtureId))}`,
-          { cache: "no-store", headers: { Accept: "application/json" } }
-        );
-        const result = await response.json();
-        if (!active) return;
-        if (response.ok && result?.ok && result?.status) {
-          setStatus(result as SelectionStatus);
-        } else {
-          setStatus(current =>
-            isDefinitiveForFixture(current, activeFixtureId)
-              ? current
-              : { ...PENDING_STATUS, reason: result?.reason || "The lineup feed has not confirmed the starting XI. Retrying automatically." }
-          );
-        }
-      } catch {
-        if (!active) return;
-        setStatus(current =>
-          isDefinitiveForFixture(current, activeFixtureId)
-            ? current
-            : { ...PENDING_STATUS, reason: "Could not check the official lineup feed. Retrying automatically." }
-        );
+    async function loadLatestStatus() {
+      if (!supabase || disposed) return;
+
+      const { data, error } = await supabase
+        .from("player_lineup_status")
+        .select("status")
+        .eq("id", 1)
+        .maybeSingle();
+
+      if (disposed) return;
+
+      if (error) {
+        setPending("The live connection is active, but the latest status could not be loaded. It will update when the next lineup check completes.");
+        return;
+      }
+
+      applyStatus(data?.status);
+    }
+
+    function onVisibilityChange() {
+      if (!document.hidden && channel) {
+        void loadLatestStatus();
       }
     }
 
-    void checkLineup();
-    const interval = window.setInterval(() => void checkLineup(), 120_000);
+    function stopSubscription() {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (channel && supabase) {
+        const currentChannel = channel;
+        channel = null;
+        void supabase.removeChannel(currentChannel);
+      }
+    }
+
+    function startSubscription() {
+      if (disposed || channel) return;
+
+      const minutesUntilKickoff = (Date.parse(activeKickoff) - Date.now()) / 60000;
+      if (minutesUntilKickoff > 65 || minutesUntilKickoff < -120) return;
+      if (isDefinitiveForFixture(statusRef.current, activeFixtureId)) return;
+
+      setPending(
+        minutesUntilKickoff < 0
+          ? "Kick-off has passed, but the confirmed lineup has not been retrieved yet. Waiting for the next update."
+          : PENDING_STATUS.reason
+      );
+
+      if (!supabase) {
+        setPending("Live lineup updates could not be connected. Reload the page to retrieve the latest status.");
+        return;
+      }
+
+      channel = supabase
+        .channel(`lineup-status-${activeFixtureId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "player_lineup_status",
+            filter: "id=eq.1"
+          },
+          payload => {
+            const updatedRow = payload.new as { status?: unknown };
+            applyStatus(updatedRow.status);
+          }
+        )
+        .subscribe((subscriptionStatus, error) => {
+          if (disposed) return;
+
+          if (subscriptionStatus === "SUBSCRIBED") {
+            void loadLatestStatus();
+          } else if (
+            subscriptionStatus === "CHANNEL_ERROR" ||
+            subscriptionStatus === "TIMED_OUT"
+          ) {
+            setPending("The live lineup connection was interrupted. It will retry automatically.");
+            if (error) console.error("Lineup Realtime subscription failed:", error.message);
+          }
+        });
+
+      document.addEventListener("visibilitychange", onVisibilityChange);
+
+      const millisecondsUntilWindowEnds =
+        Date.parse(activeKickoff) + 120 * 60_000 - Date.now();
+
+      endTimer = window.setTimeout(
+        stopSubscription,
+        Math.max(0, millisecondsUntilWindowEnds)
+      );
+    }
+
+    function scheduleSubscriptionStart() {
+      if (disposed) return;
+
+      const millisecondsUntilWindowStarts =
+        Date.parse(activeKickoff) - Date.now() - 65 * 60_000;
+
+      if (millisecondsUntilWindowStarts > 0) {
+        startTimer = window.setTimeout(
+          scheduleSubscriptionStart,
+          Math.min(millisecondsUntilWindowStarts, 2_147_483_647)
+        );
+        return;
+      }
+
+      startSubscription();
+    }
+
+    scheduleSubscriptionStart();
+
     return () => {
-      active = false;
-      window.clearInterval(interval);
+      disposed = true;
+      if (startTimer !== undefined) window.clearTimeout(startTimer);
+      if (endTimer !== undefined) window.clearTimeout(endTimer);
+      stopSubscription();
     };
   }, [fixtureId, kickoff]);
 
